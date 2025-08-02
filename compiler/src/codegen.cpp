@@ -72,9 +72,16 @@ void CodeGenerator::generate_function(const Function& func) {
 }
 
 void CodeGenerator::generate_block(const Block& block) {
+    // Enter new scope for object lifecycle management
+    enter_scope();
+    
+    // Generate all statements in the block
     for (const auto& stmt : block.statements) {
         generate_statement(*stmt);
     }
+    
+    // Exit scope - this will generate destructor calls in LIFO order
+    exit_scope();
 }
 
 void CodeGenerator::generate_statement(const Statement& stmt) {
@@ -104,6 +111,20 @@ void CodeGenerator::generate_variable_declaration(const VariableDeclaration& var
     
     // Store the alloca for later reference
     variables[var_decl.name] = alloca;
+    
+    // Handle custom type objects (classes)
+    if (var_decl.type == Type::CUSTOM && var_decl.custom_type) {
+        const std::string& class_name = var_decl.custom_type->name;
+        
+        // Generate constructor call
+        generate_constructor_call(class_name, alloca);
+        
+        // Track object for destruction at scope exit
+        if (!scope_objects.empty()) {
+            bool has_destructor = class_has_available_destructor(class_name);
+            scope_objects.back().emplace_back(var_decl.name, class_name, alloca, has_destructor);
+        }
+    }
     
     // Generate initializer and store it
     llvm::Value* init_value = generate_expression(*var_decl.initializer);
@@ -678,6 +699,79 @@ llvm::StructType* CodeGenerator::get_or_create_struct_type(const std::string& cl
     auto struct_type = llvm::StructType::create(context, class_name);
     struct_types[class_name] = struct_type;
     return struct_type;
+}
+
+void CodeGenerator::enter_scope() {
+    // Push a new scope for object tracking
+    scope_objects.emplace_back();
+}
+
+void CodeGenerator::exit_scope() {
+    if (scope_objects.empty()) {
+        return; // No scope to exit
+    }
+    
+    // Get current scope objects
+    auto& current_scope = scope_objects.back();
+    
+    // Generate destructor calls in LIFO order (reverse order of construction)
+    for (auto it = current_scope.rbegin(); it != current_scope.rend(); ++it) {
+        if (it->has_destructor) {
+            generate_destructor_call(*it);
+        }
+    }
+    
+    // Pop the scope
+    scope_objects.pop_back();
+}
+
+void CodeGenerator::generate_constructor_call(const std::string& class_name, llvm::AllocaInst* object_alloca) {
+    // For now, only handle default constructors with = default
+    if (!class_has_available_constructor(class_name, SpecialMemberType::DEFAULT_CONSTRUCTOR)) {
+        return; // No available default constructor
+    }
+    
+    // TODO: For now, = default constructors don't require actual calls
+    // In a full implementation, we would generate calls to user-defined constructors
+    // For = default, we just need to ensure the memory is initialized (done by alloca)
+}
+
+void CodeGenerator::generate_destructor_call(const ObjectInfo& obj) {
+    // For now, only handle destructors with = default
+    if (!class_has_available_destructor(obj.class_name)) {
+        return; // No available destructor
+    }
+    
+    // TODO: For now, = default destructors don't require actual calls
+    // In a full implementation, we would generate calls to user-defined destructors
+    // For = default, cleanup is handled automatically by stack unwinding
+}
+
+bool CodeGenerator::class_has_available_constructor(const std::string& class_name, SpecialMemberType constructor_type) {
+    ClassInfo* class_info = symbol_table.lookup_class(class_name);
+    if (!class_info) {
+        return false;
+    }
+    
+    switch (constructor_type) {
+        case SpecialMemberType::DEFAULT_CONSTRUCTOR:
+            return class_info->has_default_constructor;
+        case SpecialMemberType::COPY_CONSTRUCTOR:
+            return class_info->has_copy_constructor;
+        case SpecialMemberType::MOVE_CONSTRUCTOR:
+            return class_info->has_move_constructor;
+        default:
+            return false;
+    }
+}
+
+bool CodeGenerator::class_has_available_destructor(const std::string& class_name) {
+    ClassInfo* class_info = symbol_table.lookup_class(class_name);
+    if (!class_info) {
+        return false;
+    }
+    
+    return class_info->has_destructor;
 }
 
 } // namespace cprime

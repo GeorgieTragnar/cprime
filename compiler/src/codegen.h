@@ -56,8 +56,30 @@ private:
     std::string get_format_specifier(const Expression& expr);
     int count_placeholders(const std::string& format);
     
+    // Object lifecycle management
+    struct ObjectInfo {
+        std::string name;
+        std::string class_name;
+        llvm::AllocaInst* alloca_inst;
+        bool has_destructor;
+        
+        ObjectInfo(const std::string& name, const std::string& class_name, 
+                  llvm::AllocaInst* alloca_inst, bool has_destructor)
+            : name(name), class_name(class_name), alloca_inst(alloca_inst), has_destructor(has_destructor) {}
+    };
+    
+    void enter_scope();
+    void exit_scope();
+    void generate_constructor_call(const std::string& class_name, llvm::AllocaInst* object_alloca);
+    void generate_destructor_call(const ObjectInfo& obj);
+    bool class_has_available_constructor(const std::string& class_name, SpecialMemberType constructor_type);
+    bool class_has_available_destructor(const std::string& class_name);
+    
     // Variable management
     std::unordered_map<std::string, llvm::AllocaInst*> variables;
+    
+    // Object lifecycle tracking (stack of scopes)
+    std::vector<std::vector<ObjectInfo>> scope_objects;
     
     // Class type management
     std::unordered_map<std::string, llvm::StructType*> struct_types;
