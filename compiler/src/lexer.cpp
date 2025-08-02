@@ -34,8 +34,51 @@ std::vector<Token> Lexer::tokenize() {
         } else if (c == ';') {
             tokens.emplace_back(TokenType::SEMICOLON, ";", start_line, start_column);
             advance();
+        } else if (c == ',') {
+            tokens.emplace_back(TokenType::COMMA, ",", start_line, start_column);
+            advance();
+        } else if (c == '<') {
+            if (peek_next() == '=') {
+                tokens.emplace_back(TokenType::LTEQ, "<=", start_line, start_column);
+                advance();
+                advance();
+            } else {
+                tokens.emplace_back(TokenType::LT, "<", start_line, start_column);
+                advance();
+            }
+        } else if (c == '>') {
+            if (peek_next() == '=') {
+                tokens.emplace_back(TokenType::GTEQ, ">=", start_line, start_column);
+                advance();
+                advance();
+            } else {
+                tokens.emplace_back(TokenType::GT, ">", start_line, start_column);
+                advance();
+            }
+        } else if (c == '=') {
+            if (peek_next() == '=') {
+                tokens.emplace_back(TokenType::EQ, "==", start_line, start_column);
+                advance();
+                advance();
+            } else {
+                throw std::runtime_error("Unexpected character '=' at line " + 
+                                       std::to_string(line) + ", column " + std::to_string(column) +
+                                       " (did you mean '=='?)");
+            }
+        } else if (c == '!') {
+            if (peek_next() == '=') {
+                tokens.emplace_back(TokenType::NEQ, "!=", start_line, start_column);
+                advance();
+                advance();
+            } else {
+                throw std::runtime_error("Unexpected character '!' at line " + 
+                                       std::to_string(line) + ", column " + std::to_string(column) +
+                                       " (did you mean '!='?)");
+            }
         } else if (c == '"') {
             tokens.push_back(read_string());
+        } else if (std::isdigit(c)) {
+            tokens.push_back(read_number());
         } else if (std::isalpha(c) || c == '_') {
             tokens.push_back(read_identifier());
         } else {
@@ -97,7 +140,17 @@ Token Lexer::read_identifier() {
     }
     
     std::string value = input.substr(start_pos, pos - start_pos);
-    TokenType type = (value == "fn") ? TokenType::FN : TokenType::IDENTIFIER;
+    
+    TokenType type = TokenType::IDENTIFIER;
+    if (value == "fn") type = TokenType::FN;
+    else if (value == "if") type = TokenType::IF;
+    else if (value == "else") type = TokenType::ELSE;
+    else if (value == "while") type = TokenType::WHILE;
+    else if (value == "for") type = TokenType::FOR;
+    else if (value == "in") type = TokenType::IN;
+    else if (value == "true") type = TokenType::TRUE;
+    else if (value == "false") type = TokenType::FALSE;
+    else if (value == "range") type = TokenType::RANGE;
     
     return Token(type, value, start_line, start_column);
 }
@@ -125,6 +178,19 @@ Token Lexer::read_string() {
     advance(); // skip closing quote
     
     return Token(TokenType::STRING_LITERAL, value, start_line, start_column);
+}
+
+Token Lexer::read_number() {
+    size_t start_line = line;
+    size_t start_column = column;
+    size_t start_pos = pos;
+    
+    while (!is_at_end() && std::isdigit(peek())) {
+        advance();
+    }
+    
+    std::string value = input.substr(start_pos, pos - start_pos);
+    return Token(TokenType::NUMBER, value, start_line, start_column);
 }
 
 } // namespace cprime

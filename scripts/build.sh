@@ -55,19 +55,58 @@ if [ -f "bin/cprime" ]; then
     echo -e "${GREEN}✓ Build successful!${NC}"
     echo "Compiler binary: $BUILD_DIR/bin/cprime"
     
-    # Test with hello world
-    if [ -f "examples/hello.cprime" ]; then
-        echo -e "${YELLOW}Testing with hello.cprime...${NC}"
-        cd "$BUILD_DIR"
-        ./bin/cprime examples/hello.cprime -o hello_test
+    # Test with all .cprime files in examples folder
+    echo -e "${YELLOW}Testing all .cprime files in examples...${NC}"
+    cd "$BUILD_DIR"
+    
+    test_passed=0
+    test_total=0
+    
+    for cprime_file in examples/*.cprime; do
+        if [ -f "$cprime_file" ]; then
+            test_total=$((test_total + 1))
+            filename=$(basename "$cprime_file" .cprime)
+            output_name="${filename}_test"
+            
+            echo -e "${YELLOW}Testing $cprime_file...${NC}"
+            
+            # Compile the file
+            if ./bin/cprime "$cprime_file" -o "$output_name"; then
+                if [ -f "$output_name" ]; then
+                    echo -e "${GREEN}✓ $filename compilation successful${NC}"
+                    echo "Running $output_name:"
+                    echo "----------------------------------------"
+                    if ./"$output_name"; then
+                        echo "----------------------------------------"
+                        echo -e "${GREEN}✓ $filename execution successful${NC}"
+                        test_passed=$((test_passed + 1))
+                        # Clean up the executable
+                        rm -f "$output_name"
+                    else
+                        echo "----------------------------------------"
+                        echo -e "${RED}✗ $filename execution failed${NC}"
+                    fi
+                else
+                    echo -e "${RED}✗ $filename compilation failed - no output file${NC}"
+                fi
+            else
+                echo -e "${RED}✗ $filename compilation failed${NC}"
+            fi
+            echo
+        fi
+    done
+    
+    # Summary
+    if [ $test_total -eq 0 ]; then
+        echo -e "${YELLOW}No .cprime test files found in examples/${NC}"
+    else
+        echo -e "${GREEN}=== Test Summary ===${NC}"
+        echo "Passed: $test_passed/$test_total tests"
         
-        if [ -f "hello_test" ]; then
-            echo -e "${GREEN}✓ Test compilation successful!${NC}"
-            echo "Running hello_test:"
-            ./hello_test
-            echo -e "${GREEN}✓ CPrime compiler is working!${NC}"
+        if [ $test_passed -eq $test_total ]; then
+            echo -e "${GREEN}✓ All tests passed!${NC}"
         else
-            echo -e "${RED}✗ Test compilation failed${NC}"
+            echo -e "${RED}✗ Some tests failed${NC}"
             exit 1
         fi
     fi

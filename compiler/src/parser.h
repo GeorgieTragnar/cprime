@@ -27,7 +27,17 @@ private:
     
     // Parsing methods
     std::unique_ptr<Function> parse_function();
+    std::unique_ptr<Block> parse_block();
+    std::unique_ptr<Statement> parse_statement();
     std::unique_ptr<FunctionCall> parse_function_call();
+    std::unique_ptr<IfStatement> parse_if_statement();
+    std::unique_ptr<WhileLoop> parse_while_loop();
+    std::unique_ptr<ForLoop> parse_for_loop();
+    
+    // Expression parsing
+    std::unique_ptr<Expression> parse_expression();
+    std::unique_ptr<Expression> parse_comparison();
+    std::unique_ptr<Expression> parse_primary();
     
     // Error handling
     void error(const std::string& message);

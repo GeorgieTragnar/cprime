@@ -1,0 +1,84 @@
+fn main() {
+    print("=== Function Scope Test ===");
+    
+    // Basic block scope
+    print("Before outer block");
+    {
+        print("Inside outer block");
+        {
+            print("Inside nested block");
+            {
+                print("Inside deeply nested block");
+            }
+            print("Back to nested block");
+        }
+        print("Back to outer block");
+    }
+    print("After outer block");
+    
+    // Conditional scopes
+    print("=== Conditional Scope Test ===");
+    if (true) {
+        print("True branch executed");
+        {
+            print("Nested block in true branch");
+        }
+    } else {
+        print("False branch executed");
+    }
+    
+    if (false) {
+        print("This should not print");
+    } else {
+        print("Else branch executed");
+        if (true) {
+            print("Nested if in else");
+        }
+    }
+    
+    // Simple comparison tests
+    print("=== Comparison Test ===");
+    if (5 > 3) {
+        print("5 is greater than 3");
+    }
+    
+    if (2 == 2) {
+        print("2 equals 2");
+    }
+    
+    if (1 != 0) {
+        print("1 is not equal to 0");
+    }
+    
+    // Loop scopes
+    print("=== Loop Scope Test ===");
+    for (i in range(3)) {
+        print("For loop iteration");
+        {
+            print("Nested block in for");
+            if (true) {
+                print("If inside for loop");
+            }
+        }
+    }
+    
+    // Mixed nested scopes
+    print("=== Mixed Nested Scopes ===");
+    {
+        print("Outer block");
+        if (true) {
+            print("If in block");
+            for (x in range(2)) {
+                print("For in if in block");
+                {
+                    print("Block in for in if in block");
+                    if (true) {
+                        print("If in block in for in if in block");
+                    }
+                }
+            }
+        }
+    }
+    
+    print("=== Test Complete ===");
+}

@@ -8,10 +8,19 @@ namespace cprime {
 enum class TokenType {
     // Keywords
     FN,
+    IF,
+    ELSE,
+    WHILE,
+    FOR,
+    IN,
+    TRUE,
+    FALSE,
+    RANGE,
     
     // Identifiers and literals
     IDENTIFIER,
     STRING_LITERAL,
+    NUMBER,
     
     // Punctuation
     LBRACE,     // {
@@ -19,6 +28,15 @@ enum class TokenType {
     LPAREN,     // (
     RPAREN,     // )
     SEMICOLON,  // ;
+    COMMA,      // ,
+    
+    // Operators
+    LT,         // <
+    GT,         // >
+    LTEQ,       // <=
+    GTEQ,       // >=
+    EQ,         // ==
+    NEQ,        // !=
     
     // Special
     EOF_TOKEN
@@ -51,6 +69,7 @@ private:
     void skip_whitespace();
     Token read_identifier();
     Token read_string();
+    Token read_number();
     
     bool is_at_end() const { return pos >= input.length(); }
 };
