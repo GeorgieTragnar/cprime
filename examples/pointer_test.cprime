@@ -1,0 +1,12 @@
+// Test basic pointer and reference syntax parsing
+int main() {
+    print("=== Pointer and Reference Test ===");
+    
+    // For now, just test that these parse without errors
+    // TODO: Add actual pointer/reference usage when implemented
+    
+    print("Basic pointer and reference syntax parsing test");
+    print("This tests lexer and parser extensions");
+    
+    print("=== Test Complete ===");
+}

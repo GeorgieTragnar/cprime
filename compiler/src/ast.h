@@ -11,8 +11,11 @@ enum class Type {
     INT,
     BOOL,
     VOID,
-    AUTO,  // For type deduction
-    CUSTOM // For user-defined classes
+    AUTO,      // For type deduction
+    CUSTOM,    // For user-defined classes
+    POINTER,   // For pointer types: int*, Point*
+    REFERENCE, // For reference types: int&, Point&
+    RVALUE_REFERENCE // For rvalue reference types: int&&, Point&&
 };
 
 // Custom type information for user-defined classes
@@ -20,6 +23,29 @@ struct CustomType {
     std::string name;
     
     CustomType(const std::string& name) : name(name) {}
+};
+
+// Pointer type information for pointer types
+struct PointerType {
+    Type base_type;
+    std::unique_ptr<CustomType> custom_base_type;  // For custom type pointers
+    
+    PointerType(Type base_type) : base_type(base_type) {}
+    PointerType(std::unique_ptr<CustomType> custom_base_type) 
+        : base_type(Type::CUSTOM), custom_base_type(std::move(custom_base_type)) {}
+};
+
+// Reference type information for reference types
+struct ReferenceType {
+    Type base_type;
+    std::unique_ptr<CustomType> custom_base_type;  // For custom type references
+    bool is_const;  // For const references
+    bool is_rvalue; // For rvalue references (&&)
+    
+    ReferenceType(Type base_type, bool is_const = false, bool is_rvalue = false) 
+        : base_type(base_type), is_const(is_const), is_rvalue(is_rvalue) {}
+    ReferenceType(std::unique_ptr<CustomType> custom_base_type, bool is_const = false, bool is_rvalue = false)
+        : base_type(Type::CUSTOM), custom_base_type(std::move(custom_base_type)), is_const(is_const), is_rvalue(is_rvalue) {}
 };
 
 // Base class for all AST nodes
@@ -84,14 +110,27 @@ struct VariableReference : Expression {
     VariableReference(const std::string& name) : name(name) {}
 };
 
-// Variable declaration: auto x = 5; int y = 10;
+// Variable declaration: auto x = 5; int y = 10; int* ptr; Point& ref;
 struct VariableDeclaration : Statement {
     Type type;
     std::string name;
     std::unique_ptr<Expression> initializer;
+    std::unique_ptr<CustomType> custom_type;      // Set when type is CUSTOM
+    std::unique_ptr<PointerType> pointer_type;    // Set when type is POINTER
+    std::unique_ptr<ReferenceType> reference_type; // Set when type is REFERENCE/RVALUE_REFERENCE
     
     VariableDeclaration(Type type, const std::string& name, std::unique_ptr<Expression> initializer)
         : type(type), name(name), initializer(std::move(initializer)) {}
+    
+    VariableDeclaration(const std::string& name, std::unique_ptr<CustomType> custom_type, std::unique_ptr<Expression> initializer)
+        : type(Type::CUSTOM), name(name), initializer(std::move(initializer)), custom_type(std::move(custom_type)) {}
+    
+    VariableDeclaration(const std::string& name, std::unique_ptr<PointerType> pointer_type, std::unique_ptr<Expression> initializer)
+        : type(Type::POINTER), name(name), initializer(std::move(initializer)), pointer_type(std::move(pointer_type)) {}
+    
+    VariableDeclaration(const std::string& name, std::unique_ptr<ReferenceType> reference_type, std::unique_ptr<Expression> initializer)
+        : type(reference_type->is_rvalue ? Type::RVALUE_REFERENCE : Type::REFERENCE), name(name), 
+          initializer(std::move(initializer)), reference_type(std::move(reference_type)) {}
 };
 
 // Assignment: x = 5;
@@ -170,6 +209,22 @@ struct FieldAccess : Expression {
         : object(std::move(object)), field_name(field_name) {}
 };
 
+// Pointer dereference expression: *ptr
+struct PointerDereference : Expression {
+    std::unique_ptr<Expression> pointer;
+    
+    PointerDereference(std::unique_ptr<Expression> pointer)
+        : pointer(std::move(pointer)) {}
+};
+
+// Address-of expression: &variable
+struct AddressOf : Expression {
+    std::unique_ptr<Expression> operand;
+    
+    AddressOf(std::unique_ptr<Expression> operand)
+        : operand(std::move(operand)) {}
+};
+
 // Constructor types
 enum class ConstructorType {
     DEFAULT,     // Class() = default;
@@ -182,13 +237,22 @@ enum class ConstructorType {
 struct FieldDeclaration : ASTNode {
     std::string name;
     Type type;
-    std::unique_ptr<CustomType> custom_type;  // Set when type is CUSTOM
+    std::unique_ptr<CustomType> custom_type;      // Set when type is CUSTOM
+    std::unique_ptr<PointerType> pointer_type;    // Set when type is POINTER
+    std::unique_ptr<ReferenceType> reference_type; // Set when type is REFERENCE/RVALUE_REFERENCE
     
     FieldDeclaration(const std::string& name, Type type) 
         : name(name), type(type) {}
     
     FieldDeclaration(const std::string& name, std::unique_ptr<CustomType> custom_type)
         : name(name), type(Type::CUSTOM), custom_type(std::move(custom_type)) {}
+    
+    FieldDeclaration(const std::string& name, std::unique_ptr<PointerType> pointer_type)
+        : name(name), type(Type::POINTER), pointer_type(std::move(pointer_type)) {}
+    
+    FieldDeclaration(const std::string& name, std::unique_ptr<ReferenceType> reference_type)
+        : name(name), type(reference_type->is_rvalue ? Type::RVALUE_REFERENCE : Type::REFERENCE), 
+          reference_type(std::move(reference_type)) {}
 };
 
 // Constructor declaration: Class() = default; or explicit definition

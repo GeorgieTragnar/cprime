@@ -97,6 +97,52 @@ std::unique_ptr<Statement> Parser::parse_statement() {
 }
 
 std::unique_ptr<VariableDeclaration> Parser::parse_variable_declaration() {
+    // Check for complex type declarations (pointers, references)
+    size_t saved_pos = pos;
+    
+    // Try to detect pointer type: type*
+    if ((is_type_keyword() || check(TokenType::IDENTIFIER)) && peek_for_pointer()) {
+        auto pointer_type = parse_pointer_type();
+        
+        consume(TokenType::IDENTIFIER, "Expected variable name");
+        std::string name = previous().value;
+        
+        consume(TokenType::ASSIGN, "Expected '=' after pointer variable name");
+        auto initializer = parse_expression();
+        consume(TokenType::SEMICOLON, "Expected ';' after pointer variable declaration");
+        
+        // Add to symbol table (TODO: extend symbol table for pointers)
+        // For now, just declare as POINTER type
+        if (!symbol_table.declare_variable(name, Type::POINTER)) {
+            error("Variable '" + name + "' already declared in this scope");
+        }
+        
+        return std::make_unique<VariableDeclaration>(name, std::move(pointer_type), std::move(initializer));
+    }
+    
+    // Try to detect reference type: [const] type& or type&&
+    pos = saved_pos;
+    if ((check(TokenType::CONST) || is_type_keyword() || check(TokenType::IDENTIFIER)) && peek_for_reference()) {
+        auto reference_type = parse_reference_type();
+        
+        consume(TokenType::IDENTIFIER, "Expected variable name");
+        std::string name = previous().value;
+        
+        consume(TokenType::ASSIGN, "Expected '=' after reference variable name");
+        auto initializer = parse_expression();
+        consume(TokenType::SEMICOLON, "Expected ';' after reference variable declaration");
+        
+        // Add to symbol table (TODO: extend symbol table for references)
+        Type ref_type = reference_type->is_rvalue ? Type::RVALUE_REFERENCE : Type::REFERENCE;
+        if (!symbol_table.declare_variable(name, ref_type)) {
+            error("Variable '" + name + "' already declared in this scope");
+        }
+        
+        return std::make_unique<VariableDeclaration>(name, std::move(reference_type), std::move(initializer));
+    }
+    
+    // Fall back to simple type parsing
+    pos = saved_pos;
     Type type = parse_type();
     
     consume(TokenType::IDENTIFIER, "Expected variable name");
@@ -138,6 +184,12 @@ std::unique_ptr<Assignment> Parser::parse_assignment() {
 }
 
 Type Parser::parse_type() {
+    // This method now only handles simple built-in types
+    // For complex types (pointers, references), use specific parsing methods
+    return parse_base_type();
+}
+
+Type Parser::parse_base_type() {
     if (match(TokenType::AUTO)) {
         return Type::AUTO;
     } else if (match(TokenType::INT)) {
@@ -149,6 +201,70 @@ Type Parser::parse_type() {
     } else {
         error("Expected type specifier");
         return Type::VOID;
+    }
+}
+
+std::unique_ptr<PointerType> Parser::parse_pointer_type() {
+    // Parse base type first
+    if (is_type_keyword()) {
+        Type base_type = parse_base_type();
+        consume(TokenType::MULTIPLY, "Expected '*' after base type for pointer");
+        return std::make_unique<PointerType>(base_type);
+    } else if (check(TokenType::IDENTIFIER)) {
+        // Custom type pointer
+        auto custom_type = parse_custom_type();
+        consume(TokenType::MULTIPLY, "Expected '*' after custom type for pointer");
+        return std::make_unique<PointerType>(std::move(custom_type));
+    } else {
+        error("Expected type before '*' in pointer declaration");
+        return std::make_unique<PointerType>(Type::VOID);
+    }
+}
+
+std::unique_ptr<ReferenceType> Parser::parse_reference_type() {
+    bool is_const = false;
+    
+    // Check for const keyword
+    if (match(TokenType::CONST)) {
+        is_const = true;
+    }
+    
+    // Parse base type
+    if (is_type_keyword()) {
+        Type base_type = parse_base_type();
+        
+        // Check for reference type
+        if (match(TokenType::AMPERSAND)) {
+            if (match(TokenType::AMPERSAND)) {
+                // Rvalue reference (&&)
+                return std::make_unique<ReferenceType>(base_type, is_const, true);
+            } else {
+                // Regular reference (&)
+                return std::make_unique<ReferenceType>(base_type, is_const, false);
+            }
+        } else {
+            error("Expected '&' or '&&' after type for reference");
+            return std::make_unique<ReferenceType>(Type::VOID, is_const, false);
+        }
+    } else if (check(TokenType::IDENTIFIER)) {
+        // Custom type reference
+        auto custom_type = parse_custom_type();
+        
+        if (match(TokenType::AMPERSAND)) {
+            if (match(TokenType::AMPERSAND)) {
+                // Rvalue reference (&&)
+                return std::make_unique<ReferenceType>(std::move(custom_type), is_const, true);
+            } else {
+                // Regular reference (&)
+                return std::make_unique<ReferenceType>(std::move(custom_type), is_const, false);
+            }
+        } else {
+            error("Expected '&' or '&&' after custom type for reference");
+            return std::make_unique<ReferenceType>(std::move(custom_type), is_const, false);
+        }
+    } else {
+        error("Expected type before '&' in reference declaration");
+        return std::make_unique<ReferenceType>(Type::VOID, is_const, false);
     }
 }
 
@@ -528,6 +644,54 @@ std::unique_ptr<CustomType> Parser::parse_custom_type() {
 bool Parser::is_constructor_declaration() const {
     // For now, skip constructor parsing - only parse fields
     // TODO: Implement proper constructor detection later
+    return false;
+}
+
+bool Parser::peek_for_pointer() const {
+    // Look ahead to see if we have a pattern like "type *"
+    size_t lookahead_pos = pos;
+    
+    // Skip the base type
+    if (tokens[lookahead_pos].type == TokenType::AUTO ||
+        tokens[lookahead_pos].type == TokenType::INT ||
+        tokens[lookahead_pos].type == TokenType::BOOL ||
+        tokens[lookahead_pos].type == TokenType::VOID ||
+        tokens[lookahead_pos].type == TokenType::IDENTIFIER) {
+        lookahead_pos++;
+        
+        // Check if next token is '*'
+        if (lookahead_pos < tokens.size() && tokens[lookahead_pos].type == TokenType::MULTIPLY) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+bool Parser::peek_for_reference() const {
+    // Look ahead to see if we have a pattern like "[const] type &" or "type &&"
+    size_t lookahead_pos = pos;
+    
+    // Skip optional 'const'
+    if (lookahead_pos < tokens.size() && tokens[lookahead_pos].type == TokenType::CONST) {
+        lookahead_pos++;
+    }
+    
+    // Skip the base type
+    if (lookahead_pos < tokens.size() && 
+        (tokens[lookahead_pos].type == TokenType::AUTO ||
+         tokens[lookahead_pos].type == TokenType::INT ||
+         tokens[lookahead_pos].type == TokenType::BOOL ||
+         tokens[lookahead_pos].type == TokenType::VOID ||
+         tokens[lookahead_pos].type == TokenType::IDENTIFIER)) {
+        lookahead_pos++;
+        
+        // Check if next token is '&'
+        if (lookahead_pos < tokens.size() && tokens[lookahead_pos].type == TokenType::AMPERSAND) {
+            return true;
+        }
+    }
+    
     return false;
 }
 

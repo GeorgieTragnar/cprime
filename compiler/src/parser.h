@@ -54,8 +54,13 @@ private:
     // Helper methods
     Type parse_type();
     std::unique_ptr<CustomType> parse_custom_type();
+    std::unique_ptr<PointerType> parse_pointer_type();
+    std::unique_ptr<ReferenceType> parse_reference_type();
+    Type parse_base_type();
     bool is_type_keyword() const;
     bool is_constructor_declaration() const;
+    bool peek_for_pointer() const;
+    bool peek_for_reference() const;
     
     // Error handling
     void error(const std::string& message);

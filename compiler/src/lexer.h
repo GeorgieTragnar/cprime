@@ -22,6 +22,7 @@ enum class TokenType {
     CLASS,
     DEFAULT,
     EXPLICIT,
+    CONST,
     
     // Identifiers and literals
     IDENTIFIER,
@@ -37,6 +38,8 @@ enum class TokenType {
     COMMA,      // ,
     COLON,      // :
     DOT,        // .
+    AMPERSAND,  // &
+    DOUBLE_AMPERSAND, // &&
     
     // Assignment and arithmetic operators
     ASSIGN,     // =

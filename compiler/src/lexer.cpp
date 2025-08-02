@@ -95,6 +95,15 @@ std::vector<Token> Lexer::tokenize() {
         } else if (c == '%') {
             tokens.emplace_back(TokenType::MODULO, "%", start_line, start_column);
             advance();
+        } else if (c == '&') {
+            if (peek_next() == '&') {
+                tokens.emplace_back(TokenType::DOUBLE_AMPERSAND, "&&", start_line, start_column);
+                advance();
+                advance();
+            } else {
+                tokens.emplace_back(TokenType::AMPERSAND, "&", start_line, start_column);
+                advance();
+            }
         } else if (c == '"') {
             tokens.push_back(read_string());
         } else if (std::isdigit(c)) {
@@ -177,6 +186,7 @@ Token Lexer::read_identifier() {
     else if (value == "class") type = TokenType::CLASS;
     else if (value == "default") type = TokenType::DEFAULT;
     else if (value == "explicit") type = TokenType::EXPLICIT;
+    else if (value == "const") type = TokenType::CONST;
     
     return Token(type, value, start_line, start_column);
 }
