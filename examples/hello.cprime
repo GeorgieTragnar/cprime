@@ -1,0 +1,4 @@
+// Basic Hello World program in CPrime
+fn main() {
+    print("Hello, World!");
+}
