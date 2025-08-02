@@ -156,8 +156,7 @@ Token Lexer::read_identifier() {
     std::string value = input.substr(start_pos, pos - start_pos);
     
     TokenType type = TokenType::IDENTIFIER;
-    if (value == "fn") type = TokenType::FN;
-    else if (value == "if") type = TokenType::IF;
+    if (value == "if") type = TokenType::IF;
     else if (value == "else") type = TokenType::ELSE;
     else if (value == "while") type = TokenType::WHILE;
     else if (value == "for") type = TokenType::FOR;
@@ -168,6 +167,7 @@ Token Lexer::read_identifier() {
     else if (value == "auto") type = TokenType::AUTO;
     else if (value == "int") type = TokenType::INT;
     else if (value == "bool") type = TokenType::BOOL;
+    else if (value == "void") type = TokenType::VOID;
     
     return Token(type, value, start_line, start_column);
 }

@@ -12,7 +12,7 @@ std::unique_ptr<Program> Parser::parse() {
     auto program = std::make_unique<Program>();
     
     while (!is_at_end()) {
-        if (match(TokenType::FN)) {
+        if (is_type_keyword()) {
             program->functions.push_back(parse_function());
         } else {
             error("Expected function definition");
@@ -23,11 +23,14 @@ std::unique_ptr<Program> Parser::parse() {
 }
 
 std::unique_ptr<Function> Parser::parse_function() {
-    // We already consumed 'fn'
+    // Parse return type (int, void, bool, auto)
+    Type return_type = parse_type();
+    
+    // Parse function name
     consume(TokenType::IDENTIFIER, "Expected function name");
     std::string name = previous().value;
     
-    auto func = std::make_unique<Function>(name);
+    auto func = std::make_unique<Function>(return_type, name);
     
     consume(TokenType::LPAREN, "Expected '(' after function name");
     consume(TokenType::RPAREN, "Expected ')' after '(' (no parameters supported yet)");
@@ -139,6 +142,8 @@ Type Parser::parse_type() {
         return Type::INT;
     } else if (match(TokenType::BOOL)) {
         return Type::BOOL;
+    } else if (match(TokenType::VOID)) {
+        return Type::VOID;
     } else {
         error("Expected type specifier");
         return Type::VOID;
@@ -146,7 +151,7 @@ Type Parser::parse_type() {
 }
 
 bool Parser::is_type_keyword() const {
-    return check(TokenType::AUTO) || check(TokenType::INT) || check(TokenType::BOOL);
+    return check(TokenType::AUTO) || check(TokenType::INT) || check(TokenType::BOOL) || check(TokenType::VOID);
 }
 
 std::unique_ptr<IfStatement> Parser::parse_if_statement() {

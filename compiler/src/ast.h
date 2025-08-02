@@ -143,12 +143,14 @@ struct ForLoop : Statement {
         : variable(variable), iterable(std::move(iterable)), body(std::move(body)) {}
 };
 
-// Function definition: fn main() { ... }
+// Function definition: int main() { ... }, void helper() { ... }
 struct Function : ASTNode {
+    Type return_type;
     std::string name;
     std::unique_ptr<Block> body;
     
-    Function(const std::string& name) : name(name) {}
+    Function(Type return_type, const std::string& name) 
+        : return_type(return_type), name(name) {}
 };
 
 // Root node representing the entire program

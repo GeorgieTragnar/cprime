@@ -1,4 +1,4 @@
-fn main() {
+int main() {
     print("=== Function Scope Test ===");
     
     // Basic block scope

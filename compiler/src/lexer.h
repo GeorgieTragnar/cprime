@@ -7,7 +7,6 @@ namespace cprime {
 
 enum class TokenType {
     // Keywords
-    FN,
     IF,
     ELSE,
     WHILE,
@@ -19,6 +18,7 @@ enum class TokenType {
     AUTO,
     INT,
     BOOL,
+    VOID,
     
     // Identifiers and literals
     IDENTIFIER,

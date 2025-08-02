@@ -1,4 +1,4 @@
-fn main() {
+int main() {
     print("=== New Print Function Test ===");
     
     // Basic placeholder test

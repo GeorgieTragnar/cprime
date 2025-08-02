@@ -32,10 +32,8 @@ void CodeGenerator::generate(const Program& program) {
 }
 
 void CodeGenerator::generate_function(const Function& func) {
-    // Create function type: int main() or void func()
-    llvm::Type* return_type = (func.name == "main") ? 
-        llvm::Type::getInt32Ty(context) : 
-        llvm::Type::getVoidTy(context);
+    // Create function type using explicit return type
+    llvm::Type* return_type = get_llvm_type(func.return_type);
     
     auto func_type = llvm::FunctionType::get(return_type, false);
     
@@ -53,10 +51,17 @@ void CodeGenerator::generate_function(const Function& func) {
     // Generate function body
     generate_block(*func.body);
     
-    // Add return statement
-    if (func.name == "main") {
+    // Add return statement based on function return type
+    if (func.return_type == Type::VOID) {
+        builder.CreateRetVoid();
+    } else if (func.return_type == Type::INT) {
+        // For main function, return 0; for other int functions, also return 0 for now
         builder.CreateRet(llvm::ConstantInt::get(context, llvm::APInt(32, 0)));
+    } else if (func.return_type == Type::BOOL) {
+        // Return false for bool functions for now
+        builder.CreateRet(llvm::ConstantInt::get(context, llvm::APInt(1, 0)));
     } else {
+        // AUTO type should be resolved by now, but default to void
         builder.CreateRetVoid();
     }
 }

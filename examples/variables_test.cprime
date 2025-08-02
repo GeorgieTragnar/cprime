@@ -1,4 +1,4 @@
-fn main() {
+int main() {
     print("=== Variable Declaration Test ===");
     
     // Auto type deduction
