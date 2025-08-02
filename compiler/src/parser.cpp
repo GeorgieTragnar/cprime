@@ -12,10 +12,12 @@ std::unique_ptr<Program> Parser::parse() {
     auto program = std::make_unique<Program>();
     
     while (!is_at_end()) {
-        if (is_type_keyword()) {
+        if (check(TokenType::CLASS)) {
+            program->classes.push_back(parse_class());
+        } else if (is_type_keyword()) {
             program->functions.push_back(parse_function());
         } else {
-            error("Expected function definition");
+            error("Expected class or function definition");
         }
     }
     
@@ -300,7 +302,17 @@ std::unique_ptr<Expression> Parser::parse_primary() {
         if (!symbol_table.lookup_variable(name)) {
             error("Undefined variable '" + name + "'");
         }
-        return std::make_unique<VariableReference>(name);
+        
+        std::unique_ptr<Expression> expr = std::make_unique<VariableReference>(name);
+        
+        // Handle field access: obj.field
+        while (match(TokenType::DOT)) {
+            consume(TokenType::IDENTIFIER, "Expected field name after '.'");
+            std::string field_name = previous().value;
+            expr = std::make_unique<FieldAccess>(std::move(expr), field_name);
+        }
+        
+        return expr;
     }
     
     if (match(TokenType::RANGE)) {
@@ -394,6 +406,129 @@ void Parser::error(const std::string& message) {
     }
     
     throw std::runtime_error(oss.str());
+}
+
+std::unique_ptr<ClassDefinition> Parser::parse_class() {
+    consume(TokenType::CLASS, "Expected 'class'");
+    consume(TokenType::IDENTIFIER, "Expected class name");
+    std::string class_name = previous().value;
+    
+    auto class_def = std::make_unique<ClassDefinition>(class_name);
+    
+    consume(TokenType::LBRACE, "Expected '{' after class name");
+    
+    while (!check(TokenType::RBRACE) && !is_at_end()) {
+        if (is_constructor_declaration()) {
+            class_def->constructors.push_back(parse_constructor_declaration(class_name));
+        } else {
+            class_def->fields.push_back(parse_field_declaration());
+        }
+    }
+    
+    consume(TokenType::RBRACE, "Expected '}' after class body");
+    consume(TokenType::SEMICOLON, "Expected ';' after class definition");
+    
+    return class_def;
+}
+
+std::unique_ptr<FieldDeclaration> Parser::parse_field_declaration() {
+    consume(TokenType::IDENTIFIER, "Expected field name");
+    std::string field_name = previous().value;
+    
+    consume(TokenType::COLON, "Expected ':' after field name");
+    
+    // Parse type - could be built-in or custom
+    if (is_type_keyword()) {
+        Type type = parse_type();
+        auto field = std::make_unique<FieldDeclaration>(field_name, type);
+        consume(TokenType::COMMA, "Expected ',' after field declaration");
+        return field;
+    } else {
+        // Custom type
+        auto custom_type = parse_custom_type();
+        auto field = std::make_unique<FieldDeclaration>(field_name, std::move(custom_type));
+        consume(TokenType::COMMA, "Expected ',' after field declaration");
+        return field;
+    }
+}
+
+std::unique_ptr<ConstructorDeclaration> Parser::parse_constructor_declaration(const std::string& class_name) {
+    ConstructorType ctor_type;
+    bool is_explicit = false;
+    
+    // Check for explicit keyword
+    if (match(TokenType::EXPLICIT)) {
+        is_explicit = true;
+    }
+    
+    // Determine constructor type
+    if (match(TokenType::IDENTIFIER) && previous().value == class_name) {
+        // Default or custom constructor: ClassName(...)
+        consume(TokenType::LPAREN, "Expected '(' after constructor name");
+        
+        if (check(TokenType::RPAREN)) {
+            // Default constructor: ClassName()
+            ctor_type = ConstructorType::DEFAULT;
+            advance(); // consume ')'
+        } else if (check(TokenType::IDENTIFIER) && current().value == "const") {
+            // Copy constructor: ClassName(const ClassName& other)
+            advance(); // consume 'const'
+            consume(TokenType::IDENTIFIER, "Expected class name in copy constructor");
+            if (previous().value != class_name) {
+                error("Copy constructor parameter must be of same class type");
+            }
+            // Skip '&' and parameter name for now
+            while (!check(TokenType::RPAREN) && !is_at_end()) {
+                advance();
+            }
+            consume(TokenType::RPAREN, "Expected ')' after copy constructor parameters");
+            ctor_type = ConstructorType::COPY;
+        } else if (check(TokenType::IDENTIFIER) && current().value == class_name) {
+            // Move constructor: ClassName(ClassName&& other)
+            advance(); // consume class name
+            // Skip '&&' and parameter name for now
+            while (!check(TokenType::RPAREN) && !is_at_end()) {
+                advance();
+            }
+            consume(TokenType::RPAREN, "Expected ')' after move constructor parameters");
+            ctor_type = ConstructorType::MOVE;
+        } else {
+            error("Unsupported constructor type");
+        }
+    } else if (match(TokenType::IDENTIFIER) && previous().value == "~" + class_name) {
+        // Destructor: ~ClassName()
+        consume(TokenType::LPAREN, "Expected '(' after destructor name");
+        consume(TokenType::RPAREN, "Expected ')' after destructor");
+        ctor_type = ConstructorType::DESTRUCTOR;
+    } else {
+        error("Expected constructor or destructor declaration");
+    }
+    
+    auto ctor = std::make_unique<ConstructorDeclaration>(ctor_type, false, is_explicit);
+    
+    // Check for = default
+    if (match(TokenType::ASSIGN)) {
+        consume(TokenType::DEFAULT, "Expected 'default' after '='");
+        ctor->is_default = true;
+        consume(TokenType::SEMICOLON, "Expected ';' after '= default'");
+    } else {
+        // Custom implementation
+        ctor->body = parse_block();
+    }
+    
+    return ctor;
+}
+
+std::unique_ptr<CustomType> Parser::parse_custom_type() {
+    consume(TokenType::IDENTIFIER, "Expected custom type name");
+    std::string type_name = previous().value;
+    return std::make_unique<CustomType>(type_name);
+}
+
+bool Parser::is_constructor_declaration() const {
+    // For now, skip constructor parsing - only parse fields
+    // TODO: Implement proper constructor detection later
+    return false;
 }
 
 } // namespace cprime

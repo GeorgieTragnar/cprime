@@ -19,6 +19,9 @@ enum class TokenType {
     INT,
     BOOL,
     VOID,
+    CLASS,
+    DEFAULT,
+    EXPLICIT,
     
     // Identifiers and literals
     IDENTIFIER,
@@ -32,6 +35,8 @@ enum class TokenType {
     RPAREN,     // )
     SEMICOLON,  // ;
     COMMA,      // ,
+    COLON,      // :
+    DOT,        // .
     
     // Assignment and arithmetic operators
     ASSIGN,     // =

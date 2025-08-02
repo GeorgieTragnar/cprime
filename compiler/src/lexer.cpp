@@ -37,6 +37,12 @@ std::vector<Token> Lexer::tokenize() {
         } else if (c == ',') {
             tokens.emplace_back(TokenType::COMMA, ",", start_line, start_column);
             advance();
+        } else if (c == ':') {
+            tokens.emplace_back(TokenType::COLON, ":", start_line, start_column);
+            advance();
+        } else if (c == '.') {
+            tokens.emplace_back(TokenType::DOT, ".", start_line, start_column);
+            advance();
         } else if (c == '<') {
             if (peek_next() == '=') {
                 tokens.emplace_back(TokenType::LTEQ, "<=", start_line, start_column);
@@ -168,6 +174,9 @@ Token Lexer::read_identifier() {
     else if (value == "int") type = TokenType::INT;
     else if (value == "bool") type = TokenType::BOOL;
     else if (value == "void") type = TokenType::VOID;
+    else if (value == "class") type = TokenType::CLASS;
+    else if (value == "default") type = TokenType::DEFAULT;
+    else if (value == "explicit") type = TokenType::EXPLICIT;
     
     return Token(type, value, start_line, start_column);
 }

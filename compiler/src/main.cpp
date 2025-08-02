@@ -81,8 +81,14 @@ int main(int argc, char* argv[]) {
         cprime::Parser parser(std::move(tokens));
         auto ast = parser.parse();
         
+        // Register classes in symbol table first
+        cprime::SymbolTable symbol_table;
+        for (const auto& class_def : ast->classes) {
+            symbol_table.register_class(*class_def);
+        }
+        
         // Code generation
-        cprime::CodeGenerator codegen;
+        cprime::CodeGenerator codegen(symbol_table);
         codegen.generate(*ast);
         
         if (emit_llvm) {

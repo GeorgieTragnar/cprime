@@ -29,6 +29,9 @@ private:
     
     // Parsing methods
     std::unique_ptr<Function> parse_function();
+    std::unique_ptr<ClassDefinition> parse_class();
+    std::unique_ptr<FieldDeclaration> parse_field_declaration();
+    std::unique_ptr<ConstructorDeclaration> parse_constructor_declaration(const std::string& class_name);
     std::unique_ptr<Block> parse_block();
     std::unique_ptr<Statement> parse_statement();
     std::unique_ptr<VariableDeclaration> parse_variable_declaration();
@@ -50,7 +53,9 @@ private:
     
     // Helper methods
     Type parse_type();
+    std::unique_ptr<CustomType> parse_custom_type();
     bool is_type_keyword() const;
+    bool is_constructor_declaration() const;
     
     // Error handling
     void error(const std::string& message);

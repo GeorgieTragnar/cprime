@@ -11,7 +11,15 @@ enum class Type {
     INT,
     BOOL,
     VOID,
-    AUTO  // For type deduction
+    AUTO,  // For type deduction
+    CUSTOM // For user-defined classes
+};
+
+// Custom type information for user-defined classes
+struct CustomType {
+    std::string name;
+    
+    CustomType(const std::string& name) : name(name) {}
 };
 
 // Base class for all AST nodes
@@ -153,9 +161,60 @@ struct Function : ASTNode {
         : return_type(return_type), name(name) {}
 };
 
+// Field access expression: obj.field
+struct FieldAccess : Expression {
+    std::unique_ptr<Expression> object;
+    std::string field_name;
+    
+    FieldAccess(std::unique_ptr<Expression> object, const std::string& field_name)
+        : object(std::move(object)), field_name(field_name) {}
+};
+
+// Constructor types
+enum class ConstructorType {
+    DEFAULT,     // Class() = default;
+    COPY,        // Class(const Class& other) = default;
+    MOVE,        // Class(Class&& other) = default;
+    DESTRUCTOR   // ~Class() = default;
+};
+
+// Field declaration: name: type
+struct FieldDeclaration : ASTNode {
+    std::string name;
+    Type type;
+    std::unique_ptr<CustomType> custom_type;  // Set when type is CUSTOM
+    
+    FieldDeclaration(const std::string& name, Type type) 
+        : name(name), type(type) {}
+    
+    FieldDeclaration(const std::string& name, std::unique_ptr<CustomType> custom_type)
+        : name(name), type(Type::CUSTOM), custom_type(std::move(custom_type)) {}
+};
+
+// Constructor declaration: Class() = default; or explicit definition
+struct ConstructorDeclaration : ASTNode {
+    ConstructorType type;
+    bool is_default;
+    bool is_explicit;
+    std::unique_ptr<Block> body;  // nullptr for = default
+    
+    ConstructorDeclaration(ConstructorType type, bool is_default = true, bool is_explicit = false)
+        : type(type), is_default(is_default), is_explicit(is_explicit) {}
+};
+
+// Class definition: class Name { fields... constructors... };
+struct ClassDefinition : ASTNode {
+    std::string name;
+    std::vector<std::unique_ptr<FieldDeclaration>> fields;
+    std::vector<std::unique_ptr<ConstructorDeclaration>> constructors;
+    
+    ClassDefinition(const std::string& name) : name(name) {}
+};
+
 // Root node representing the entire program
 struct Program : ASTNode {
     std::vector<std::unique_ptr<Function>> functions;
+    std::vector<std::unique_ptr<ClassDefinition>> classes;
 };
 
 } // namespace cprime

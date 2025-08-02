@@ -150,7 +150,7 @@ else
     echo -e "${YELLOW}Running all .cprime files in examples...${NC}"
     echo
     
-    for cprime_file in examples/*.cprime; do
+    for cprime_file in "$EXAMPLES_DIR"/*.cprime; do
         if [ -f "$cprime_file" ]; then
             run_test "$cprime_file"
         fi

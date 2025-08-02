@@ -10,13 +10,18 @@
 
 namespace cprime {
 
-CodeGenerator::CodeGenerator() : builder(context) {
+CodeGenerator::CodeGenerator(SymbolTable& symbol_table) : builder(context), symbol_table(symbol_table) {
     module = std::make_unique<llvm::Module>("cprime_module", context);
 }
 
 void CodeGenerator::generate(const Program& program) {
     // First, declare printf
     get_or_declare_printf();
+    
+    // Generate all classes first (struct types)  
+    for (const auto& class_def : program.classes) {
+        generate_class(*class_def);
+    }
     
     // Generate all functions
     for (const auto& func : program.functions) {
@@ -278,6 +283,8 @@ llvm::Value* CodeGenerator::generate_expression(const Expression& expr) {
         return generate_variable_reference(*var_ref);
     } else if (auto range = dynamic_cast<const RangeExpression*>(&expr)) {
         return generate_range_expression(*range);
+    } else if (auto field_access = dynamic_cast<const FieldAccess*>(&expr)) {
+        return generate_field_access(*field_access);
     } else {
         throw std::runtime_error("Unknown expression type in code generation");
     }
@@ -558,5 +565,119 @@ void CodeGenerator::write_ir_to_file(const std::string& filename) {
     module->print(file, nullptr);
 }
 
+void CodeGenerator::generate_class(const ClassDefinition& class_def) {
+    // Create LLVM struct type for the class
+    std::vector<llvm::Type*> field_types;
+    
+    ClassInfo* class_info = symbol_table.lookup_class(class_def.name);
+    if (!class_info) {
+        throw std::runtime_error("Class not found in symbol table: " + class_def.name);
+    }
+    
+    // Add built-in type fields
+    for (const auto& field : class_info->fields) {
+        llvm::Type* field_type = get_llvm_type(field.second);
+        field_types.push_back(field_type);
+    }
+    
+    // Add custom type fields
+    for (const auto& field : class_info->custom_fields) {
+        llvm::Type* field_type = get_llvm_type(field.second);
+        field_types.push_back(field_type);
+    }
+    
+    // Create struct type
+    auto struct_type = llvm::StructType::create(context, field_types, class_def.name);
+    struct_types[class_def.name] = struct_type;
+}
+
+llvm::Value* CodeGenerator::generate_field_access(const FieldAccess& field_access) {
+    // Generate the object expression
+    llvm::Value* object = generate_expression(*field_access.object);
+    
+    // Get the object's type information
+    if (auto var_ref = dynamic_cast<const VariableReference*>(field_access.object.get())) {
+        Symbol* symbol = symbol_table.lookup_variable(var_ref->name);
+        if (!symbol || symbol->type != Type::CUSTOM) {
+            throw std::runtime_error("Field access on non-class type");
+        }
+        
+        // Get class info and field index
+        ClassInfo* class_info = symbol_table.lookup_class(symbol->custom_type_name);
+        if (!class_info) {
+            throw std::runtime_error("Class not found: " + symbol->custom_type_name);
+        }
+        
+        // Find field index
+        int field_index = -1;
+        int current_index = 0;
+        
+        // Check built-in fields first
+        for (const auto& field : class_info->fields) {
+            if (field.first == field_access.field_name) {
+                field_index = current_index;
+                break;
+            }
+            current_index++;
+        }
+        
+        // Check custom fields
+        if (field_index == -1) {
+            for (const auto& field : class_info->custom_fields) {
+                if (field.first == field_access.field_name) {
+                    field_index = current_index;
+                    break;
+                }
+                current_index++;
+            }
+        }
+        
+        if (field_index == -1) {
+            throw std::runtime_error("Field not found: " + field_access.field_name);
+        }
+        
+        // Generate GEP instruction for field access
+        std::vector<llvm::Value*> indices = {
+            llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), 0),  // Struct pointer deref
+            llvm::ConstantInt::get(llvm::Type::getInt32Ty(context), field_index)  // Field index
+        };
+        
+        auto field_ptr = builder.CreateGEP(
+            struct_types[symbol->custom_type_name],
+            object,
+            indices,
+            "field_ptr"
+        );
+        
+        // Load the field value
+        return builder.CreateLoad(
+            get_llvm_type(symbol_table.get_field_type(symbol->custom_type_name, field_access.field_name)),
+            field_ptr,
+            "field_value"
+        );
+    }
+    
+    throw std::runtime_error("Complex field access not yet supported");
+}
+
+llvm::Type* CodeGenerator::get_llvm_type(const std::string& custom_type_name) {
+    auto it = struct_types.find(custom_type_name);
+    if (it != struct_types.end()) {
+        return it->second;
+    }
+    throw std::runtime_error("Unknown custom type: " + custom_type_name);
+}
+
+llvm::StructType* CodeGenerator::get_or_create_struct_type(const std::string& class_name) {
+    auto it = struct_types.find(class_name);
+    if (it != struct_types.end()) {
+        return it->second;
+    }
+    
+    // Create placeholder struct type
+    auto struct_type = llvm::StructType::create(context, class_name);
+    struct_types[class_name] = struct_type;
+    return struct_type;
+}
 
 } // namespace cprime

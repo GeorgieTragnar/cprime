@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ast.h"
+#include "symbol_table.h"
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/IRBuilder.h>
@@ -12,7 +13,7 @@ namespace cprime {
 
 class CodeGenerator {
 public:
-    CodeGenerator();
+    CodeGenerator(SymbolTable& symbol_table);
     void generate(const Program& program);
     void write_ir_to_file(const std::string& filename);
     
@@ -20,9 +21,11 @@ private:
     llvm::LLVMContext context;
     std::unique_ptr<llvm::Module> module;
     llvm::IRBuilder<> builder;
+    SymbolTable& symbol_table;
     
     // Code generation methods
     void generate_function(const Function& func);
+    void generate_class(const ClassDefinition& class_def);
     void generate_block(const Block& block);
     void generate_statement(const Statement& stmt);
     void generate_variable_declaration(const VariableDeclaration& var_decl);
@@ -40,10 +43,13 @@ private:
     llvm::Value* generate_string_literal(const StringLiteral& lit);
     llvm::Value* generate_variable_reference(const VariableReference& var_ref);
     llvm::Value* generate_range_expression(const RangeExpression& range);
+    llvm::Value* generate_field_access(const FieldAccess& field_access);
     
     // Helper methods
     llvm::Function* get_or_declare_printf();
     llvm::Type* get_llvm_type(Type type);
+    llvm::Type* get_llvm_type(const std::string& custom_type_name);
+    llvm::StructType* get_or_create_struct_type(const std::string& class_name);
     
     // Print function helpers
     std::string process_format_string(const std::string& format, const std::vector<std::unique_ptr<Expression>>& args);
@@ -52,6 +58,9 @@ private:
     
     // Variable management
     std::unordered_map<std::string, llvm::AllocaInst*> variables;
+    
+    // Class type management
+    std::unordered_map<std::string, llvm::StructType*> struct_types;
 };
 
 } // namespace cprime
