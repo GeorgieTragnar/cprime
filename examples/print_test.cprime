@@ -1,0 +1,31 @@
+fn main() {
+    print("=== New Print Function Test ===");
+    
+    // Basic placeholder test
+    auto x = 42;
+    print("x = {}", x);
+    
+    // Multiple placeholders
+    auto y = 10;
+    print("x = {}, y = {}", x, y);
+    
+    // String literals
+    print("Hello {} from CPrime!", "World");
+    
+    // Expressions
+    print("x + y = {}", x + y);
+    print("x * y = {}", x * y);
+    
+    // Boolean values
+    auto flag = true;
+    print("flag = {}", flag);
+    
+    // Complex expressions
+    print("Complex: {} + {} = {}", x, y, x + y);
+    print("Comparison: {} > {} is {}", x, y, x > y);
+    
+    // Escaped braces
+    print("Literal braces: {{}} and nested: {{value = {}}}", x);
+    
+    print("=== Print Test Complete ===");
+}

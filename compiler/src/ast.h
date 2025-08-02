@@ -6,6 +6,14 @@
 
 namespace cprime {
 
+// Type enumeration
+enum class Type {
+    INT,
+    BOOL,
+    VOID,
+    AUTO  // For type deduction
+};
+
 // Base class for all AST nodes
 struct ASTNode {
     virtual ~ASTNode() = default;
@@ -35,10 +43,17 @@ struct NumberLiteral : Expression {
     NumberLiteral(int value) : value(value) {}
 };
 
-// Binary expression: a < b, x == y
+// String literal: "Hello", "World"
+struct StringLiteral : Expression {
+    std::string value;
+    
+    StringLiteral(const std::string& value) : value(value) {}
+};
+
+// Binary expression: a < b, x == y, a + b, x * y
 struct BinaryExpression : Expression {
     std::unique_ptr<Expression> left;
-    std::string operator_token;  // "<", ">", "==", "!=", "<=", ">="
+    std::string operator_token;  // "<", ">", "==", "!=", "<=", ">=", "+", "-", "*", "/", "%"
     std::unique_ptr<Expression> right;
     
     BinaryExpression(std::unique_ptr<Expression> left, 
@@ -54,10 +69,36 @@ struct RangeExpression : Expression {
     RangeExpression(std::unique_ptr<Expression> limit) : limit(std::move(limit)) {}
 };
 
-// Function call: print("Hello")
+// Variable reference: x, y, result
+struct VariableReference : Expression {
+    std::string name;
+    
+    VariableReference(const std::string& name) : name(name) {}
+};
+
+// Variable declaration: auto x = 5; int y = 10;
+struct VariableDeclaration : Statement {
+    Type type;
+    std::string name;
+    std::unique_ptr<Expression> initializer;
+    
+    VariableDeclaration(Type type, const std::string& name, std::unique_ptr<Expression> initializer)
+        : type(type), name(name), initializer(std::move(initializer)) {}
+};
+
+// Assignment: x = 5;
+struct Assignment : Statement {
+    std::string name;
+    std::unique_ptr<Expression> value;
+    
+    Assignment(const std::string& name, std::unique_ptr<Expression> value)
+        : name(name), value(std::move(value)) {}
+};
+
+// Function call: print("Hello"), print(x), print(x + y)
 struct FunctionCall : Statement {
     std::string name;
-    std::vector<std::string> args;  // Just string literals for now
+    std::vector<std::unique_ptr<Expression>> args;  // Now supports expressions
     
     FunctionCall(const std::string& name) : name(name) {}
 };

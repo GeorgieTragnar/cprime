@@ -2,6 +2,7 @@
 
 #include "ast.h"
 #include "lexer.h"
+#include "symbol_table.h"
 #include <memory>
 
 namespace cprime {
@@ -14,6 +15,7 @@ public:
 private:
     std::vector<Token> tokens;
     size_t pos;
+    SymbolTable symbol_table;
     
     // Token management
     Token& current();
@@ -29,15 +31,26 @@ private:
     std::unique_ptr<Function> parse_function();
     std::unique_ptr<Block> parse_block();
     std::unique_ptr<Statement> parse_statement();
+    std::unique_ptr<VariableDeclaration> parse_variable_declaration();
+    std::unique_ptr<Assignment> parse_assignment();
     std::unique_ptr<FunctionCall> parse_function_call();
     std::unique_ptr<IfStatement> parse_if_statement();
     std::unique_ptr<WhileLoop> parse_while_loop();
     std::unique_ptr<ForLoop> parse_for_loop();
     
-    // Expression parsing
+    // Expression parsing with precedence
     std::unique_ptr<Expression> parse_expression();
+    std::unique_ptr<Expression> parse_logical_or();
+    std::unique_ptr<Expression> parse_logical_and();
+    std::unique_ptr<Expression> parse_equality();
     std::unique_ptr<Expression> parse_comparison();
+    std::unique_ptr<Expression> parse_term();
+    std::unique_ptr<Expression> parse_factor();
     std::unique_ptr<Expression> parse_primary();
+    
+    // Helper methods
+    Type parse_type();
+    bool is_type_keyword() const;
     
     // Error handling
     void error(const std::string& message);

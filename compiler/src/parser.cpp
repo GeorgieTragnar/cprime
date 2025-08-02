@@ -39,6 +39,9 @@ std::unique_ptr<Function> Parser::parse_function() {
 std::unique_ptr<Block> Parser::parse_block() {
     consume(TokenType::LBRACE, "Expected '{'");
     
+    // Enter new scope
+    symbol_table.enter_scope();
+    
     auto block = std::make_unique<Block>();
     
     while (!check(TokenType::RBRACE) && !is_at_end()) {
@@ -46,6 +49,10 @@ std::unique_ptr<Block> Parser::parse_block() {
     }
     
     consume(TokenType::RBRACE, "Expected '}'");
+    
+    // Exit scope
+    symbol_table.exit_scope();
+    
     return block;
 }
 
@@ -60,14 +67,86 @@ std::unique_ptr<Statement> Parser::parse_statement() {
         // Standalone block
         pos--; // Back up to consume the brace in parse_block
         return parse_block();
+    } else if (is_type_keyword()) {
+        return parse_variable_declaration();
     } else if (check(TokenType::IDENTIFIER)) {
-        auto call = parse_function_call();
-        consume(TokenType::SEMICOLON, "Expected ';' after statement");
-        return call;
+        // Could be assignment or function call
+        size_t saved_pos = pos;
+        advance(); // consume identifier
+        
+        if (check(TokenType::ASSIGN)) {
+            // It's an assignment
+            pos = saved_pos; // restore position
+            return parse_assignment();
+        } else {
+            // It's a function call
+            pos = saved_pos; // restore position
+            auto call = parse_function_call();
+            consume(TokenType::SEMICOLON, "Expected ';' after statement");
+            return call;
+        }
     } else {
         error("Expected statement");
         return nullptr;
     }
+}
+
+std::unique_ptr<VariableDeclaration> Parser::parse_variable_declaration() {
+    Type type = parse_type();
+    
+    consume(TokenType::IDENTIFIER, "Expected variable name");
+    std::string name = previous().value;
+    
+    consume(TokenType::ASSIGN, "Expected '=' after variable name");
+    auto initializer = parse_expression();
+    consume(TokenType::SEMICOLON, "Expected ';' after variable declaration");
+    
+    // Type deduction for auto
+    if (type == Type::AUTO) {
+        type = symbol_table.deduce_type(*initializer);
+    }
+    
+    // Add to symbol table
+    if (!symbol_table.declare_variable(name, type)) {
+        error("Variable '" + name + "' already declared in this scope");
+    }
+    
+    return std::make_unique<VariableDeclaration>(type, name, std::move(initializer));
+}
+
+std::unique_ptr<Assignment> Parser::parse_assignment() {
+    consume(TokenType::IDENTIFIER, "Expected variable name");
+    std::string name = previous().value;
+    
+    consume(TokenType::ASSIGN, "Expected '='");
+    auto value = parse_expression();
+    consume(TokenType::SEMICOLON, "Expected ';' after assignment");
+    
+    // Check if variable exists
+    if (!symbol_table.lookup_variable(name)) {
+        error("Undefined variable '" + name + "'");
+    }
+    
+    symbol_table.assign_variable(name);
+    
+    return std::make_unique<Assignment>(name, std::move(value));
+}
+
+Type Parser::parse_type() {
+    if (match(TokenType::AUTO)) {
+        return Type::AUTO;
+    } else if (match(TokenType::INT)) {
+        return Type::INT;
+    } else if (match(TokenType::BOOL)) {
+        return Type::BOOL;
+    } else {
+        error("Expected type specifier");
+        return Type::VOID;
+    }
+}
+
+bool Parser::is_type_keyword() const {
+    return check(TokenType::AUTO) || check(TokenType::INT) || check(TokenType::BOOL);
 }
 
 std::unique_ptr<IfStatement> Parser::parse_if_statement() {
@@ -104,20 +183,85 @@ std::unique_ptr<ForLoop> Parser::parse_for_loop() {
     auto iterable = parse_expression();
     consume(TokenType::RPAREN, "Expected ')' after iterable");
     
-    auto body = parse_block();
+    // Enter new scope for the for loop
+    symbol_table.enter_scope();
     
-    return std::make_unique<ForLoop>(variable, std::move(iterable), std::move(body));
+    // For loops automatically declare their iteration variable as int
+    if (!symbol_table.declare_variable(variable, Type::INT)) {
+        error("Cannot declare for loop variable '" + variable + "'");
+    }
+    
+    // Parse body with the loop variable in scope
+    consume(TokenType::LBRACE, "Expected '{' after for loop header");
+    
+    auto block = std::make_unique<Block>();
+    while (!check(TokenType::RBRACE) && !is_at_end()) {
+        block->statements.push_back(parse_statement());
+    }
+    
+    consume(TokenType::RBRACE, "Expected '}'");
+    
+    // Exit scope
+    symbol_table.exit_scope();
+    
+    return std::make_unique<ForLoop>(variable, std::move(iterable), std::move(block));
 }
 
 std::unique_ptr<Expression> Parser::parse_expression() {
-    return parse_comparison();
+    return parse_logical_or();
+}
+
+std::unique_ptr<Expression> Parser::parse_logical_or() {
+    // For now, just go to next level (no logical OR yet)
+    return parse_logical_and();
+}
+
+std::unique_ptr<Expression> Parser::parse_logical_and() {
+    // For now, just go to next level (no logical AND yet)
+    return parse_equality();
+}
+
+std::unique_ptr<Expression> Parser::parse_equality() {
+    auto expr = parse_comparison();
+    
+    while (match(TokenType::EQ) || match(TokenType::NEQ)) {
+        std::string op = previous().value;
+        auto right = parse_comparison();
+        expr = std::make_unique<BinaryExpression>(std::move(expr), op, std::move(right));
+    }
+    
+    return expr;
 }
 
 std::unique_ptr<Expression> Parser::parse_comparison() {
+    auto expr = parse_term();
+    
+    while (match(TokenType::LT) || match(TokenType::GT) || 
+           match(TokenType::LTEQ) || match(TokenType::GTEQ)) {
+        std::string op = previous().value;
+        auto right = parse_term();
+        expr = std::make_unique<BinaryExpression>(std::move(expr), op, std::move(right));
+    }
+    
+    return expr;
+}
+
+std::unique_ptr<Expression> Parser::parse_term() {
+    auto expr = parse_factor();
+    
+    while (match(TokenType::PLUS) || match(TokenType::MINUS)) {
+        std::string op = previous().value;
+        auto right = parse_factor();
+        expr = std::make_unique<BinaryExpression>(std::move(expr), op, std::move(right));
+    }
+    
+    return expr;
+}
+
+std::unique_ptr<Expression> Parser::parse_factor() {
     auto expr = parse_primary();
     
-    while (match(TokenType::LT) || match(TokenType::GT) || match(TokenType::LTEQ) || 
-           match(TokenType::GTEQ) || match(TokenType::EQ) || match(TokenType::NEQ)) {
+    while (match(TokenType::MULTIPLY) || match(TokenType::DIVIDE) || match(TokenType::MODULO)) {
         std::string op = previous().value;
         auto right = parse_primary();
         expr = std::make_unique<BinaryExpression>(std::move(expr), op, std::move(right));
@@ -138,6 +282,20 @@ std::unique_ptr<Expression> Parser::parse_primary() {
     if (match(TokenType::NUMBER)) {
         int value = std::stoi(previous().value);
         return std::make_unique<NumberLiteral>(value);
+    }
+    
+    if (match(TokenType::STRING_LITERAL)) {
+        std::string value = previous().value;
+        return std::make_unique<StringLiteral>(value);
+    }
+    
+    if (match(TokenType::IDENTIFIER)) {
+        std::string name = previous().value;
+        // Check if variable exists
+        if (!symbol_table.lookup_variable(name)) {
+            error("Undefined variable '" + name + "'");
+        }
+        return std::make_unique<VariableReference>(name);
     }
     
     if (match(TokenType::RANGE)) {
@@ -165,13 +323,11 @@ std::unique_ptr<FunctionCall> Parser::parse_function_call() {
     
     consume(TokenType::LPAREN, "Expected '(' after function name");
     
-    // Parse arguments (just string literals for now)
-    if (check(TokenType::STRING_LITERAL)) {
-        call->args.push_back(current().value);
-        advance();
-        
-        // For now, we only support single argument
-        // Later we can add comma-separated args
+    // Parse arguments (expressions)
+    if (!check(TokenType::RPAREN)) {
+        do {
+            call->args.push_back(parse_expression());
+        } while (match(TokenType::COMMA));
     }
     
     consume(TokenType::RPAREN, "Expected ')' after arguments");

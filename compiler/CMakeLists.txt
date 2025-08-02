@@ -22,6 +22,7 @@ set(SOURCES
     src/lexer.cpp
     src/parser.cpp
     src/codegen.cpp
+    src/symbol_table.cpp
 )
 
 # Create executable

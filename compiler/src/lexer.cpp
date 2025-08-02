@@ -61,9 +61,8 @@ std::vector<Token> Lexer::tokenize() {
                 advance();
                 advance();
             } else {
-                throw std::runtime_error("Unexpected character '=' at line " + 
-                                       std::to_string(line) + ", column " + std::to_string(column) +
-                                       " (did you mean '=='?)");
+                tokens.emplace_back(TokenType::ASSIGN, "=", start_line, start_column);
+                advance();
             }
         } else if (c == '!') {
             if (peek_next() == '=') {
@@ -75,6 +74,21 @@ std::vector<Token> Lexer::tokenize() {
                                        std::to_string(line) + ", column " + std::to_string(column) +
                                        " (did you mean '!='?)");
             }
+        } else if (c == '+') {
+            tokens.emplace_back(TokenType::PLUS, "+", start_line, start_column);
+            advance();
+        } else if (c == '-') {
+            tokens.emplace_back(TokenType::MINUS, "-", start_line, start_column);
+            advance();
+        } else if (c == '*') {
+            tokens.emplace_back(TokenType::MULTIPLY, "*", start_line, start_column);
+            advance();
+        } else if (c == '/') {
+            tokens.emplace_back(TokenType::DIVIDE, "/", start_line, start_column);
+            advance();
+        } else if (c == '%') {
+            tokens.emplace_back(TokenType::MODULO, "%", start_line, start_column);
+            advance();
         } else if (c == '"') {
             tokens.push_back(read_string());
         } else if (std::isdigit(c)) {
@@ -151,6 +165,9 @@ Token Lexer::read_identifier() {
     else if (value == "true") type = TokenType::TRUE;
     else if (value == "false") type = TokenType::FALSE;
     else if (value == "range") type = TokenType::RANGE;
+    else if (value == "auto") type = TokenType::AUTO;
+    else if (value == "int") type = TokenType::INT;
+    else if (value == "bool") type = TokenType::BOOL;
     
     return Token(type, value, start_line, start_column);
 }

@@ -16,6 +16,9 @@ enum class TokenType {
     TRUE,
     FALSE,
     RANGE,
+    AUTO,
+    INT,
+    BOOL,
     
     // Identifiers and literals
     IDENTIFIER,
@@ -30,7 +33,15 @@ enum class TokenType {
     SEMICOLON,  // ;
     COMMA,      // ,
     
-    // Operators
+    // Assignment and arithmetic operators
+    ASSIGN,     // =
+    PLUS,       // +
+    MINUS,      // -
+    MULTIPLY,   // *
+    DIVIDE,     // /
+    MODULO,     // %
+    
+    // Comparison operators
     LT,         // <
     GT,         // >
     LTEQ,       // <=
