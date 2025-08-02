@@ -31,7 +31,7 @@ private:
     std::unique_ptr<Function> parse_function();
     std::unique_ptr<ClassDefinition> parse_class();
     std::unique_ptr<FieldDeclaration> parse_field_declaration();
-    std::unique_ptr<ConstructorDeclaration> parse_constructor_declaration(const std::string& class_name);
+    std::unique_ptr<SpecialMemberDeclaration> parse_special_member_declaration(const std::string& class_name);
     std::unique_ptr<Block> parse_block();
     std::unique_ptr<Statement> parse_statement();
     std::unique_ptr<VariableDeclaration> parse_variable_declaration();
@@ -58,7 +58,7 @@ private:
     std::unique_ptr<ReferenceType> parse_reference_type();
     Type parse_base_type();
     bool is_type_keyword() const;
-    bool is_constructor_declaration() const;
+    bool is_special_member_declaration() const;
     bool peek_for_pointer() const;
     bool peek_for_reference() const;
     

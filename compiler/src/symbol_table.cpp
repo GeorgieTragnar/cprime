@@ -117,6 +117,33 @@ void SymbolTable::register_class(const ClassDefinition& class_def) {
         }
     }
     
+    // Track special members
+    for (const auto& member : class_def.special_members) {
+        switch (member->type) {
+            case SpecialMemberType::DEFAULT_CONSTRUCTOR:
+                class_info.has_default_constructor = true;
+                break;
+            case SpecialMemberType::COPY_CONSTRUCTOR:
+                class_info.has_copy_constructor = true;
+                break;
+            case SpecialMemberType::MOVE_CONSTRUCTOR:
+                class_info.has_move_constructor = true;
+                break;
+            case SpecialMemberType::COPY_ASSIGNMENT:
+                class_info.has_copy_assignment = true;
+                break;
+            case SpecialMemberType::MOVE_ASSIGNMENT:
+                class_info.has_move_assignment = true;
+                break;
+            case SpecialMemberType::DESTRUCTOR:
+                class_info.has_destructor = true;
+                break;
+        }
+    }
+    
+    // No Rule of Five validation - CPrime allows any combination of special members
+    // All special members are implicitly deleted unless explicitly declared
+    
     classes[class_def.name] = std::move(class_info);
 }
 

@@ -225,12 +225,14 @@ struct AddressOf : Expression {
         : operand(std::move(operand)) {}
 };
 
-// Constructor types
-enum class ConstructorType {
-    DEFAULT,     // Class() = default;
-    COPY,        // Class(const Class& other) = default;
-    MOVE,        // Class(Class&& other) = default;
-    DESTRUCTOR   // ~Class() = default;
+// Special member function types (Rule of Five + Destructor)
+enum class SpecialMemberType {
+    DEFAULT_CONSTRUCTOR,     // Class() = default;
+    COPY_CONSTRUCTOR,        // Class(const Class& other) = default;
+    MOVE_CONSTRUCTOR,        // Class(Class&& other) = default;
+    COPY_ASSIGNMENT,         // Class& operator=(const Class& other) = default;
+    MOVE_ASSIGNMENT,         // Class& operator=(Class&& other) = default;
+    DESTRUCTOR               // ~Class() = default;
 };
 
 // Field declaration: name: type
@@ -255,22 +257,23 @@ struct FieldDeclaration : ASTNode {
           reference_type(std::move(reference_type)) {}
 };
 
-// Constructor declaration: Class() = default; or explicit definition
-struct ConstructorDeclaration : ASTNode {
-    ConstructorType type;
+// Special member function declaration: constructors, assignment operators, destructor
+struct SpecialMemberDeclaration : ASTNode {
+    SpecialMemberType type;
     bool is_default;
+    bool is_deleted;
     bool is_explicit;
-    std::unique_ptr<Block> body;  // nullptr for = default
+    std::unique_ptr<Block> body;  // nullptr for = default or = delete
     
-    ConstructorDeclaration(ConstructorType type, bool is_default = true, bool is_explicit = false)
-        : type(type), is_default(is_default), is_explicit(is_explicit) {}
+    SpecialMemberDeclaration(SpecialMemberType type, bool is_default = false, bool is_deleted = false, bool is_explicit = false)
+        : type(type), is_default(is_default), is_deleted(is_deleted), is_explicit(is_explicit) {}
 };
 
-// Class definition: class Name { fields... constructors... };
+// Class definition: class Name { fields... special_members... };
 struct ClassDefinition : ASTNode {
     std::string name;
     std::vector<std::unique_ptr<FieldDeclaration>> fields;
-    std::vector<std::unique_ptr<ConstructorDeclaration>> constructors;
+    std::vector<std::unique_ptr<SpecialMemberDeclaration>> special_members;
     
     ClassDefinition(const std::string& name) : name(name) {}
 };

@@ -27,6 +27,14 @@ struct ClassInfo {
     std::vector<std::pair<std::string, Type>> fields;           // Built-in type fields
     std::vector<std::pair<std::string, std::string>> custom_fields;  // Custom type fields
     
+    // Special member tracking for Rule of Five validation
+    bool has_default_constructor = false;
+    bool has_copy_constructor = false;
+    bool has_move_constructor = false;
+    bool has_copy_assignment = false;
+    bool has_move_assignment = false;
+    bool has_destructor = false;
+    
     ClassInfo() = default;  // Default constructor for unordered_map
     ClassInfo(const std::string& name) : name(name) {}
     
@@ -35,6 +43,18 @@ struct ClassInfo {
     ClassInfo(ClassInfo&&) = default;
     ClassInfo& operator=(const ClassInfo&) = default;
     ClassInfo& operator=(ClassInfo&&) = default;
+    
+    // Check if any special member is defined
+    bool has_any_special_member() const {
+        return has_default_constructor || has_copy_constructor || has_move_constructor ||
+               has_copy_assignment || has_move_assignment || has_destructor;
+    }
+    
+    // Check if all special members are defined (Rule of Five + Destructor)
+    bool has_complete_special_members() const {
+        return has_default_constructor && has_copy_constructor && has_move_constructor &&
+               has_copy_assignment && has_move_assignment && has_destructor;
+    }
 };
 
 // Scope management for variables

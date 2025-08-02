@@ -104,6 +104,9 @@ std::vector<Token> Lexer::tokenize() {
                 tokens.emplace_back(TokenType::AMPERSAND, "&", start_line, start_column);
                 advance();
             }
+        } else if (c == '~') {
+            tokens.emplace_back(TokenType::TILDE, "~", start_line, start_column);
+            advance();
         } else if (c == '"') {
             tokens.push_back(read_string());
         } else if (std::isdigit(c)) {
@@ -185,8 +188,10 @@ Token Lexer::read_identifier() {
     else if (value == "void") type = TokenType::VOID;
     else if (value == "class") type = TokenType::CLASS;
     else if (value == "default") type = TokenType::DEFAULT;
+    else if (value == "delete") type = TokenType::DELETE;
     else if (value == "explicit") type = TokenType::EXPLICIT;
     else if (value == "const") type = TokenType::CONST;
+    else if (value == "operator") type = TokenType::OPERATOR;
     
     return Token(type, value, start_line, start_column);
 }

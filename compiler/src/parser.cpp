@@ -534,8 +534,8 @@ std::unique_ptr<ClassDefinition> Parser::parse_class() {
     consume(TokenType::LBRACE, "Expected '{' after class name");
     
     while (!check(TokenType::RBRACE) && !is_at_end()) {
-        if (is_constructor_declaration()) {
-            class_def->constructors.push_back(parse_constructor_declaration(class_name));
+        if (is_special_member_declaration()) {
+            class_def->special_members.push_back(parse_special_member_declaration(class_name));
         } else {
             class_def->fields.push_back(parse_field_declaration());
         }
@@ -568,71 +568,107 @@ std::unique_ptr<FieldDeclaration> Parser::parse_field_declaration() {
     }
 }
 
-std::unique_ptr<ConstructorDeclaration> Parser::parse_constructor_declaration(const std::string& class_name) {
-    ConstructorType ctor_type;
+std::unique_ptr<SpecialMemberDeclaration> Parser::parse_special_member_declaration(const std::string& class_name) {
+    SpecialMemberType member_type;
     bool is_explicit = false;
     
-    // Check for explicit keyword
+    // Check for explicit keyword (only for constructors)
     if (match(TokenType::EXPLICIT)) {
         is_explicit = true;
     }
     
-    // Determine constructor type
-    if (match(TokenType::IDENTIFIER) && previous().value == class_name) {
-        // Default or custom constructor: ClassName(...)
-        consume(TokenType::LPAREN, "Expected '(' after constructor name");
-        
-        if (check(TokenType::RPAREN)) {
-            // Default constructor: ClassName()
-            ctor_type = ConstructorType::DEFAULT;
-            advance(); // consume ')'
-        } else if (check(TokenType::IDENTIFIER) && current().value == "const") {
-            // Copy constructor: ClassName(const ClassName& other)
-            advance(); // consume 'const'
-            consume(TokenType::IDENTIFIER, "Expected class name in copy constructor");
-            if (previous().value != class_name) {
-                error("Copy constructor parameter must be of same class type");
-            }
-            // Skip '&' and parameter name for now
-            while (!check(TokenType::RPAREN) && !is_at_end()) {
-                advance();
-            }
-            consume(TokenType::RPAREN, "Expected ')' after copy constructor parameters");
-            ctor_type = ConstructorType::COPY;
-        } else if (check(TokenType::IDENTIFIER) && current().value == class_name) {
-            // Move constructor: ClassName(ClassName&& other)
-            advance(); // consume class name
-            // Skip '&&' and parameter name for now
-            while (!check(TokenType::RPAREN) && !is_at_end()) {
-                advance();
-            }
-            consume(TokenType::RPAREN, "Expected ')' after move constructor parameters");
-            ctor_type = ConstructorType::MOVE;
-        } else {
-            error("Unsupported constructor type");
+    // Parse destructor: ~ClassName()
+    if (match(TokenType::TILDE)) {
+        consume(TokenType::IDENTIFIER, "Expected class name after '~'");
+        if (previous().value != class_name) {
+            error("Destructor name must match class name");
         }
-    } else if (match(TokenType::IDENTIFIER) && previous().value == "~" + class_name) {
-        // Destructor: ~ClassName()
         consume(TokenType::LPAREN, "Expected '(' after destructor name");
         consume(TokenType::RPAREN, "Expected ')' after destructor");
-        ctor_type = ConstructorType::DESTRUCTOR;
+        member_type = SpecialMemberType::DESTRUCTOR;
+    }
+    // Parse constructors: ClassName(...) or assignment operators: ClassName& operator=(...)
+    else if (match(TokenType::IDENTIFIER) && previous().value == class_name) {
+        // Check what follows to distinguish constructor from assignment operator
+        if (check(TokenType::AMPERSAND)) {
+            // This is an assignment operator: ClassName& operator=(...)
+            consume(TokenType::AMPERSAND, "Expected '&' after class name in assignment operator");
+            consume(TokenType::OPERATOR, "Expected 'operator' keyword");
+            consume(TokenType::ASSIGN, "Expected '=' after 'operator'");
+            consume(TokenType::LPAREN, "Expected '(' after 'operator='");
+            
+            if (match(TokenType::CONST)) {
+                // Copy assignment: ClassName& operator=(const ClassName& other)
+                consume(TokenType::IDENTIFIER, "Expected class name in copy assignment");
+                if (previous().value != class_name) {
+                    error("Copy assignment parameter must be of same class type");
+                }
+                consume(TokenType::AMPERSAND, "Expected '&' in copy assignment parameter");
+                consume(TokenType::IDENTIFIER, "Expected parameter name in copy assignment");
+                consume(TokenType::RPAREN, "Expected ')' after copy assignment parameters");
+                member_type = SpecialMemberType::COPY_ASSIGNMENT;
+            } else if (check(TokenType::IDENTIFIER) && current().value == class_name) {
+                // Move assignment: ClassName& operator=(ClassName&& other)
+                advance(); // consume class name
+                consume(TokenType::DOUBLE_AMPERSAND, "Expected '&&' in move assignment parameter");
+                consume(TokenType::IDENTIFIER, "Expected parameter name in move assignment");
+                consume(TokenType::RPAREN, "Expected ')' after move assignment parameters");
+                member_type = SpecialMemberType::MOVE_ASSIGNMENT;
+            } else {
+                error("Unsupported assignment operator parameter type");
+            }
+        } else {
+            // This is a constructor: ClassName(...)
+            consume(TokenType::LPAREN, "Expected '(' after constructor name");
+            
+            if (check(TokenType::RPAREN)) {
+                // Default constructor: ClassName()
+                member_type = SpecialMemberType::DEFAULT_CONSTRUCTOR;
+                advance(); // consume ')'
+            } else if (match(TokenType::CONST)) {
+                // Copy constructor: ClassName(const ClassName& other)
+                consume(TokenType::IDENTIFIER, "Expected class name in copy constructor");
+                if (previous().value != class_name) {
+                    error("Copy constructor parameter must be of same class type");
+                }
+                consume(TokenType::AMPERSAND, "Expected '&' in copy constructor parameter");
+                consume(TokenType::IDENTIFIER, "Expected parameter name in copy constructor");
+                consume(TokenType::RPAREN, "Expected ')' after copy constructor parameters");
+                member_type = SpecialMemberType::COPY_CONSTRUCTOR;
+            } else if (check(TokenType::IDENTIFIER) && current().value == class_name) {
+                // Move constructor: ClassName(ClassName&& other)
+                advance(); // consume class name
+                consume(TokenType::DOUBLE_AMPERSAND, "Expected '&&' in move constructor parameter");
+                consume(TokenType::IDENTIFIER, "Expected parameter name in move constructor");
+                consume(TokenType::RPAREN, "Expected ')' after move constructor parameters");
+                member_type = SpecialMemberType::MOVE_CONSTRUCTOR;
+            } else {
+                error("Unsupported constructor parameter type");
+            }
+        }
     } else {
-        error("Expected constructor or destructor declaration");
+        error("Expected special member function declaration");
     }
     
-    auto ctor = std::make_unique<ConstructorDeclaration>(ctor_type, false, is_explicit);
+    auto member = std::make_unique<SpecialMemberDeclaration>(member_type, false, false, is_explicit);
     
-    // Check for = default
+    // Check for = default or = delete
     if (match(TokenType::ASSIGN)) {
-        consume(TokenType::DEFAULT, "Expected 'default' after '='");
-        ctor->is_default = true;
-        consume(TokenType::SEMICOLON, "Expected ';' after '= default'");
+        if (match(TokenType::DEFAULT)) {
+            member->is_default = true;
+            consume(TokenType::SEMICOLON, "Expected ';' after '= default'");
+        } else if (match(TokenType::DELETE)) {
+            member->is_deleted = true;
+            consume(TokenType::SEMICOLON, "Expected ';' after '= delete'");
+        } else {
+            error("Expected 'default' or 'delete' after '='");
+        }
     } else {
-        // Custom implementation
-        ctor->body = parse_block();
+        // Custom implementation (not supported yet - require = default or = delete for now)
+        error("Custom special member implementations not yet supported - use '= default;' or '= delete;'");
     }
     
-    return ctor;
+    return member;
 }
 
 std::unique_ptr<CustomType> Parser::parse_custom_type() {
@@ -641,9 +677,47 @@ std::unique_ptr<CustomType> Parser::parse_custom_type() {
     return std::make_unique<CustomType>(type_name);
 }
 
-bool Parser::is_constructor_declaration() const {
-    // For now, skip constructor parsing - only parse fields
-    // TODO: Implement proper constructor detection later
+bool Parser::is_special_member_declaration() const {
+    // Check for explicit keyword
+    size_t saved_pos = pos;
+    if (saved_pos < tokens.size() && tokens[saved_pos].type == TokenType::EXPLICIT) {
+        saved_pos++;
+    }
+    
+    if (saved_pos >= tokens.size()) return false;
+    
+    // Check for destructor: ~ClassName
+    if (tokens[saved_pos].type == TokenType::TILDE) {
+        return true;
+    }
+    
+    // Check for constructor or assignment operator by looking ahead
+    if (tokens[saved_pos].type == TokenType::IDENTIFIER) {
+        // Look ahead to distinguish between field and special member
+        size_t lookahead = saved_pos + 1;
+        
+        // Field declaration pattern: identifier : type
+        if (lookahead < tokens.size() && tokens[lookahead].type == TokenType::COLON) {
+            return false; // This is a field declaration
+        }
+        
+        // Constructor pattern: identifier (
+        if (lookahead < tokens.size() && tokens[lookahead].type == TokenType::LPAREN) {
+            return true; // This is a constructor
+        }
+        
+        // Assignment operator pattern: identifier & operator =
+        if (lookahead < tokens.size() && tokens[lookahead].type == TokenType::AMPERSAND) {
+            lookahead++;
+            if (lookahead < tokens.size() && tokens[lookahead].type == TokenType::OPERATOR) {
+                lookahead++;
+                if (lookahead < tokens.size() && tokens[lookahead].type == TokenType::ASSIGN) {
+                    return true; // This is an assignment operator
+                }
+            }
+        }
+    }
+    
     return false;
 }
 

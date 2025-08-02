@@ -21,8 +21,10 @@ enum class TokenType {
     VOID,
     CLASS,
     DEFAULT,
+    DELETE,
     EXPLICIT,
     CONST,
+    OPERATOR,
     
     // Identifiers and literals
     IDENTIFIER,
@@ -40,6 +42,7 @@ enum class TokenType {
     DOT,        // .
     AMPERSAND,  // &
     DOUBLE_AMPERSAND, // &&
+    TILDE,      // ~
     
     // Assignment and arithmetic operators
     ASSIGN,     // =
