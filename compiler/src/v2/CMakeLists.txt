@@ -20,6 +20,10 @@ target_compile_options(cprime_v2 PRIVATE
     $<$<CONFIG:Release>:-O3 -DNDEBUG>
 )
 
+# CLI executable
+add_executable(cprime_v2_cli cprime_v2_cli.cpp)
+target_link_libraries(cprime_v2_cli cprime_v2)
+
 # Test executable
 add_executable(test_three_layer test_three_layer.cpp)
 target_link_libraries(test_three_layer cprime_v2)
@@ -28,6 +32,9 @@ target_link_libraries(test_three_layer cprime_v2)
 if(NOT CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     # We're being included from the main project
     set_target_properties(cprime_v2 PROPERTIES 
+        FOLDER "compiler/v2"
+    )
+    set_target_properties(cprime_v2_cli PROPERTIES 
         FOLDER "compiler/v2"
     )
     set_target_properties(test_three_layer PROPERTIES 

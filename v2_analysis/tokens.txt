@@ -1,0 +1,19 @@
+=== Raw Token Dump ===
+Total tokens: 15
+
+[0] RawToken(KEYWORD, "class", 1:1)
+[1] RawToken(IDENTIFIER, "Connection", 1:7)
+[2] RawToken(PUNCTUATION, "{", 1:18)
+[3] RawToken(KEYWORD, "runtime", 1:20)
+[4] RawToken(KEYWORD, "exposes", 1:28)
+[5] RawToken(IDENTIFIER, "UserOps", 1:36)
+[6] RawToken(PUNCTUATION, "{", 1:44)
+[7] RawToken(IDENTIFIER, "handle", 1:46)
+[8] RawToken(PUNCTUATION, "}", 1:53)
+[9] RawToken(KEYWORD, "defer", 1:55)
+[10] RawToken(IDENTIFIER, "cleanup", 1:61)
+[11] RawToken(PUNCTUATION, "(", 1:68)
+[12] RawToken(PUNCTUATION, ")", 1:69)
+[13] RawToken(PUNCTUATION, "}", 1:71)
+[14] RawToken(EOF, "", 2:1)
+
