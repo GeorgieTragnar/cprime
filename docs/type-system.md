@@ -770,6 +770,422 @@ let user = get_user(user_id)?;
 // let user = get_user(product_id)?;  // Type error
 ```
 
+## Coroutine Type Integration
+
+CPrime's type system seamlessly integrates with the revolutionary coroutine design, providing compiler-guided optimization and type safety:
+
+### Coroutines as Typed Data Classes
+
+Coroutines follow CPrime's type system principles as specialized data classes:
+
+```cpp
+// Coroutine types are parameterized by size and capabilities
+class HttpHandlerCoro<Size, Capabilities> 
+where Size: CoroSizeTag, Capabilities: AccessRights
+{
+    // Stack memory typed by size class
+    stack_memory: StackMemory<Size>,
+    register_context: RegisterContext,
+    
+    // Application state
+    request: HttpRequest,
+    response: HttpResponse,
+    
+    // Capability-based access (type-safe)
+    access_rights: Capabilities,
+    
+    constructed_by: CoroManager<Size, Capabilities>,
+}
+
+// Type aliases for common coroutine configurations
+type MicroHttpCoro = HttpHandlerCoro<Micro, HttpOps>;
+type SecureHttpCoro = HttpHandlerCoro<Small, HttpOps + TlsOps>;
+type FullHttpCoro = HttpHandlerCoro<Medium, HttpOps + TlsOps + CacheOps>;
+
+// Compiler generates optimal memory layout for each type
+// MicroHttpCoro: 256 bytes total (stack pool allocation)
+// SecureHttpCoro: 2KB total (heap pool allocation)
+// FullHttpCoro: 16KB total (heap pool allocation)
+```
+
+### Compiler-Generated Type Metadata
+
+The compiler generates rich type metadata for coroutine functions:
+
+```cpp
+// Compiler analyzes this function and generates metadata
+#[coro_analysis(
+    estimated_stack_size = 640,
+    max_stack_size = 1024,
+    is_bounded = true,
+    recursion_depth = 0,
+    size_class = CoroSizeTag::Small
+)]
+async fn web_request_handler(request: HttpRequest) -> HttpResponse {
+    let headers = parse_headers(&request.headers);        // +128 bytes stack
+    let auth_result = co_await authenticate(&headers);    // +256 bytes stack
+    let response = build_response(&auth_result);          // +192 bytes stack
+    response
+}
+
+// Metadata is encoded as type-level information
+struct CoroFunctionType<F> {
+    function: F,
+    metadata: CoroMetadata,
+}
+
+impl CoroFunction for typeof(web_request_handler) {
+    type Args = (HttpRequest,);
+    type Output = HttpResponse;
+    type SizeClass = Small;
+    type AccessRights = HttpOps;
+    
+    const METADATA: CoroMetadata = CoroMetadata {
+        estimated_stack_size: 640,
+        max_stack_size: Some(1024),
+        is_bounded: true,
+        size_class: CoroSizeTag::Small,
+        // ... other metadata
+    };
+}
+```
+
+### Generic Coroutine Types
+
+Coroutines work naturally with CPrime's generic type system:
+
+```cpp
+// Generic coroutine type
+class GenericCoro<T, R, Size, Caps>
+where 
+    T: Send,                    // Input type must be sendable between threads
+    R: Send,                    // Output type must be sendable
+    Size: CoroSizeTag,          // Size class
+    Caps: AccessRights          // Capability requirements
+{
+    input: T,
+    output: Option<R>,
+    stack_memory: StackMemory<Size>,
+    capabilities: Caps,
+    
+    constructed_by: GenericCoroManager<T, R, Size, Caps>,
+}
+
+// Generic functional class for coroutine operations
+functional class GenericCoroManager<T, R, Size, Caps> {
+    fn construct(input: T) -> GenericCoro<T, R, Size, Caps> {
+        let stack = allocate_stack_for_size_class(Size::SIZE_CLASS);
+        
+        GenericCoro {
+            input,
+            output: None,
+            stack_memory: StackMemory::<Size>::from_raw(stack),
+            capabilities: Caps::default(),
+        }
+    }
+    
+    fn resume(coro: &mut GenericCoro<T, R, Size, Caps>) -> CoroResult<R> {
+        // Type-safe resume with generic input/output
+        context_switch_typed::<T, R>(coro.stack_memory, &coro.input)
+    }
+}
+
+// Specialized instances with type inference
+let http_coro: GenericCoro<HttpRequest, HttpResponse, Small, HttpOps> = 
+    GenericCoroManager::construct(request);
+
+let db_coro: GenericCoro<SqlQuery, QueryResult, Medium, DbOps> = 
+    GenericCoroManager::construct(query);
+```
+
+### Union Types for Coroutine Size Classes
+
+Union types provide type-safe heterogeneous coroutine storage:
+
+```cpp
+// Union type for different coroutine sizes with preserved type information
+union CoroSizeVariant<Input, Output, Caps> 
+where Caps: AccessRights
+{
+    Micro(GenericCoro<Input, Output, Micro, Caps>),
+    Small(GenericCoro<Input, Output, Small, Caps>),
+    Medium(GenericCoro<Input, Output, Medium, Caps>),
+    Large(GenericCoro<Input, Output, Large, Caps>),
+}
+
+// Type-safe operations on union variants
+functional class CoroSizeManager<I, O, C> {
+    fn resume_any(variant: &mut CoroSizeVariant<I, O, C>) -> CoroResult<O> {
+        match variant {
+            CoroSizeVariant::Micro(micro) => {
+                // Compiler knows this is GenericCoro<I, O, Micro, C>
+                GenericCoroManager::<I, O, Micro, C>::resume(micro)
+            },
+            CoroSizeVariant::Small(small) => {
+                GenericCoroManager::<I, O, Small, C>::resume(small)
+            },
+            CoroSizeVariant::Medium(medium) => {
+                GenericCoroManager::<I, O, Medium, C>::resume(medium)
+            },
+            CoroSizeVariant::Large(large) => {
+                GenericCoroManager::<I, O, Large, C>::resume(large)
+            },
+        }
+    }
+    
+    fn migrate_up(variant: &mut CoroSizeVariant<I, O, C>) -> Result<()> {
+        // Type-safe migration between size classes
+        let new_variant = match variant {
+            CoroSizeVariant::Micro(micro) => {
+                let migrated = migrate_micro_to_small(micro)?;
+                CoroSizeVariant::Small(migrated)
+            },
+            CoroSizeVariant::Small(small) => {
+                let migrated = migrate_small_to_medium(small)?;
+                CoroSizeVariant::Medium(migrated)
+            },
+            CoroSizeVariant::Medium(medium) => {
+                let migrated = migrate_medium_to_large(medium)?;
+                CoroSizeVariant::Large(migrated)
+            },
+            CoroSizeVariant::Large(_) => {
+                return Err("Already at largest size class");
+            },
+        };
+        
+        *variant = new_variant;
+        Ok(())
+    }
+}
+
+// Usage with full type safety
+let mut http_variant: CoroSizeVariant<HttpRequest, HttpResponse, HttpOps> = 
+    CoroSizeVariant::Small(create_http_handler());
+
+let response = CoroSizeManager::resume_any(&mut http_variant)?;
+// Compiler knows response is HttpResponse due to type parameters
+```
+
+### Phantom Types for Compile-Time Coroutine States
+
+Phantom types track coroutine lifecycle states at compile time:
+
+```cpp
+// Phantom types for coroutine states
+struct Created;
+struct Running;
+struct Suspended;
+struct Completed;
+
+// Stateful coroutine type with phantom state parameter
+class StatefulCoro<T, R, Size, Caps, State>
+where State: CoroState
+{
+    base: GenericCoro<T, R, Size, Caps>,
+    _state: PhantomData<State>,
+}
+
+functional class StatefulCoroOps {
+    // Type-safe state transitions
+    fn create<T, R, Size, Caps>(input: T) -> StatefulCoro<T, R, Size, Caps, Created> {
+        StatefulCoro {
+            base: GenericCoroManager::construct(input),
+            _state: PhantomData,
+        }
+    }
+    
+    fn start<T, R, Size, Caps>(
+        coro: StatefulCoro<T, R, Size, Caps, Created>
+    ) -> StatefulCoro<T, R, Size, Caps, Running> {
+        // Can only start a created coroutine
+        StatefulCoro {
+            base: coro.base,
+            _state: PhantomData,
+        }
+    }
+    
+    fn suspend<T, R, Size, Caps>(
+        coro: StatefulCoro<T, R, Size, Caps, Running>
+    ) -> StatefulCoro<T, R, Size, Caps, Suspended> {
+        // Can only suspend a running coroutine
+        StatefulCoro {
+            base: coro.base,
+            _state: PhantomData,
+        }
+    }
+    
+    fn resume<T, R, Size, Caps>(
+        coro: StatefulCoro<T, R, Size, Caps, Suspended>
+    ) -> Result<StatefulCoro<T, R, Size, Caps, Running>, StatefulCoro<T, R, Size, Caps, Completed>> {
+        // Can only resume a suspended coroutine
+        match GenericCoroManager::resume(&mut coro.base) {
+            CoroResult::Running => Ok(StatefulCoro {
+                base: coro.base,
+                _state: PhantomData,
+            }),
+            CoroResult::Completed(_) => Err(StatefulCoro {
+                base: coro.base,
+                _state: PhantomData,
+            }),
+            CoroResult::Error(e) => panic!("Coroutine error: {}", e),
+        }
+    }
+}
+
+// Compile-time state machine enforcement
+let coro = StatefulCoroOps::create(http_request);       // Created
+let coro = StatefulCoroOps::start(coro);                // Running
+let coro = StatefulCoroOps::suspend(coro);              // Suspended
+let coro = StatefulCoroOps::resume(coro)?;              // Running or Completed
+// StatefulCoroOps::start(coro);                        // ❌ Compile error!
+```
+
+### Associated Types for Coroutine Traits
+
+Coroutines work with associated types for flexible generic programming:
+
+```cpp
+trait CoroProcessor {
+    type Input;
+    type Output;
+    type SizeClass: CoroSizeTag;
+    type Capabilities: AccessRights;
+    
+    fn process_async(input: Self::Input) -> impl Future<Output = Self::Output>;
+    fn size_hint() -> Self::SizeClass;
+    fn required_capabilities() -> Self::Capabilities;
+}
+
+// Implementation for HTTP processing
+struct HttpProcessor;
+
+impl CoroProcessor for HttpProcessor {
+    type Input = HttpRequest;
+    type Output = HttpResponse;
+    type SizeClass = Small;
+    type Capabilities = HttpOps;
+    
+    async fn process_async(request: Self::Input) -> Self::Output {
+        // Implementation using appropriate size class and capabilities
+        let coro: GenericCoro<Self::Input, Self::Output, Self::SizeClass, Self::Capabilities> = 
+            GenericCoroManager::construct(request);
+        
+        GenericCoroManager::resume(&mut coro)?.into_output()
+    }
+    
+    fn size_hint() -> Self::SizeClass {
+        Small::default()
+    }
+    
+    fn required_capabilities() -> Self::Capabilities {
+        HttpOps::default()
+    }
+}
+
+// Generic function works with any processor
+fn process_with_processor<P: CoroProcessor>(input: P::Input) -> P::Output {
+    // Compiler generates optimal code based on associated types
+    P::process_async(input).await
+}
+```
+
+### Type-Level Size Calculations
+
+The type system can encode stack size calculations at the type level:
+
+```cpp
+// Type-level arithmetic for stack size calculations
+trait StackSize {
+    const SIZE: usize;
+}
+
+struct LocalVarSize<T>(PhantomData<T>);
+
+impl<T> StackSize for LocalVarSize<T> {
+    const SIZE: usize = std::mem::size_of::<T>();
+}
+
+// Compose stack sizes at type level
+struct StackFrame<T1, T2, T3> {
+    _t1: PhantomData<T1>,
+    _t2: PhantomData<T2>, 
+    _t3: PhantomData<T3>,
+}
+
+impl<T1, T2, T3> StackSize for StackFrame<T1, T2, T3>
+where 
+    T1: StackSize,
+    T2: StackSize,
+    T3: StackSize,
+{
+    const SIZE: usize = T1::SIZE + T2::SIZE + T3::SIZE;
+}
+
+// Use in coroutine function analysis
+async fn typed_handler() -> HttpResponse {
+    let headers: HttpHeaders = parse_headers();     // LocalVarSize<HttpHeaders>
+    let auth: AuthResult = authenticate().await;    // LocalVarSize<AuthResult>
+    let response: HttpResponse = build_response();  // LocalVarSize<HttpResponse>
+    
+    response
+}
+
+// Compiler can calculate exact stack size at type level
+type HandlerFrame = StackFrame<
+    LocalVarSize<HttpHeaders>,    // 128 bytes
+    LocalVarSize<AuthResult>,     // 64 bytes
+    LocalVarSize<HttpResponse>    // 256 bytes
+>;
+// Total: 448 bytes - fits in Small (2KB) size class
+
+const STACK_SIZE: usize = HandlerFrame::SIZE;  // 448
+```
+
+### Memory Layout Optimization
+
+The type system enables precise memory layout control for coroutines:
+
+```cpp
+// Explicit memory layout control
+#[repr(C)]
+class OptimizedCoro {
+    // Hot fields first (cache line optimization)
+    state: CoroState,           // 1 byte
+    priority: Priority,         // 1 byte  
+    _padding1: [u8; 6],         // Align to 8 bytes
+    
+    // Frequently accessed pointers
+    stack_ptr: *mut u8,         // 8 bytes
+    stack_top: *mut u8,         // 8 bytes
+    
+    // Less frequently accessed data
+    metadata: CoroMetadata,     // 32 bytes
+    debug_info: DebugInfo,      // 64 bytes
+    
+    constructed_by: OptimizedCoroManager,
+}
+
+// Packed coroutine for memory-constrained environments
+#[repr(packed)]
+class PackedMicroCoro {
+    stack_memory: [u8; 252],    // 252 bytes stack
+    state: CoroState,           // 1 byte
+    priority: Priority,         // 1 byte
+    context_switches: u16,      // 2 bytes
+    // Total: exactly 256 bytes
+}
+
+// Compiler verifies size constraints
+static_assert!(std::mem::size_of::<PackedMicroCoro>() == 256);
+```
+
+This type system integration enables CPrime's coroutines to achieve:
+- **Compile-time optimization**: Stack size analysis and allocation strategy selection
+- **Type safety**: Statically verified coroutine states and capability usage
+- **Memory efficiency**: Precise layout control and size class optimization
+- **Zero-cost abstractions**: Generic types compile to optimal assembly
+- **Integration**: Seamless work with CPrime's three-class system and polymorphism
+
 ## Advanced Type Features
 
 ### Associated Constants

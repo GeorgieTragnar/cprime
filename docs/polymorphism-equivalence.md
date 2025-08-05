@@ -509,6 +509,374 @@ impl Drivable for CarData { ... }
 impl Drivable for MotorcycleData { ... }
 ```
 
+## Coroutine Polymorphism Integration
+
+CPrime's revolutionary coroutine system demonstrates the power of the three-tier polymorphism approach, using all three tiers in a unified architecture:
+
+### Tier 1: Access Rights for Coroutine Capabilities
+
+Coroutines use access rights for capability-based security and functionality:
+
+```cpp
+class DatabaseCoro {
+    stack_memory: *mut u8,
+    connection: DbConnection,
+    query_cache: QueryCache,
+    
+    // Mixin-style access rights for different database capabilities
+    exposes ReadOps { connection, query_cache }   // Read-only database operations
+    exposes WriteOps { connection }               // Write operations  
+    exposes AdminOps { connection, query_cache }  // Full administrative access
+    
+    constructed_by: DbCoroManager,
+}
+
+// Coroutine maintains capabilities across all suspension points
+async fn handle_read_request(request: ReadRequest) -> ReadResponse {
+    // This coroutine has ReadOps capabilities throughout execution
+    let validation = co_await validate_request(&request);
+    
+    if validation.is_valid() {
+        // Still has ReadOps after suspension
+        let query_result = co_await ReadOps::execute_select_query(&request.sql);
+        ReadResponse::success(query_result)
+    } else {
+        ReadResponse::unauthorized()
+    }
+}
+
+// Different coroutine types with different access rights
+let read_coro: DatabaseCoro<ReadOps> = DbCoroManager::construct_read_only(connection);
+let admin_coro: DatabaseCoro<AdminOps> = DbCoroManager::construct_admin(admin_connection);
+
+// Casting works for coroutines too
+if let Some(admin_ops) = admin_coro.cast::<AdminOps>() {
+    AdminOps::execute_management_query(&admin_ops, "OPTIMIZE TABLE users");
+}
+```
+
+### Tier 2: Interfaces for Common Coroutine Operations
+
+Interfaces provide common contracts across different coroutine types:
+
+```cpp
+interface CoroLifecycle {
+    fn resume(&mut self) -> CoroResult;
+    fn suspend(&mut self);
+    fn is_complete(&self) -> bool;
+    fn get_stats(&self) -> CoroStats;
+}
+
+interface Schedulable {
+    fn priority(&self) -> Priority;
+    fn estimated_runtime(&self) -> Duration;
+    fn can_yield(&self) -> bool;
+}
+
+// All coroutine size classes implement common interfaces
+impl CoroLifecycle for MicroCoro<256> {
+    fn resume(&mut self) -> CoroResult {
+        MicroCoroManager::resume(self)  // Optimized micro resume
+    }
+    
+    fn suspend(&mut self) {
+        MicroCoroManager::suspend(self)
+    }
+    
+    fn is_complete(&self) -> bool {
+        self.state == CoroState::Complete
+    }
+    
+    fn get_stats(&self) -> CoroStats {
+        CoroStats {
+            memory_usage: 256,
+            context_switches: self.context_switch_count,
+            allocation_source: AllocationSource::StackPool,
+        }
+    }
+}
+
+impl CoroLifecycle for LargeCoro {
+    fn resume(&mut self) -> CoroResult {
+        LargeCoroManager::resume(self)  // Individual coroutine resume
+    }
+    
+    fn suspend(&mut self) {
+        LargeCoroManager::suspend(self)
+    }
+    
+    fn is_complete(&self) -> bool {
+        self.state == CoroState::Complete
+    }
+    
+    fn get_stats(&self) -> CoroStats {
+        CoroStats {
+            memory_usage: self.allocated_size,
+            context_switches: self.context_switch_count,
+            allocation_source: AllocationSource::Individual,
+        }
+    }
+}
+
+// Generic coroutine processing using interfaces
+fn process_coroutines(coros: &mut [&mut dyn CoroLifecycle]) {
+    for coro in coros {
+        if !coro.is_complete() {
+            match coro.resume() {
+                CoroResult::Yield => {
+                    // Coroutine yielded, continue later
+                },
+                CoroResult::Complete(_) => {
+                    // Coroutine finished
+                },
+                CoroResult::Error(e) => {
+                    log::error!("Coroutine error: {}", e);
+                },
+            }
+        }
+    }
+}
+
+// Scheduler using interface-based priority scheduling
+fn schedule_by_priority(coros: &mut [&mut dyn Schedulable]) {
+    // Sort by priority without knowing specific coroutine types
+    coros.sort_by_key(|coro| coro.priority());
+    
+    for coro in coros {
+        if coro.can_yield() {
+            // Process high-priority coroutines first
+            schedule_for_execution(coro);
+        }
+    }
+}
+```
+
+### Tier 3: Unions for Coroutine Size Classes
+
+Unions solve the template type explosion problem for heterogeneous coroutine containers:
+
+```cpp
+// Union-based storage for different coroutine sizes
+union runtime CoroStorage {
+    Micro(runtime MicroCoro<256>),      // Stack-allocated pool
+    Small(runtime SmallCoro<2048>),     // Heap pool
+    Medium(runtime MediumCoro<16384>),  // Heap pool  
+    Large(runtime LargeCoro),           // Individual allocation
+}
+
+// Self-expanding heterogeneous coroutine scheduler
+class CoroScheduler {
+    active_coroutines: Vec<runtime CoroStorage>,
+    completed_coroutines: Vec<CoroId>,
+    constructed_by: SchedulerOps,
+}
+
+functional class SchedulerOps {
+    fn construct() -> CoroScheduler {
+        CoroScheduler {
+            // Initially optimized for micro coroutines
+            active_coroutines: Vec::with_union_hint::<CoroStorage::Micro>(),
+            completed_coroutines: Vec::new(),
+        }
+    }
+    
+    fn schedule_task<T>(scheduler: &mut CoroScheduler, task: T) 
+    where T: CoroTask
+    {
+        // Compiler analysis determines size class
+        let size_hint = compiler_analyze_task::<T>();
+        let coro_storage = CoroStorageManager::allocate_for_size(size_hint);
+        
+        // Union auto-expands if new size class is added
+        scheduler.active_coroutines.push(coro_storage);
+    }
+    
+    fn run_scheduler_loop(scheduler: &mut CoroScheduler) {
+        for coro_space in &mut scheduler.active_coroutines {
+            // Unified API across all coroutine sizes
+            let result = if let Some(micro) = coro_space.try_as::<MicroCoro<256>>() {
+                MicroCoroManager::resume(micro)  // 10 cycle resume
+            } else if let Some(small) = coro_space.try_as::<SmallCoro<2048>>() {
+                SmallCoroManager::resume(small)  // 50 cycle resume
+            } else if let Some(medium) = coro_space.try_as::<MediumCoro<16384>>() {
+                MediumCoroManager::resume(medium)  // 50 cycle resume
+            } else if let Some(large) = coro_space.try_as::<LargeCoro>() {
+                LargeCoroManager::resume(large)  // 100 cycle resume
+            } else {
+                unreachable!("Unknown coroutine size class")
+            };
+            
+            match result {
+                CoroResult::Complete(coro_id) => {
+                    scheduler.completed_coroutines.push(coro_id);
+                },
+                CoroResult::Suspended => {
+                    // Continue in next iteration
+                },
+                CoroResult::Error(e) => {
+                    log::error!("Coroutine {} failed: {}", coro_space.id(), e);
+                },
+            }
+        }
+        
+        // Remove completed coroutines
+        Self::cleanup_completed(scheduler);
+    }
+}
+
+// Migration between size classes when needed
+fn migrate_coroutine_size(storage: &mut CoroStorage) -> Result<()> {
+    let new_storage = match storage {
+        CoroStorage::Micro(micro) if micro.needs_more_stack() => {
+            // Migrate from stack pool to heap pool
+            let migrated = migrate_micro_to_small(micro)?;
+            CoroStorage::Small(migrated)
+        },
+        CoroStorage::Small(small) if small.needs_more_stack() => {
+            let migrated = migrate_small_to_medium(small)?;
+            CoroStorage::Medium(migrated)
+        },
+        CoroStorage::Medium(medium) if medium.needs_more_stack() => {
+            let migrated = migrate_medium_to_large(medium)?;
+            CoroStorage::Large(migrated)
+        },
+        _ => return Ok(()), // No migration needed
+    };
+    
+    *storage = new_storage;
+    Ok(())
+}
+```
+
+### All Three Tiers Working Together
+
+The most powerful aspect is how all three tiers work together seamlessly:
+
+```cpp
+// Complex web server coroutine using all three tiers
+class WebServerCoro {
+    request: HttpRequest,
+    response: HttpResponse,
+    connection: NetworkConnection,
+    
+    // Tier 1: Access rights for different server capabilities (mixin model)
+    exposes HttpOps { request, response }          // HTTP protocol handling
+    exposes TlsOps { connection }                  // TLS encryption
+    exposes CompressionOps { response }            // Response compression
+    exposes CacheOps { request, response }         // Caching capabilities
+    exposes LoggingOps { request, response }       // Request logging
+    exposes MetricsOps { request, response }       // Performance metrics
+    
+    constructed_by: WebServerManager,
+}
+
+// Tier 2: Interface for common web server operations
+interface WebRequestHandler {
+    fn handle_request(&mut self, request: HttpRequest) -> impl Future<Output = HttpResponse>;
+    fn supports_method(&self, method: HttpMethod) -> bool;
+    fn max_request_size(&self) -> usize;
+}
+
+impl WebRequestHandler for WebServerCoro<HttpOps, TlsOps> {
+    async fn handle_request(&mut self, request: HttpRequest) -> HttpResponse {
+        // Use access rights for actual implementation
+        let parsed = HttpOps::parse_request(&request);
+        let secure_response = TlsOps::encrypt_response(&parsed);
+        secure_response
+    }
+    
+    fn supports_method(&self, method: HttpMethod) -> bool {
+        HttpOps::is_method_supported(method)
+    }
+    
+    fn max_request_size(&self) -> usize {
+        HttpOps::max_request_size()
+    }
+}
+
+// Tier 3: Union storage for different web server coroutine configurations
+union runtime WebServerCoroStorage {
+    Basic(runtime WebServerCoro<HttpOps>),                           // Basic HTTP
+    Secure(runtime WebServerCoro<HttpOps, TlsOps>),                 // HTTPS
+    FullFeatured(runtime WebServerCoro<HttpOps, TlsOps, CompressionOps, CacheOps>), // All features
+}
+
+// Scheduler handles all variants with unified API
+class WebServerScheduler {
+    server_coroutines: Vec<runtime WebServerCoroStorage>,
+    constructed_by: WebSchedulerOps,
+}
+
+functional class WebSchedulerOps {
+    fn handle_incoming_request(
+        scheduler: &mut WebServerScheduler,
+        request: HttpRequest
+    ) -> impl Future<Output = HttpResponse> {
+        // Select appropriate coroutine based on request requirements
+        let coro_storage = Self::select_best_handler(scheduler, &request);
+        
+        // All three tiers work together:
+        match coro_storage {
+            WebServerCoroStorage::Basic(basic) => {
+                // Tier 1: Access HttpOps capability
+                // Tier 2: Use WebRequestHandler interface
+                // Tier 3: Union storage provides the coroutine
+                basic.handle_request(request).await
+            },
+            WebServerCoroStorage::Secure(secure) => {
+                // Multiple access rights: HttpOps + TlsOps
+                secure.handle_request(request).await
+            },
+            WebServerCoroStorage::FullFeatured(full) => {
+                // All capabilities: HTTP + TLS + Compression + Cache
+                full.handle_request(request).await
+            },
+        }
+    }
+    
+    fn select_best_handler(
+        scheduler: &WebServerScheduler,
+        request: &HttpRequest
+    ) -> &mut WebServerCoroStorage {
+        // Choose based on request requirements
+        if request.requires_tls() && request.accepts_compression() {
+            // Need full-featured handler
+            scheduler.server_coroutines.iter_mut()
+                .find(|coro| matches!(coro, WebServerCoroStorage::FullFeatured(_)))
+                .unwrap_or_else(|| create_full_featured_handler())
+        } else if request.requires_tls() {
+            // Need secure handler
+            scheduler.server_coroutines.iter_mut()
+                .find(|coro| matches!(coro, WebServerCoroStorage::Secure(_)))
+                .unwrap_or_else(|| create_secure_handler())
+        } else {
+            // Basic handler is sufficient
+            scheduler.server_coroutines.iter_mut()
+                .find(|coro| matches!(coro, WebServerCoroStorage::Basic(_)))
+                .unwrap_or_else(|| create_basic_handler())
+        }
+    }
+}
+```
+
+### Performance Benefits of Three-Tier Coroutine Architecture
+
+| Aspect | Traditional Approach | CPrime Three-Tier |
+|--------|---------------------|-------------------|
+| **Memory Usage** | 64KB+ per coroutine | 256B-16KB per coroutine |
+| **Context Switch** | 300-500 cycles | 50-100 cycles |
+| **Allocation Cost** | malloc/free overhead | Pool allocation (0-100 cycles) |
+| **Polymorphism** | Virtual function overhead | Choose: zero-cost, interface, or union |
+| **Type Safety** | Runtime errors | Compile-time verification |
+| **Memory Density** | Low (16 coroutines per MB) | High (1000+ micro coroutines per MB) |
+
+The three-tier approach enables:
+- **Access rights** for secure capability management
+- **Interfaces** for common operations without casting
+- **Unions** for efficient heterogeneous storage and migration
+- **Unified API** across all coroutine sizes and capabilities
+- **Revolutionary performance** through compiler-guided optimization
+
 ## Conclusion
 
 CPrime's three-tier polymorphism system provides complete functional equivalence with C++ inheritance while offering superior architectural properties:

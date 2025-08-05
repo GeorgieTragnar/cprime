@@ -375,6 +375,356 @@ functional class SafeSocket {
 }
 ```
 
+## Coroutine Integration with Three-Class System
+
+CPrime coroutines are implemented using the three-class system, demonstrating the power and flexibility of the architectural pattern:
+
+### Coroutines as Data Classes
+
+Coroutine state follows the data class pattern - pure state with controlled construction:
+
+```cpp
+// Coroutine state as data class
+class HttpHandlerCoro {
+    // Stack and execution state (pure data)
+    stack_memory: *mut u8,
+    stack_size: usize,
+    stack_top: *mut u8,
+    register_context: RegisterContext,
+    
+    // Application-specific state
+    request: HttpRequest,
+    response: HttpResponse,
+    processing_stage: ProcessingStage,
+    
+    // Pool allocation metadata
+    size_tag: CoroSizeTag,
+    pool_id: Option<PoolId>,
+    
+    // Construction control
+    constructed_by: HttpCoroManager,
+    
+    // Memory operations follow data class rules
+    fn move(self) -> Self;  // Always public
+    private fn copy(&self) -> Self {
+        // Custom copy for coroutine state
+        HttpHandlerCoro {
+            stack_memory: clone_stack_memory(self.stack_memory, self.stack_size),
+            stack_size: self.stack_size,
+            stack_top: self.stack_memory.add(self.stack_size),
+            register_context: self.register_context.clone(),
+            request: self.request.clone(),
+            response: self.response.clone(),
+            processing_stage: self.processing_stage,
+            size_tag: self.size_tag,
+            pool_id: self.pool_id,
+        }
+    }
+}
+```
+
+### Functional Classes for Coroutine Operations
+
+All coroutine operations are implemented as stateless functional classes:
+
+```cpp
+functional class HttpCoroManager {
+    // Constructor allocates coroutine with compiler-guided size analysis
+    fn construct(request: HttpRequest) -> HttpHandlerCoro {
+        let size_hint = compiler_analyze_size::<HttpHandlerCoro>();
+        let stack = allocate_stack_for_size_class(size_hint);
+        
+        HttpHandlerCoro {
+            stack_memory: stack.ptr,
+            stack_size: stack.size,
+            stack_top: stack.ptr.add(stack.size),
+            register_context: RegisterContext::new(),
+            request,
+            response: HttpResponse::empty(),
+            processing_stage: ProcessingStage::Initial,
+            size_tag: size_hint,
+            pool_id: stack.pool_id,
+        }
+    }
+    
+    // Destructor handles cleanup
+    fn destruct(coro: &mut HttpHandlerCoro) {
+        // Free stack memory based on allocation source
+        match coro.pool_id {
+            Some(pool_id) => deallocate_from_pool(coro.stack_memory, pool_id),
+            None => deallocate_individual(coro.stack_memory, coro.stack_size),
+        }
+        
+        // Clean up application state
+        HttpRequest::destruct(&mut coro.request);
+        HttpResponse::destruct(&mut coro.response);
+    }
+    
+    // Semantic operations
+    fn resume(coro: &mut HttpHandlerCoro) -> CoroResult<HttpResponse> {
+        // Context switch to coroutine stack
+        let result = context_switch_to(
+            coro.stack_memory,
+            coro.register_context,
+            &mut coro.processing_stage
+        );
+        
+        match result {
+            CoroState::Yielded => CoroResult::Suspended,
+            CoroState::Completed(response) => {
+                coro.response = response;
+                CoroResult::Complete(coro.response.clone())
+            },
+            CoroState::Error(e) => CoroResult::Error(e),
+        }
+    }
+    
+    fn suspend_at(coro: &mut HttpHandlerCoro, suspension_point: SuspensionPoint) {
+        // Save current register state
+        save_register_context(&mut coro.register_context);
+        coro.processing_stage = ProcessingStage::Suspended(suspension_point);
+    }
+}
+
+// Specialized functional classes for different coroutine sizes
+functional class MicroCoroManager {
+    // No constructor - acts as pure module for micro coroutine operations
+    fn allocate_from_pool(size_hint: CoroSizeTag) -> Option<*mut u8> {
+        if size_hint == CoroSizeTag::Micro {
+            MICRO_POOL_MANAGER.allocate()
+        } else {
+            None
+        }
+    }
+    
+    fn deallocate_to_pool(ptr: *mut u8) {
+        MICRO_POOL_MANAGER.deallocate(ptr);
+    }
+    
+    fn resume_micro(stack_ptr: *mut u8, context: &RegisterContext) -> CoroResult {
+        // Optimized resume for micro coroutines
+        micro_context_switch(stack_ptr, context)
+    }
+}
+```
+
+### Coroutine Size Classes as Union Data Classes
+
+Coroutine storage uses CPrime's union system for efficient heterogeneous containers:
+
+```cpp
+// Union data class for different coroutine sizes
+union CoroStorage {
+    Micro(MicroCoro<256>),      // Stack-allocated pool storage
+    Small(SmallCoro<2048>),     // Heap pool storage
+    Medium(MediumCoro<16384>),  // Heap pool storage
+    Large(LargeCoro),           // Individual heap allocation
+    
+    constructed_by: CoroStorageManager,
+}
+
+// Functional class managing union-based storage
+functional class CoroStorageManager {
+    fn construct_for_size(size_class: CoroSizeTag) -> CoroStorage {
+        match size_class {
+            CoroSizeTag::Micro => {
+                let micro_coro = MicroCoroManager::allocate_from_pool()?;
+                CoroStorage::Micro(micro_coro)
+            },
+            CoroSizeTag::Small => {
+                let small_coro = SmallCoroManager::allocate_from_pool()?;
+                CoroStorage::Small(small_coro)
+            },
+            CoroSizeTag::Medium => {
+                let medium_coro = MediumCoroManager::allocate_from_pool()?;
+                CoroStorage::Medium(medium_coro)
+            },
+            CoroSizeTag::Large => {
+                let large_coro = LargeCoroManager::allocate_individual()?;
+                CoroStorage::Large(large_coro)
+            },
+        }
+    }
+    
+    fn resume_any(storage: &mut CoroStorage) -> CoroResult {
+        match storage {
+            CoroStorage::Micro(micro) => MicroCoroManager::resume_micro(micro),
+            CoroStorage::Small(small) => SmallCoroManager::resume_small(small),
+            CoroStorage::Medium(medium) => MediumCoroManager::resume_medium(medium),
+            CoroStorage::Large(large) => LargeCoroManager::resume_large(large),
+        }
+    }
+    
+    fn migrate_to_larger_class(storage: &mut CoroStorage) -> Result<()> {
+        // Pattern matching to handle migration between size classes
+        let new_storage = match storage {
+            CoroStorage::Micro(micro) => {
+                let migrated = migrate_micro_to_small(micro)?;
+                CoroStorage::Small(migrated)
+            },
+            CoroStorage::Small(small) => {
+                let migrated = migrate_small_to_medium(small)?;
+                CoroStorage::Medium(migrated)
+            },
+            CoroStorage::Medium(medium) => {
+                let migrated = migrate_medium_to_large(medium)?;
+                CoroStorage::Large(migrated)
+            },
+            CoroStorage::Large(_) => return Err("Already at largest size class"),
+        };
+        
+        *storage = new_storage;
+        Ok(())
+    }
+}
+```
+
+### Three-Class Pattern in Coroutine Pools
+
+Even the memory pool system follows the three-class pattern:
+
+```cpp
+// Pool state as data class
+class MicroCoroPool {
+    // Pure state - memory layout and allocation tracking
+    pool_memory: &'static mut [u8; 256 * 1000],  // 256KB for 1000 micro coroutines
+    allocation_bitmap: [u64; 16],                // Track 1000 slots with 16 u64s
+    free_count: usize,
+    total_allocations: u64,
+    
+    constructed_by: MicroPoolManager,
+    
+    // Data class memory operations
+    fn move(self) -> Self;
+    private fn copy(&self) -> Self {
+        // Pool copying requires special handling
+        MicroCoroPool {
+            pool_memory: clone_pool_memory(self.pool_memory),
+            allocation_bitmap: self.allocation_bitmap,
+            free_count: self.free_count,
+            total_allocations: self.total_allocations,
+        }
+    }
+}
+
+// Pool operations as functional class
+functional class MicroPoolManager {
+    fn construct(pool_memory: &'static mut [u8]) -> MicroCoroPool {
+        MicroCoroPool {
+            pool_memory,
+            allocation_bitmap: [0; 16],  // All slots initially free
+            free_count: 1000,
+            total_allocations: 0,
+        }
+    }
+    
+    fn destruct(pool: &mut MicroCoroPool) {
+        // Ensure all coroutines are deallocated
+        if pool.free_count != 1000 {
+            panic!("Destroying pool with active coroutines");
+        }
+        
+        // Pool memory is static, no deallocation needed
+    }
+    
+    fn allocate(pool: &mut MicroCoroPool) -> Option<*mut u8> {
+        if pool.free_count == 0 {
+            return None;
+        }
+        
+        // Find first free slot using bit scanning
+        let slot_idx = find_first_zero_bit(&pool.allocation_bitmap);
+        set_bit(&mut pool.allocation_bitmap, slot_idx);
+        pool.free_count -= 1;
+        pool.total_allocations += 1;
+        
+        Some(pool.pool_memory.as_mut_ptr().add(slot_idx * 256))
+    }
+    
+    fn deallocate(pool: &mut MicroCoroPool, ptr: *mut u8) {
+        let offset = ptr.offset_from(pool.pool_memory.as_ptr()) as usize;
+        let slot_idx = offset / 256;
+        
+        clear_bit(&mut pool.allocation_bitmap, slot_idx);
+        pool.free_count += 1;
+    }
+    
+    fn get_stats(pool: &MicroCoroPool) -> PoolStats {
+        PoolStats {
+            total_slots: 1000,
+            free_slots: pool.free_count,
+            used_slots: 1000 - pool.free_count,
+            total_allocations: pool.total_allocations,
+            utilization: (1000 - pool.free_count) as f64 / 1000.0,
+        }
+    }
+}
+
+// Usage follows three-class pattern
+let mut micro_pool = MicroPoolManager::construct(&mut STATIC_POOL_MEMORY);
+defer MicroPoolManager::destruct(&mut micro_pool);
+
+let coro_ptr = MicroPoolManager::allocate(&mut micro_pool)?;
+// ... use coroutine ...
+MicroPoolManager::deallocate(&mut micro_pool, coro_ptr);
+```
+
+### Compiler-Library Protocol as Functional Classes
+
+Even the compiler-library cooperation follows the three-class system:
+
+```cpp
+// Metadata as data class (generated by compiler)
+class CoroMetadata {
+    function_id: u64,
+    estimated_stack_size: usize,
+    max_stack_size: Option<usize>,
+    is_bounded: bool,
+    size_class: CoroSizeTag,
+    migration_likelihood: f32,
+    
+    // No constructed_by - this is compiler-generated data
+}
+
+// Metadata registry as functional class (no constructor = module)
+functional class MetadataRegistry {
+    fn lookup_metadata(function_id: u64) -> Option<&'static CoroMetadata> {
+        COROUTINE_METADATA_TABLE.iter()
+            .find(|meta| meta.function_id == function_id)
+    }
+    
+    fn get_size_hint<F>() -> CoroSizeTag 
+    where F: CoroFunction
+    {
+        let function_id = F::function_id();
+        Self::lookup_metadata(function_id)
+            .map(|meta| meta.size_class)
+            .unwrap_or(CoroSizeTag::Medium)  // Conservative default
+    }
+    
+    fn validate_prediction(function_id: u64, actual_size: usize) -> bool {
+        if let Some(metadata) = Self::lookup_metadata(function_id) {
+            match metadata.max_stack_size {
+                Some(max_size) => actual_size <= max_size,
+                None => true,  // Unbounded - always valid
+            }
+        } else {
+            false  // No metadata found
+        }
+    }
+}
+```
+
+### Benefits of Three-Class Coroutine Architecture
+
+1. **Clear Separation**: Coroutine state (data), operations (functional), and unsafe interop (danger) are clearly separated
+2. **Memory Safety**: Construction control ensures proper initialization and cleanup
+3. **Performance**: Functional classes enable aggressive compiler optimizations
+4. **Testability**: Stateless operations are easily unit tested
+5. **Composability**: Pool managers, allocators, and schedulers all follow the same pattern
+
+This architecture enables CPrime's revolutionary coroutine performance (100x memory density, 50-100 cycle context switches) while maintaining safety and composability.
+
 ## Polymorphism in the Three-Class System
 
 The three-class system works with CPrime's three-tier polymorphism approach:

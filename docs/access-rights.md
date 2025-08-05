@@ -2,9 +2,61 @@
 
 ## Overview
 
-CPrime's access rights system provides inheritance-like polymorphism through vtable extensions. Unlike traditional views or capabilities, access rights actually extend the base data class with additional memory and vtable pointers, similar to C++ inheritance but with more explicit control. This system offers both compile-time (static) and runtime (dynamic) variants, allowing developers to choose between zero-cost abstractions and dynamic flexibility.
+CPrime's access rights system provides **one-level mixin polymorphism** through vtable extensions. Unlike traditional hierarchical inheritance, access rights use **single-level capability composition** where multiple capabilities can be mixed together without creating inheritance hierarchies. Each access right adds its own vtable pointer and memory, similar to C++ multiple inheritance but without the complexity of deep inheritance chains.
+
+This system offers both compile-time (static) and runtime (dynamic) variants, allowing developers to choose between zero-cost abstractions and dynamic flexibility.
 
 ## Core Concepts
+
+### One-Level Mixin Model vs Hierarchical Inheritance
+
+CPrime access rights implement a **mixin model** rather than traditional inheritance hierarchies:
+
+```cpp
+// ❌ NOT hierarchical inheritance (like C++):
+// class Base { virtual void method() = 0; };
+// class Derived1 : public Base { void method() override; };
+// class Derived2 : public Derived1 { void method() override; };  // Deep hierarchy
+
+// ✅ CPrime mixin model - single-level capability composition:
+class NetworkConnection {
+    socket: TcpSocket,
+    buffer: [u8; 4096],
+    
+    // Each access right is a separate mixin - no inheritance hierarchy
+    exposes TcpOps { socket, buffer }      // TCP capability
+    exposes SslOps { socket }              // SSL capability  
+    exposes CompressionOps { buffer }      // Compression capability
+    exposes LoggingOps { socket, buffer }  // Logging capability
+}
+
+// VTable composition, not inheritance chain:
+// - TcpOps vtable: [connect, send, receive, close]
+// - SslOps vtable: [handshake, encrypt, decrypt]  
+// - CompressionOps vtable: [compress, decompress]
+// - LoggingOps vtable: [log_send, log_receive]
+
+// Final object can have ALL capabilities simultaneously
+let full_connection: NetworkConnection<TcpOps, SslOps, CompressionOps, LoggingOps> = 
+    ConnectionFactory::create_secure_compressed_logged();
+
+// Access specific capabilities directly - no casting chain
+TcpOps::send(&full_connection, data);
+SslOps::encrypt(&full_connection, &data);
+CompressionOps::compress(&full_connection, &data);
+LoggingOps::log_send(&full_connection, data.len());
+```
+
+**Key Differences from Hierarchical Inheritance:**
+
+| Aspect | Hierarchical Inheritance | CPrime Mixin Model |
+|--------|-------------------------|-------------------|
+| **Depth** | Unlimited nesting (Base→Derived1→Derived2→...) | Single level only |
+| **Composition** | Linear inheritance chain | Multiple parallel capabilities |
+| **VTable Structure** | Chained vtable lookups | Direct vtable per capability |
+| **Method Resolution** | Complex diamond problem | Simple direct dispatch |
+| **Memory Layout** | Base + derived fields in sequence | Base + capability vtables |
+| **Casting** | Upcast/downcast through hierarchy | Direct capability casting |
 
 ### Access Rights Are Inheritance Extensions
 
@@ -373,6 +425,202 @@ class Connection {
 // 3. Multiple independent access rights
 // 4. Compile-time vs runtime choice
 // 5. No virtual destructor issues
+```
+
+## Integration with Coroutines
+
+### Capability Preservation Across Suspensions
+
+Access rights are preserved across coroutine suspension points, maintaining security and capabilities throughout the coroutine's lifetime:
+
+```cpp
+class DatabaseCoro {
+    stack_memory: *mut u8,
+    connection: DbConnection,
+    query_cache: QueryCache,
+    
+    // Mixin-style access rights preserved across suspensions
+    exposes ReadOps { connection, query_cache }
+    exposes WriteOps { connection }
+    exposes AdminOps { connection, query_cache }
+    
+    constructed_by: DbCoroManager,
+}
+
+// Coroutine maintains capabilities across all suspension points
+async fn handle_admin_request(request: AdminRequest) -> AdminResponse {
+    // This coroutine has AdminOps capabilities throughout execution
+    let validation = co_await validate_admin_credentials(&request.auth);
+    
+    if validation.is_valid() {
+        // Still has AdminOps after suspension
+        let query_result = co_await AdminOps::execute_privileged_query(&request.sql);
+        
+        // Another suspension - capabilities still preserved
+        co_await AdminOps::clear_audit_logs();
+        
+        AdminResponse::success(query_result)
+    } else {
+        AdminResponse::unauthorized()
+    }
+}
+
+// Coroutine creation with specific access rights
+let admin_coro = DbCoroManager::construct_with_admin_access(admin_connection);
+
+// Access rights casting works on coroutines too
+if let Some(admin_ops) = admin_coro.cast::<AdminOps>() {
+    AdminOps::execute_management_query(&admin_ops, "OPTIMIZE TABLE users");
+}
+```
+
+### Coroutine Access Right Patterns
+
+```cpp
+// Pattern 1: Security-focused coroutines
+class SecureTaskCoro {
+    task_data: TaskData,
+    security_context: SecurityContext,
+    
+    // Different access levels for different operations
+    exposes GuestOps { task_data }           // Read-only access
+    exposes UserOps { task_data }            // Standard operations
+    exposes ModeratorOps { task_data }       // Moderation capabilities
+    exposes AdminOps { task_data, security_context }  // Full access
+}
+
+async fn process_user_task(task: UserTask) -> TaskResult {
+    // This coroutine automatically has UserOps capabilities
+    let processed = co_await UserOps::process_task(&task);
+    
+    if processed.needs_review() {
+        // Can't escalate to ModeratorOps - would need different coroutine type
+        co_await UserOps::submit_for_review(&processed);
+    }
+    
+    TaskResult::completed(processed)
+}
+
+// Pattern 2: Capability-based workflow coroutines
+async fn moderation_workflow(task: ModerationTask) -> ModerationResult {
+    // This coroutine has ModeratorOps capabilities
+    let review = co_await ModeratorOps::review_content(&task.content);
+    
+    match review.decision {
+        Decision::Approve => {
+            co_await ModeratorOps::approve_content(&task.content);
+            ModerationResult::approved()
+        },
+        Decision::Reject => {
+            co_await ModeratorOps::reject_content(&task.content, &review.reason);
+            ModerationResult::rejected(review.reason)
+        },
+        Decision::Escalate => {
+            // ModeratorOps can escalate but not execute admin actions
+            co_await ModeratorOps::escalate_to_admin(&task);
+            ModerationResult::escalated()
+        },
+    }
+}
+```
+
+### Runtime Coroutine Polymorphism
+
+```cpp
+// Mixed coroutine types with different access rights
+union runtime CoroVariant {
+    GuestCoro(runtime SecureTaskCoro<GuestOps>),
+    UserCoro(runtime SecureTaskCoro<UserOps>),
+    ModeratorCoro(runtime SecureTaskCoro<ModeratorOps>),
+    AdminCoro(runtime SecureTaskCoro<AdminOps>),
+}
+
+class TaskScheduler {
+    active_coroutines: Vec<runtime CoroVariant>,
+    constructed_by: SchedulerOps,
+}
+
+functional class SchedulerOps {
+    fn process_all_tasks(scheduler: &mut TaskScheduler) {
+        for coro_space in &mut scheduler.active_coroutines {
+            // Unified API across all coroutine access levels
+            if let Some(guest) = coro_space.try_as::<SecureTaskCoro<GuestOps>>() {
+                GuestOps::resume_limited(guest);
+            } else if let Some(user) = coro_space.try_as::<SecureTaskCoro<UserOps>>() {
+                UserOps::resume_standard(user);
+            } else if let Some(moderator) = coro_space.try_as::<SecureTaskCoro<ModeratorOps>>() {
+                ModeratorOps::resume_moderation(moderator);
+            } else if let Some(admin) = coro_space.try_as::<SecureTaskCoro<AdminOps>>() {
+                AdminOps::resume_admin(admin);
+            }
+            
+            // Or use interface if available
+            if let Some(resumable) = coro_space.try_as::<dyn Resumable>() {
+                resumable.resume();  // Polymorphic resume
+            }
+        }
+    }
+}
+```
+
+### Mixin Composition in Coroutines
+
+```cpp
+// Complex capability mixing in coroutines
+class WebServerCoro {
+    request: HttpRequest,
+    response: HttpResponse,
+    connection: NetworkConnection,
+    
+    // Multiple independent capabilities can be mixed
+    exposes HttpOps { request, response }          // HTTP protocol handling
+    exposes TlsOps { connection }                  // TLS encryption
+    exposes CompressionOps { response }            // Response compression
+    exposes CacheOps { request, response }         // Caching logic
+    exposes LoggingOps { request, response }       // Request logging
+    exposes MetricsOps { request, response }       // Performance metrics
+}
+
+async fn handle_web_request(request: HttpRequest) -> HttpResponse {
+    // This coroutine has ALL the mixed capabilities available
+    
+    // HTTP processing
+    let parsed = co_await HttpOps::parse_request(&request);
+    
+    // Check cache first
+    if let Some(cached) = co_await CacheOps::lookup(&parsed) {
+        // Log cache hit
+        co_await LoggingOps::log_cache_hit(&request);
+        co_await MetricsOps::record_cache_hit();
+        return cached;
+    }
+    
+    // Process request
+    let mut response = co_await HttpOps::process_request(&parsed);
+    
+    // Apply compression if supported
+    if CompressionOps::client_supports_compression(&request) {
+        response = co_await CompressionOps::compress_response(&response);
+    }
+    
+    // Cache the response
+    co_await CacheOps::store(&request, &response);
+    
+    // Log and record metrics
+    co_await LoggingOps::log_response(&request, &response);
+    co_await MetricsOps::record_response_time(&request);
+    
+    response
+}
+
+// Creating coroutine with specific capability mix
+let web_coro = WebServerManager::construct_full_featured(request);
+// This coroutine has access to all 6 capability mixins
+
+// Can cast to specific capabilities as needed
+if let Some(metrics) = web_coro.cast::<MetricsOps>() {
+    MetricsOps::generate_report(&metrics);
+}
 ```
 
 ## Best Practices
