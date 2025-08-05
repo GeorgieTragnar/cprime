@@ -8,39 +8,39 @@ namespace cprime::v2 {
 // Static keyword definitions - context-sensitive keywords handled in semantic layer
 const std::unordered_set<std::string> RawTokenizer::keywords = {
     // Core language keywords
-    "class", "functional", "union", "interface",
-    "exposes", "constructed_by", "implemented_by",
-    "runtime", "defer", "co_await", "co_yield",
+    "class", "plex", "struct", "union", "interface",
+    "runtime", "defer",
     
     // Control flow
-    "if", "else", "while", "for", "in", "match", "case",
+    "if", "else", "while", "for", "case",
     "break", "continue", "return",
     
+    // Exception handling
+    "throw", "try", "catch",
+    
     // Types and modifiers
-    "auto", "void", "bool", "int", "float", "string",
+    "auto", "void", "bool", "int", "float",
     "const", "mut", "static", "extern",
+    "constexpr", "consteval", "constinit", "noexcept",
     
     // Special values
-    "true", "false", "null", "undefined",
+    "true", "false", "nullptr",
     
-    // Memory and safety
-    "unsafe", "move", "copy", "drop",
+    // Memory management
+    "new", "delete", "danger",
     
-    // Module system
-    "mod", "use", "pub", "priv",
+    // Visibility
+    "public", "private",
     
-    // Generics and traits
-    "template", "where", "impl", "trait",
-    
-    // Advanced features
-    "async", "await", "yield", "suspend", "resume",
-    "macro", "typeof", "sizeof"
+    // Metaprogramming
+    "sizeof", "alignof", "decltype"
 };
 
 const std::unordered_set<std::string> RawTokenizer::operators = {
     // Arithmetic
     "+", "-", "*", "/", "%",
     "+=", "-=", "*=", "/=", "%=",
+    "++", "--", // Increment/decrement
     
     // Comparison
     "==", "!=", "<", ">", "<=", ">=",
@@ -53,20 +53,15 @@ const std::unordered_set<std::string> RawTokenizer::operators = {
     "&", "|", "<<", ">>", "~",
     "&=", "|=", "^=", "<<=", ">>=",
     
-    // Member access
-    ".", "->", "::", "?.",
+    // Pointer and member access
+    ".", "->", "::",
+    "->*", ".*", // C++ pointer-to-member operators
     
     // Assignment
-    "=", ":=", // Walrus operator for declarations
+    "=",
     
-    // Range and iteration
-    "..", "..=", "=>",
-    
-    // Type and casting
-    "as", "is", "?", "??",
-    
-    // Other
-    "@", "#", "$" // For future language extensions
+    // Conditional and comma operators
+    "?", ":", "," // Also in punctuation - context determines usage
 };
 
 const std::unordered_set<std::string> RawTokenizer::multi_char_operators = {
@@ -74,8 +69,9 @@ const std::unordered_set<std::string> RawTokenizer::multi_char_operators = {
     "&&", "||", "<<", ">>",
     "+=", "-=", "*=", "/=", "%=",
     "&=", "|=", "^=", "<<=", ">>=",
-    "->", "::", "?.", "..", "..=", "=>",
-    ":=", "??", "as", "is"
+    "++", "--", // Increment/decrement
+    "->", "::",
+    "->*", ".*" // C++ pointer-to-member operators
 };
 
 const std::unordered_set<char> RawTokenizer::single_char_punctuation = {
@@ -204,18 +200,31 @@ std::vector<RawToken> RawTokenizer::tokenize() {
             continue;
         }
         
-        // Handle operators (check multi-char first)
+        // Handle operators (check longer multi-char first)
         std::string potential_operator = "";
         potential_operator += c;
-        if (!is_at_end() && pos + 1 < source.length()) {
-            potential_operator += peek_next();
+        
+        // Check for 3-character operators first
+        if (!is_at_end() && pos + 1 < source.length() && pos + 2 < source.length()) {
+            std::string three_char_op = potential_operator + peek_next() + source[pos + 2];
+            if (multi_char_operators.count(three_char_op)) {
+                tokens.emplace_back(RawTokenType::OPERATOR, three_char_op, line, column, current_position());
+                advance(); // First character
+                advance(); // Second character  
+                advance(); // Third character
+                continue;
+            }
         }
         
-        if (multi_char_operators.count(potential_operator)) {
-            tokens.emplace_back(RawTokenType::OPERATOR, potential_operator, line, column, current_position());
-            advance(); // First character
-            advance(); // Second character
-            continue;
+        // Check for 2-character operators
+        if (!is_at_end() && pos + 1 < source.length()) {
+            potential_operator += peek_next();
+            if (multi_char_operators.count(potential_operator)) {
+                tokens.emplace_back(RawTokenType::OPERATOR, potential_operator, line, column, current_position());
+                advance(); // First character
+                advance(); // Second character
+                continue;
+            }
         }
         
         // Single character operators
