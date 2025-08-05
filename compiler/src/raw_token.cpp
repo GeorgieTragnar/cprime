@@ -3,7 +3,7 @@
 #include <sstream>
 #include <iostream>
 
-namespace cprime::v2 {
+namespace cprime {
 
 // Static keyword definitions - context-sensitive keywords handled in semantic layer
 const std::unordered_set<std::string> RawTokenizer::keywords = {
@@ -583,4 +583,4 @@ void ContextualTokenStream::ensure_valid_position() const {
     }
 }
 
-} // namespace cprime::v2
+} // namespace cprime

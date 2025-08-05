@@ -3,7 +3,7 @@
 #include <sstream>
 #include <algorithm>
 
-namespace cprime::v2 {
+namespace cprime {
 
 std::string ParseContext::to_string() const {
     std::stringstream ss;
@@ -351,4 +351,4 @@ ScopedContext::~ScopedContext() {
     }
 }
 
-} // namespace cprime::v2
+} // namespace cprime

@@ -6,7 +6,7 @@
 #include <memory>
 #include <variant>
 
-namespace cprime::v2 {
+namespace cprime {
 
 /**
  * Semantic token types - unambiguous tokens with resolved meaning.
@@ -322,4 +322,4 @@ private:
     std::string token_type_to_string(SemanticTokenType type) const;
 };
 
-} // namespace cprime::v2
+} // namespace cprime

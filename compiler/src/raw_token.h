@@ -5,7 +5,7 @@
 #include <unordered_set>
 #include <unordered_map>
 
-namespace cprime::v2 {
+namespace cprime {
 
 /**
  * Raw token types for the new three-layer compiler architecture.
@@ -274,4 +274,4 @@ private:
     void ensure_valid_position() const;
 };
 
-} // namespace cprime::v2
+} // namespace cprime

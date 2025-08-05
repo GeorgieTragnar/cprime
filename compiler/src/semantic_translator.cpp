@@ -4,7 +4,7 @@
 #include <chrono>
 #include <algorithm>
 
-namespace cprime::v2 {
+namespace cprime {
 
 // SemanticTranslator implementation
 SemanticTranslator::SemanticTranslator(RawTokenStream raw_tokens)
@@ -612,4 +612,4 @@ void SemanticTranslator::error_at_token(const std::string& message, const RawTok
     errors.emplace_back(message, token.line, token.column, context_stack.get_context_path_string());
 }
 
-} // namespace cprime::v2
+} // namespace cprime

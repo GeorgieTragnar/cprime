@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <memory>
 
-namespace cprime::v2 {
+namespace cprime {
 
 /**
  * Semantic translator - Layer 2 of the three-layer architecture.
@@ -253,4 +253,4 @@ private:
     void trace_token_translation(const RawToken& raw_token, const SemanticToken& semantic_token);
 };
 
-} // namespace cprime::v2
+} // namespace cprime

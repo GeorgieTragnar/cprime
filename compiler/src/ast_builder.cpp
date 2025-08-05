@@ -2,7 +2,7 @@
 #include <sstream>
 #include <stdexcept>
 
-namespace cprime::v2 {
+namespace cprime {
 
 // ============================================================================
 // ASTBuilder Implementation
@@ -463,4 +463,4 @@ ast::DeclList ASTBuilder::parse_class_members() {
     return members;
 }
 
-} // namespace cprime::v2
+} // namespace cprime

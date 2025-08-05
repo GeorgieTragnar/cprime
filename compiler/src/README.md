@@ -1,4 +1,4 @@
-# CPrime Compiler V2 - Three-Layer Architecture
+# CPrime Compiler - Three-Layer Architecture
 
 This directory contains the new three-layer compiler architecture for CPrime, designed to handle context-sensitive keywords and provide a clean separation between syntax, semantics, and code generation.
 
@@ -48,7 +48,7 @@ The architecture supports incremental feature development:
 
 ## Building and Testing
 
-### Build the V2 Components
+### Build the compiler Components
 ```bash
 cd /path/to/cprime/compiler/src/v2
 mkdir build && cd build
@@ -116,7 +116,7 @@ SemanticTranslator translator(std::move(raw_stream));
 auto semantic_tokens = translator.translate();
 
 // Layer 3: Code generation (when implemented)
-// LLVMCodeGenV2 codegen;
+// LLVMCodeGencompiler codegen;
 // auto llvm_ir = codegen.generate(semantic_tokens);
 ```
 
@@ -131,8 +131,8 @@ auto semantic_tokens = translator.translate();
 
 ## Integration with Existing Compiler
 
-The V2 architecture is designed to coexist with the existing compiler:
-- **Feature Flags**: Control which features use V1 vs V2 implementation
+The compiler architecture is designed to coexist with the existing compiler:
+- **Feature Flags**: Control which features use V1 vs compiler implementation
 - **Backward Compatibility**: V1 compiler remains fully functional
 - **Gradual Migration**: Features can be migrated one at a time
 - **Testing**: Both implementations can be tested in parallel

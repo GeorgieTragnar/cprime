@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# CPrime V2 Analyzer - Convenience Script for V2 CLI
-# This script provides easy access to V2 tokenization and debugging capabilities
+# CPrime Analyzer - Convenience Script for Compiler CLI
+# This script provides easy access to tokenization, AST building and debugging capabilities
 
 set -e  # Exit on any error
 
@@ -16,22 +16,22 @@ NC='\033[0m' # No Color
 # Get the project root directory (parent of scripts/)
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-V2_CLI="$PROJECT_ROOT/compiler/src/v2/build/cprime_v2_cli"
+CPRIME_CLI="$PROJECT_ROOT/compiler/src/build/cprime_cli"
 
-echo -e "${BLUE}CPrime V2 Code Analyzer${NC}"
-echo "======================="
+echo -e "${BLUE}CPrime Code Analyzer${NC}"
+echo "==================="
 
-# Check if V2 CLI exists
-if [ ! -f "$V2_CLI" ]; then
-    echo -e "${RED}Error: V2 CLI not found at $V2_CLI${NC}"
-    echo "Please run: ./scripts/build_v2.sh to build the V2 components first"
+# Check if CLI exists
+if [ ! -f "$CPRIME_CLI" ]; then
+    echo -e "${RED}Error: CPrime CLI not found at $CPRIME_CLI${NC}"
+    echo "Please run: ./scripts/build.sh to build the compiler first"
     exit 1
 fi
 
 # Default values
 MODE=""
 INPUT_FILE=""
-OUTPUT_DIR="v2_analysis"
+OUTPUT_DIR="cprime_analysis"
 OPEN_RESULT=false
 VERBOSE=false
 
@@ -42,11 +42,12 @@ show_help() {
     echo "MODES:"
     echo "  tokens       Analyze and dump raw tokens"
     echo "  context      Analyze context-sensitive keyword resolution"
-    echo "  both         Run both token and context analysis"
+    echo "  ast          Build and analyze AST structure"
+    echo "  full         Run full pipeline analysis (tokens + context + AST)"
     echo "  interactive  Interactive mode for quick testing"
     echo ""
     echo "OPTIONS:"
-    echo "  -o, --output-dir DIR  Output directory for analysis files (default: v2_analysis)"
+    echo "  -o, --output-dir DIR  Output directory for analysis files (default: cprime_analysis)"
     echo "  --open               Open results with default viewer after analysis"
     echo "  -v, --verbose        Enable verbose output"
     echo "  -h, --help          Show this help message"
@@ -54,9 +55,10 @@ show_help() {
     echo "EXAMPLES:"
     echo "  $0 tokens src/main.cp              # Analyze tokens from file"
     echo "  $0 context src/main.cp --open      # Analyze context and open result"
-    echo "  $0 both src/main.cp -o debug/      # Full analysis to debug/ folder"
+    echo "  $0 ast src/main.cp                 # Build and analyze AST"
+    echo "  $0 full src/main.cp -o debug/      # Full analysis to debug/ folder"
     echo "  $0 interactive                     # Start interactive mode"
-    echo "  echo 'class Foo {}' | $0 tokens    # Analyze from stdin"
+    echo "  echo 'class Foo {}' | $0 ast       # Build AST from stdin"
     echo ""
     echo "INTERACTIVE MODE:"
     echo "  In interactive mode, you can type CPrime code and see immediate analysis."
@@ -70,7 +72,7 @@ show_help() {
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        tokens|context|both|interactive)
+        tokens|context|ast|full|interactive)
             if [ -n "$MODE" ]; then
                 echo -e "${RED}Error: Multiple modes specified${NC}"
                 exit 1
@@ -111,8 +113,8 @@ done
 
 # Default mode if not specified
 if [ -z "$MODE" ]; then
-    echo -e "${YELLOW}No mode specified, defaulting to 'both'${NC}"
-    MODE="both"
+    echo -e "${YELLOW}No mode specified, defaulting to 'full'${NC}"
+    MODE="full"
 fi
 
 # Create output directory
@@ -131,10 +133,10 @@ run_analysis() {
             echo "Input file: $input"
             echo "Output file: $output_file"
         fi
-        "$V2_CLI" "--$mode" -o "$output_file" "$input"
+        "$CPRIME_CLI" "--$mode" -o "$output_file" "$input"
     else
         # Read from stdin
-        "$V2_CLI" "--$mode" -o "$output_file"
+        "$CPRIME_CLI" "--$mode" -o "$output_file"
     fi
     
     if [ $? -eq 0 ]; then
@@ -174,14 +176,14 @@ open_results() {
 
 # Interactive mode
 run_interactive() {
-    echo -e "${CYAN}Starting interactive V2 analysis mode${NC}"
+    echo -e "${CYAN}Starting interactive CPrime analysis mode${NC}"
     echo "Type CPrime code and press Enter to analyze. Type 'quit' or 'exit' to leave."
     echo ""
     
     local counter=1
     
     while true; do
-        echo -n -e "${BLUE}cprime_v2> ${NC}"
+        echo -n -e "${BLUE}cprime> ${NC}"
         read -r input
         
         if [ "$input" = "quit" ] || [ "$input" = "exit" ]; then
@@ -201,8 +203,8 @@ run_interactive() {
         local temp_context="$OUTPUT_DIR/interactive_${counter}_context.txt"
         
         # Run both analyses
-        echo "$input" | "$V2_CLI" --dump-tokens -o "$temp_tokens"
-        echo "$input" | "$V2_CLI" --debug-context -o "$temp_context"
+        echo "$input" | "$CPRIME_CLI" --dump-tokens -o "$temp_tokens"
+        echo "$input" | "$CPRIME_CLI" --debug-context -o "$temp_context"
         
         # Show compact results
         echo -e "${YELLOW}=== TOKENS ===${NC}"
@@ -228,9 +230,13 @@ case $MODE in
     context)
         run_analysis "debug-context" "$INPUT_FILE" "$OUTPUT_DIR/context.txt"
         ;;
-    both)
+    ast)
+        run_analysis "build-ast" "$INPUT_FILE" "$OUTPUT_DIR/ast.txt"
+        ;;
+    full)
         run_analysis "dump-tokens" "$INPUT_FILE" "$OUTPUT_DIR/tokens.txt"
         run_analysis "debug-context" "$INPUT_FILE" "$OUTPUT_DIR/context.txt"
+        run_analysis "build-ast" "$INPUT_FILE" "$OUTPUT_DIR/ast.txt"
         ;;
     interactive)
         run_interactive
@@ -249,10 +255,13 @@ if [ "$MODE" != "interactive" ]; then
     echo -e "${GREEN}Analysis completed successfully!${NC}"
     echo -e "${CYAN}Results saved to: $OUTPUT_DIR${NC}"
     
-    if [ "$MODE" = "both" ] || [ "$MODE" = "tokens" ]; then
+    if [ "$MODE" = "full" ] || [ "$MODE" = "tokens" ]; then
         echo -e "  📄 Token analysis: $OUTPUT_DIR/tokens.txt"
     fi
-    if [ "$MODE" = "both" ] || [ "$MODE" = "context" ]; then
+    if [ "$MODE" = "full" ] || [ "$MODE" = "context" ]; then
         echo -e "  🔍 Context analysis: $OUTPUT_DIR/context.txt"
+    fi
+    if [ "$MODE" = "full" ] || [ "$MODE" = "ast" ]; then
+        echo -e "  🌳 AST analysis: $OUTPUT_DIR/ast.txt"
     fi
 fi

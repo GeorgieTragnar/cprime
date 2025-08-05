@@ -4,7 +4,7 @@
 #include <iostream>
 #include <iomanip>
 
-using namespace cprime::v2;
+using namespace cprime;
 
 /**
  * Test the new AST Builder with context-enriched tokens.

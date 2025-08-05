@@ -10,7 +10,7 @@
 #include <iomanip>
 #include <getopt.h>
 
-using namespace cprime::v2;
+using namespace cprime;
 
 struct CLIOptions {
     bool dump_tokens = false;
@@ -355,7 +355,7 @@ void build_ast_from_source(const std::string& source, std::ostream& out,
 }
 
 void show_pipeline_status(std::ostream& out) {
-    out << "=== CPrime V2 Compiler Pipeline Status ===\n\n";
+    out << "=== CPrime Compiler Pipeline Status ===\n\n";
     
     out << std::left;
     out << std::setw(20) << "Layer" << std::setw(30) << "Component" << std::setw(15) << "Status" << "Description\n";

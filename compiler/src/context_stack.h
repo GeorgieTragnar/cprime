@@ -6,7 +6,7 @@
 #include <functional>
 #include <memory>
 
-namespace cprime::v2 {
+namespace cprime {
 
 /**
  * Parsing contexts for context-sensitive keyword resolution.
@@ -240,4 +240,4 @@ private:
     bool active;
 };
 
-} // namespace cprime::v2
+} // namespace cprime

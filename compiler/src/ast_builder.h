@@ -9,7 +9,7 @@
 #include <stack>
 #include <optional>
 
-namespace cprime::v2 {
+namespace cprime {
 
 /**
  * AST Builder - Layer 3 of the compiler pipeline.
@@ -235,4 +235,4 @@ private:
     void merge_symbol_tables(const std::vector<SymbolTable>& tables);
 };
 
-} // namespace cprime::v2
+} // namespace cprime

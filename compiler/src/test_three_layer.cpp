@@ -5,7 +5,7 @@
 #include <iostream>
 #include <string>
 
-using namespace cprime::v2;
+using namespace cprime;
 
 void test_raw_tokenization() {
     std::cout << "=== Testing Raw Tokenization ===\n";

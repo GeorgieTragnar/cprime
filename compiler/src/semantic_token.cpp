@@ -3,7 +3,7 @@
 #include <iostream>
 #include <algorithm>
 
-namespace cprime::v2 {
+namespace cprime {
 
 // Helper function to join strings
 std::string join_strings(const std::vector<std::string>& strings, const std::string& delimiter) {
@@ -523,4 +523,4 @@ std::string SemanticFeatureRegistry::token_type_to_string(SemanticTokenType type
     }
 }
 
-} // namespace cprime::v2
+} // namespace cprime

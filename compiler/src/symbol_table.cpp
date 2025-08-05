@@ -1,215 +1,236 @@
 #include "symbol_table.h"
-#include <stdexcept>
+#include <iostream>
+#include <iomanip>
 
 namespace cprime {
 
-SymbolTable::SymbolTable() {
-    // Start with global scope
-    enter_scope();
+// ============================================================================
+// Symbol implementation
+// ============================================================================
+
+std::string Symbol::to_string() const {
+    std::string result = name + " (" + std::to_string(static_cast<int>(kind)) + ")";
+    if (type) {
+        result += " : " + type->to_string();
+    }
+    return result;
 }
 
-void SymbolTable::enter_scope() {
-    scopes.emplace_back();
-}
+// ============================================================================
+// Scope implementation
+// ============================================================================
 
-void SymbolTable::exit_scope() {
-    if (scopes.empty()) {
-        throw std::runtime_error("Cannot exit scope: no scopes active");
+bool Scope::add_symbol(SymbolPtr symbol) {
+    const std::string& name = symbol->get_name();
+    if (symbols.find(name) != symbols.end()) {
+        return false; // Symbol already exists
     }
-    scopes.pop_back();
-}
-
-bool SymbolTable::declare_variable(const std::string& name, Type type) {
-    if (scopes.empty()) {
-        throw std::runtime_error("No active scope for variable declaration");
-    }
-    
-    auto& current_scope = scopes.back();
-    
-    // Check if variable already exists in current scope
-    if (current_scope.find(name) != current_scope.end()) {
-        return false; // Variable already declared in this scope
-    }
-    
-    // Add to current scope
-    current_scope.emplace(name, Symbol(name, type, true));
+    symbols[name] = symbol;
     return true;
 }
 
-bool SymbolTable::assign_variable(const std::string& name) {
-    Symbol* symbol = find_symbol(name);
-    if (!symbol) {
-        return false; // Variable not found
+SymbolPtr Scope::lookup_local(const std::string& name) const {
+    auto it = symbols.find(name);
+    return it != symbols.end() ? it->second : nullptr;
+}
+
+SymbolPtr Scope::lookup(const std::string& name) const {
+    // Search current scope first
+    auto symbol = lookup_local(name);
+    if (symbol) {
+        return symbol;
     }
     
-    symbol->is_initialized = true;
-    return true;
-}
-
-Symbol* SymbolTable::lookup_variable(const std::string& name) {
-    return find_symbol(name);
-}
-
-Symbol* SymbolTable::find_symbol(const std::string& name) {
-    // Search from innermost to outermost scope
-    for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
-        auto found = it->find(name);
-        if (found != it->end()) {
-            return &found->second;
-        }
+    // Search parent scopes
+    if (parent) {
+        return parent->lookup(name);
     }
+    
     return nullptr;
 }
 
-Type SymbolTable::deduce_type(const Expression& expr) {
-    if (dynamic_cast<const BooleanLiteral*>(&expr)) {
-        return Type::BOOL;
-    } else if (dynamic_cast<const NumberLiteral*>(&expr)) {
-        return Type::INT;
-    } else if (auto var_ref = dynamic_cast<const VariableReference*>(&expr)) {
-        Symbol* symbol = lookup_variable(var_ref->name);
-        return symbol ? symbol->type : Type::VOID;
-    } else if (auto binary = dynamic_cast<const BinaryExpression*>(&expr)) {
-        // For arithmetic operators, result is int
-        // For comparison operators, result is bool
-        if (binary->operator_token == "+" || binary->operator_token == "-" ||
-            binary->operator_token == "*" || binary->operator_token == "/" ||
-            binary->operator_token == "%") {
-            return Type::INT;
-        } else {
-            return Type::BOOL;
-        }
-    }
-    return Type::VOID;
+Scope* Scope::create_child_scope(Kind kind, const std::string& name) {
+    auto child = std::make_unique<Scope>(kind, name, this);
+    Scope* child_ptr = child.get();
+    children.push_back(std::move(child));
+    return child_ptr;
 }
 
-bool SymbolTable::declare_variable(const std::string& name, const std::string& custom_type_name) {
-    if (scopes.empty()) {
-        throw std::runtime_error("No active scope for variable declaration");
+std::string Scope::get_qualified_name() const {
+    if (parent && parent->kind != Kind::Global) {
+        return parent->get_qualified_name() + "::" + name;
     }
-    
-    auto& current_scope = scopes.back();
-    
-    // Check if variable already exists in current scope
-    if (current_scope.find(name) != current_scope.end()) {
-        return false; // Variable already declared in this scope
-    }
-    
-    // Check if custom type exists
-    if (classes.find(custom_type_name) == classes.end()) {
-        throw std::runtime_error("Unknown custom type: " + custom_type_name);
-    }
-    
-    // Add to current scope
-    current_scope.emplace(name, Symbol(name, custom_type_name, true));
-    return true;
+    return name;
 }
 
-void SymbolTable::register_class(const ClassDefinition& class_def) {
-    ClassInfo class_info(class_def.name);
+void Scope::dump(int indent) const {
+    std::string prefix(indent * 2, ' ');
+    std::cout << prefix << "Scope: " << name << " (kind=" << static_cast<int>(kind) << ")\n";
     
-    // Register fields
-    for (const auto& field : class_def.fields) {
-        if (field->type == Type::CUSTOM && field->custom_type) {
-            class_info.custom_fields.emplace_back(field->name, field->custom_type->name);
-        } else {
-            class_info.fields.emplace_back(field->name, field->type);
-        }
+    for (const auto& [sym_name, symbol] : symbols) {
+        std::cout << prefix << "  - " << symbol->to_string() << "\n";
     }
     
-    // Track special members
-    for (const auto& member : class_def.special_members) {
-        switch (member->type) {
-            case SpecialMemberType::DEFAULT_CONSTRUCTOR:
-                class_info.has_default_constructor = true;
-                break;
-            case SpecialMemberType::COPY_CONSTRUCTOR:
-                class_info.has_copy_constructor = true;
-                break;
-            case SpecialMemberType::MOVE_CONSTRUCTOR:
-                class_info.has_move_constructor = true;
-                break;
-            case SpecialMemberType::COPY_ASSIGNMENT:
-                class_info.has_copy_assignment = true;
-                break;
-            case SpecialMemberType::MOVE_ASSIGNMENT:
-                class_info.has_move_assignment = true;
-                break;
-            case SpecialMemberType::DESTRUCTOR:
-                class_info.has_destructor = true;
-                break;
-        }
+    for (const auto& child : children) {
+        child->dump(indent + 1);
     }
-    
-    // No Rule of Five validation - CPrime allows any combination of special members
-    // All special members are implicitly deleted unless explicitly declared
-    
-    classes[class_def.name] = std::move(class_info);
 }
 
-ClassInfo* SymbolTable::lookup_class(const std::string& name) {
-    auto it = classes.find(name);
-    return (it != classes.end()) ? &it->second : nullptr;
+// ============================================================================
+// SymbolTable implementation
+// ============================================================================
+
+SymbolTable::SymbolTable() {
+    global_scope = std::make_unique<Scope>(Scope::Kind::Global, "global");
+    current_scope = global_scope.get();
 }
 
-bool SymbolTable::has_field(const std::string& class_name, const std::string& field_name) {
-    ClassInfo* class_info = lookup_class(class_name);
-    if (!class_info) return false;
-    
-    // Check built-in type fields
-    for (const auto& field : class_info->fields) {
-        if (field.first == field_name) {
-            return true;
-        }
-    }
-    
-    // Check custom type fields
-    for (const auto& field : class_info->custom_fields) {
-        if (field.first == field_name) {
-            return true;
-        }
-    }
-    
-    return false;
+void SymbolTable::enter_scope(Scope::Kind kind, const std::string& name) {
+    current_scope = current_scope->create_child_scope(kind, name);
 }
 
-Type SymbolTable::get_field_type(const std::string& class_name, const std::string& field_name) {
-    ClassInfo* class_info = lookup_class(class_name);
-    if (!class_info) return Type::VOID;
-    
-    // Check built-in type fields
-    for (const auto& field : class_info->fields) {
-        if (field.first == field_name) {
-            return field.second;
-        }
+void SymbolTable::exit_scope() {
+    if (current_scope->get_parent()) {
+        current_scope = current_scope->get_parent();
     }
-    
-    // Check custom type fields
-    for (const auto& field : class_info->custom_fields) {
-        if (field.first == field_name) {
-            return Type::CUSTOM;
-        }
-    }
-    
-    return Type::VOID;
 }
 
-std::string SymbolTable::get_field_custom_type(const std::string& class_name, const std::string& field_name) {
-    ClassInfo* class_info = lookup_class(class_name);
-    if (!class_info) return "";
+bool SymbolTable::add_symbol(const std::string& name, SymbolKind kind, 
+                            ast::TypePtr type, ast::DeclPtr declaration) {
+    auto symbol = std::make_shared<Symbol>(name, kind, type, declaration);
+    return current_scope->add_symbol(symbol);
+}
+
+SymbolPtr SymbolTable::lookup(const std::string& name) const {
+    return current_scope->lookup(name);
+}
+
+SymbolPtr SymbolTable::lookup_in_scope(const std::string& name, const Scope* scope) const {
+    if (!scope) scope = current_scope;
+    return scope->lookup(name);
+}
+
+void SymbolTable::register_type(const std::string& name, ast::TypePtr type) {
+    type_registry[name] = type;
+}
+
+ast::TypePtr SymbolTable::lookup_type(const std::string& name) const {
+    auto it = type_registry.find(name);
+    return it != type_registry.end() ? it->second : nullptr;
+}
+
+void SymbolTable::register_access_right(const std::string& class_name, const ast::AccessRight& access_right) {
+    access_rights[class_name][access_right.name] = access_right;
+}
+
+std::optional<ast::AccessRight> SymbolTable::lookup_access_right(const std::string& class_name, 
+                                                                const std::string& right_name) const {
+    auto class_it = access_rights.find(class_name);
+    if (class_it == access_rights.end()) {
+        return std::nullopt;
+    }
     
-    // Check custom type fields
-    for (const auto& field : class_info->custom_fields) {
-        if (field.first == field_name) {
-            return field.second;
+    auto right_it = class_it->second.find(right_name);
+    if (right_it == class_it->second.end()) {
+        return std::nullopt;
+    }
+    
+    return right_it->second;
+}
+
+size_t SymbolTable::total_symbols() const {
+    std::vector<SymbolPtr> symbols;
+    collect_symbols_recursive(global_scope.get(), symbols);
+    return symbols.size();
+}
+
+void SymbolTable::dump() const {
+    std::cout << "=== Symbol Table ===\n";
+    std::cout << "Total symbols: " << total_symbols() << "\n\n";
+    global_scope->dump(0);
+    
+    if (!type_registry.empty()) {
+        std::cout << "\n=== Type Registry ===\n";
+        for (const auto& [name, type] : type_registry) {
+            std::cout << "  " << name << " -> " << type->to_string() << "\n";
         }
     }
     
-    return "";
+    if (!access_rights.empty()) {
+        std::cout << "\n=== Access Rights ===\n";
+        for (const auto& [class_name, rights] : access_rights) {
+            std::cout << "  " << class_name << ":\n";
+            for (const auto& [right_name, right] : rights) {
+                std::cout << "    " << (right.is_runtime ? "runtime " : "") 
+                         << "exposes " << right_name << " { ";
+                for (const auto& field : right.granted_fields) {
+                    std::cout << field << " ";
+                }
+                std::cout << "}\n";
+            }
+        }
+    }
 }
 
-bool SymbolTable::is_compatible(Type from, Type to) {
-    return from == to || to == Type::AUTO;
+std::vector<SymbolPtr> SymbolTable::find_symbols_by_kind(SymbolKind kind) const {
+    std::vector<SymbolPtr> result;
+    collect_symbols_recursive(global_scope.get(), result, kind);
+    return result;
+}
+
+std::vector<SymbolPtr> SymbolTable::find_symbols_in_scope(const Scope* scope, SymbolKind kind) const {
+    std::vector<SymbolPtr> result;
+    collect_symbols_recursive(scope, result, kind);
+    return result;
+}
+
+void SymbolTable::collect_symbols_recursive(const Scope* scope, std::vector<SymbolPtr>& result,
+                                           std::optional<SymbolKind> kind) const {
+    for (const auto& [name, symbol] : scope->get_symbols()) {
+        if (!kind || symbol->get_kind() == *kind) {
+            result.push_back(symbol);
+        }
+    }
+    
+    for (const auto& child : scope->get_children()) {
+        collect_symbols_recursive(child.get(), result, kind);
+    }
+}
+
+// ============================================================================
+// SymbolTableBuilder implementation
+// ============================================================================
+
+void SymbolTableBuilder::process_variable_declaration(const ast::VarDecl& decl) {
+    symbol_table.add_symbol(decl.get_name(), SymbolKind::Variable, 
+                           decl.get_type(), nullptr);
+}
+
+void SymbolTableBuilder::process_function_declaration(const ast::FunctionDecl& decl) {
+    symbol_table.add_symbol(decl.get_name(), SymbolKind::Function, 
+                           decl.get_return_type(), nullptr);
+}
+
+void SymbolTableBuilder::process_class_declaration(const ast::ClassDecl& decl) {
+    // Add class symbol
+    symbol_table.add_symbol(decl.get_name(), SymbolKind::Class, nullptr, nullptr);
+    
+    // Register access rights
+    for (const auto& access_right : decl.get_access_rights()) {
+        symbol_table.register_access_right(decl.get_name(), access_right);
+    }
+}
+
+void SymbolTableBuilder::process_struct_declaration(const ast::StructDecl& decl) {
+    symbol_table.add_symbol(decl.get_name(), SymbolKind::Struct, nullptr, nullptr);
+}
+
+void SymbolTableBuilder::process_union_declaration(const ast::UnionDecl& decl) {
+    symbol_table.add_symbol(decl.get_name(), SymbolKind::Union, nullptr, nullptr);
+}
+
+void SymbolTableBuilder::process_interface_declaration(const ast::InterfaceDecl& decl) {
+    symbol_table.add_symbol(decl.get_name(), SymbolKind::Interface, nullptr, nullptr);
 }
 
 } // namespace cprime

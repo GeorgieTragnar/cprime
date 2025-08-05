@@ -3,14 +3,14 @@
 #include <iostream>
 #include <vector>
 
-using namespace cprime::v2;
+using namespace cprime;
 
 /**
  * Simple demo of context-enriched tokens.
  * Shows how raw tokens can be enriched with context information.
  */
 int main() {
-    std::cout << "=== CPrime V2 Contextual Token Demo ===\n\n";
+    std::cout << "=== CPrime Contextual Token Demo ===\n\n";
     
     // Sample CPrime code
     std::string cprime_code = R"(

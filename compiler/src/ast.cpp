@@ -1,7 +1,7 @@
 #include "ast.h"
 #include <sstream>
 
-namespace cprime::v2::ast {
+namespace cprime::ast {
 
 // ============================================================================
 // Base AST Node implementations
@@ -206,4 +206,4 @@ std::string CompilationUnit::to_string() const {
     return ss.str();
 }
 
-} // namespace cprime::v2::ast
+} // namespace cprime::ast
