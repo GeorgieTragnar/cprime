@@ -2,472 +2,442 @@
 
 ## Overview
 
-CPrime's access rights system provides capability-based security through compile-time access control. Instead of traditional inheritance-based polymorphism, CPrime uses access rights to control what operations are possible on data, providing fine-grained security with zero runtime overhead.
+CPrime's access rights system provides inheritance-like polymorphism through vtable extensions. Unlike traditional views or capabilities, access rights actually extend the base data class with additional memory and vtable pointers, similar to C++ inheritance but with more explicit control. This system offers both compile-time (static) and runtime (dynamic) variants, allowing developers to choose between zero-cost abstractions and dynamic flexibility.
 
 ## Core Concepts
 
-### Access Rights Are Not Types
+### Access Rights Are Inheritance Extensions
 
-In CPrime, access rights are separate from types. A single data type can have different access rights in different contexts:
+Access rights in CPrime work like C++ inheritance, adding vtable pointers and memory to the base data class:
 
 ```cpp
-// One type, different friend access
+// Base data class
+class Connection {
+    handle: DbHandle,
+    buffer: [u8; 4096],
+    
+    // Each access right adds vtable pointers and memory
+    exposes UserOps { handle, buffer }      // +8 bytes for vtable ptr
+    exposes AdminOps { handle, buffer }     // +8 bytes for vtable ptr
+    exposes runtime QueryOps { handle }     // +8 bytes for vtable ptr + RTTI
+}
+
+// Memory layout (conceptual):
+// [base fields][UserOps vtable ptr][AdminOps vtable ptr][QueryOps vtable ptr + RTTI]
+// Total: base_size + (num_access_rights * ptr_size) + runtime_overhead
+```
+
+### Casting Required for Access
+
+Like C++ inheritance, you need to cast to access derived-only operations:
+
+```cpp
+// Cannot directly call AdminOps methods on base Connection
+let conn: Connection = create_connection();
+// AdminOps::delete_table(&conn);  // ❌ Compile error
+
+// Must cast to appropriate access right
+if let Some(admin) = conn.cast::<AdminOps>() {
+    AdminOps::delete_table(&admin);  // ✓ Now accessible
+}
+
+// Or with compile-time known type
+let admin_conn: Connection<AdminOps> = create_admin_connection();
+AdminOps::delete_table(&admin_conn);  // ✓ Direct access
+```
+
+## Compile-Time vs Runtime Access Rights
+
+### Compile-Time Access Rights (Default)
+
+By default, access rights are compile-time with restricted casting:
+
+```cpp
 class SecureData {
     key: [u8; 32],
     value: String,
-    timestamp: u64,
     
-    // Declares what functional classes can see what fields
-    exposes UserOps { value, timestamp }
-    exposes AdminOps { key, value, timestamp }
-    exposes AuditOps { timestamp }
+    // Compile-time access rights - no runtime overhead
+    exposes UserOps { value }
+    exposes AdminOps { key, value }
+}
+
+// Compile-time type includes access right
+let user_data: SecureData<UserOps> = create_user_data();
+let admin_data: SecureData<AdminOps> = create_admin_data();
+
+// Upcasting allowed (to base or interface)
+let base: &SecureData = &user_data;  // ✓ Upcast to base
+
+// Downcasting forbidden at compile-time
+// let admin = user_data.cast::<AdminOps>();  // Always None/false
+
+// Dynamic cast on compile-time access always fails unless same type
+let same = user_data.dynamic_cast::<UserOps>();  // ✓ Returns Some
+let diff = user_data.dynamic_cast::<AdminOps>(); // ✗ Returns None
+```
+
+### Runtime Access Rights
+
+Runtime access rights enable full polymorphism with dynamic dispatch:
+
+```cpp
+class DynamicConnection {
+    handle: DbHandle,
+    
+    // Runtime keyword enables dynamic dispatch
+    runtime exposes UserOps { handle }
+    runtime exposes AdminOps { handle }
+    runtime exposes QueryOps { handle }
+}
+
+// Runtime polymorphism - type erased
+let conn: runtime Connection = create_dynamic_connection();
+
+// Dynamic casting works
+match conn.dynamic_cast() {
+    Some(AdminOps(admin)) => {
+        AdminOps::dangerous_operation(&admin);
+    },
+    Some(UserOps(user)) => {
+        UserOps::safe_operation(&user);
+    },
+    None => println("Unknown access type"),
+}
+
+// RTTI enables runtime type queries
+if conn.has_capability::<AdminOps>() {
+    // Admin operations available
 }
 ```
 
-### Friend Modules Pattern
+### Memory and Performance Impact
 
-Access rights work like C++ friend declarations, but at the module level:
+| Feature | Compile-Time | Runtime |
+|---------|--------------|---------|
+| Vtable per access right | Yes (static) | Yes (dynamic) |
+| Memory overhead | 8 bytes per access | 8+ bytes per access + RTTI |
+| Downcasting | Forbidden | Full support |
+| Dynamic dispatch | No | Yes |
+| Type erasure | No | Yes |
+| Zero-cost | Yes (when type known) | No |
+
+## How Access Rights Differ from Interfaces
+
+While access rights provide inheritance-like polymorphism, interfaces provide common vtable patterns:
 
 ```cpp
-// Functional classes with different friend access
-functional class UserOps {
-    fn read_value(data: &SecureData) -> &str {
-        &data.value      // ✓ Can access value
-        // data.key      // ❌ Cannot access key
-    }
-    
-    fn get_timestamp(data: &SecureData) -> u64 {
-        data.timestamp   // ✓ Can access timestamp
+// Interface defines common operations
+interface Queryable {
+    fn execute_query(&self, sql: &str) -> Result<QueryResult>;
+}
+
+// Access rights implement interface
+impl Queryable for Connection<UserOps> {
+    fn execute_query(&self, sql: &str) -> Result<QueryResult> {
+        UserOps::query(self, sql)
     }
 }
 
-functional class AdminOps {
-    fn read_key(data: &SecureData) -> &[u8] {
-        &data.key        // ✓ Can access key
-    }
-    
-    fn read_value(data: &SecureData) -> &str {
-        &data.value      // ✓ Can access value
-    }
-    
-    fn update_key(data: &mut SecureData, new_key: [u8; 32]) {
-        data.key = new_key;  // ✓ Can modify key
+impl Queryable for Connection<AdminOps> {
+    fn execute_query(&self, sql: &str) -> Result<QueryResult> {
+        AdminOps::query(self, sql)  // May have more privileges
     }
 }
 
-functional class AuditOps {
-    fn get_access_time(data: &SecureData) -> u64 {
-        data.timestamp   // ✓ Can access timestamp
-        // data.value    // ❌ Cannot access value
-        // data.key      // ❌ Cannot access key
-    }
+// Can work with any Queryable without casting
+fn run_query(conn: &impl Queryable, sql: &str) {
+    conn.execute_query(sql)?;  // No casting needed
 }
 ```
 
-## Module Boundaries and Construction
+## Memory Layout Details
 
-### Constructor Access Control
-
-Modules control who can construct data types and with what access rights:
+### Compile-Time Layout
 
 ```cpp
-mod database {
-    class Connection {
-        handle: DbHandle,
-        permissions: PermissionSet,
-        constructed_by: DatabaseOps,
-    }
+class FileData {
+    handle: FileHandle,     // 8 bytes
+    path: String,          // 24 bytes
     
-    functional class DatabaseOps {
-        fn construct_user_connection(credentials: &UserCreds) -> Result<Connection> {
-            let handle = db::connect_user(credentials)?;
-            Ok(Connection {
-                handle,
-                permissions: PermissionSet::USER,
-            })
-        }
-        
-        fn construct_admin_connection(admin_key: &AdminKey) -> Result<Connection> {
-            let handle = db::connect_admin(admin_key)?;
-            Ok(Connection {
-                handle,
-                permissions: PermissionSet::ADMIN,
-            })
-        }
-    }
-    
-    // Public factory functions
-    pub fn create_user_connection(creds: &UserCreds) -> Result<Connection> {
-        DatabaseOps::construct_user_connection(creds)
-    }
-    
-    pub fn create_admin_connection(key: &AdminKey) -> Result<Connection> {
-        DatabaseOps::construct_admin_connection(key)
-    }
+    exposes ReadOps { handle, path }    // +8 bytes vtable
+    exposes WriteOps { handle }         // +8 bytes vtable
 }
 
-// Different access rights based on construction
-let user_conn = database::create_user_connection(&user_creds)?;
-let admin_conn = database::create_admin_connection(&admin_key)?;
-
-// Same type, different capabilities
-UserQueries::execute(&user_conn, "SELECT * FROM public_data");
-AdminQueries::execute(&admin_conn, "DELETE FROM sensitive_table");
+// Memory layout for FileData<ReadOps>:
+// [handle: 8][path: 24][ReadOps vtable: 8] = 40 bytes
+// 
+// Memory layout for FileData<WriteOps>:
+// [handle: 8][path: 24][WriteOps vtable: 8] = 40 bytes
+//
+// Memory layout for FileData<ReadOps, WriteOps>:
+// [handle: 8][path: 24][ReadOps vtable: 8][WriteOps vtable: 8] = 48 bytes
 ```
 
-### Module-Level Security
-
-Modules define security boundaries and control access patterns:
+### Runtime Layout
 
 ```cpp
-mod secure_storage {
-    // Private implementation details
-    class StorageData {
-        encrypted_data: Vec<u8>,
-        metadata: StorageMetadata,
-        constructed_by: SecureOps,
-    }
+class RuntimeFileData {
+    handle: FileHandle,
     
-    // Internal operations - not exposed
-    functional class SecureOps {
-        fn construct(data: &[u8], key: &EncryptionKey) -> StorageData {
-            let encrypted = encrypt(data, key);
-            StorageData {
-                encrypted_data: encrypted,
-                metadata: StorageMetadata::new(),
-            }
-        }
-        
-        fn decrypt_internal(storage: &StorageData, key: &EncryptionKey) -> Vec<u8> {
-            decrypt(&storage.encrypted_data, key)
-        }
-    }
+    runtime exposes ReadOps { handle }
+    runtime exposes WriteOps { handle }
+}
+
+// Memory layout includes RTTI:
+// [handle: 8][vtable ptr: 8][type_info: 8+] = 24+ bytes
+// The vtable itself contains pointers to all exposed operations
+```
+
+## Advanced Patterns
+
+### Multiple Access Rights
+
+A single object can expose multiple access rights:
+
+```cpp
+class DatabaseConnection {
+    handle: DbHandle,
+    cache: QueryCache,
     
-    // Public interface - limited access
-    pub functional class PublicOps {
-        pub fn store(data: &[u8], key: &EncryptionKey) -> StorageData {
-            SecureOps::construct(data, key)
-        }
-        
-        pub fn retrieve(storage: &StorageData, key: &EncryptionKey) -> Result<Vec<u8>> {
-            verify_access(key)?;
-            Ok(SecureOps::decrypt_internal(storage, key))
-        }
-        
-        pub fn get_metadata(storage: &StorageData) -> &StorageMetadata {
-            &storage.metadata  // Only metadata accessible publicly
-        }
-    }
+    exposes QueryOps { handle, cache }
+    exposes AdminOps { handle }
+    exposes CacheOps { cache }
+}
+
+// Can be accessed through any exposed interface
+let conn = create_connection();
+
+// Must cast to specific access right
+if let Some(query) = conn.cast::<QueryOps>() {
+    QueryOps::select(&query, "SELECT ...");
+}
+
+if let Some(admin) = conn.cast::<AdminOps>() {
+    AdminOps::create_table(&admin, schema);
 }
 ```
 
-## Compile-Time vs Runtime Access Control
+### Access Right Hierarchies
 
-### Compile-Time (Default)
-
-By default, access rights are checked at compile time with zero runtime cost:
+Access rights can form hierarchies similar to inheritance:
 
 ```cpp
-// Compile-time access control
-let conn: Connection = create_connection();
-UserOps::query(&conn, "SELECT ...");     // ✓ Compile-time verified
-// AdminOps::delete(&conn);              // ❌ Compile error
-
-// Access rights are compile-time constants
-fn process_user_data(conn: &Connection) {
-    UserOps::read(&conn);                 // ✓ Always allowed
-    // AdminOps::write(&conn);            // ❌ Compile error
+// Base access
+class BasicAccess {
+    exposes ReadOps { ... }
 }
+
+// Extended access (conceptual - syntax TBD)
+class AdminAccess : BasicAccess {
+    exposes WriteOps { ... }
+    exposes DeleteOps { ... }
+}
+
+// Admin has all Basic operations plus more
+let admin: AdminAccess = create_admin();
+ReadOps::read(&admin);    // ✓ Inherited
+WriteOps::write(&admin);  // ✓ Admin-only
 ```
 
-### Runtime (Opt-In)
+### Combining with Interfaces
 
-When needed, access rights can be checked at runtime with dynamic dispatch:
-
-```cpp
-// Runtime access control - explicit opt-in
-let conn: runtime Connection = create_plugin_connection();
-
-// Dynamic capability checking
-if let Some(admin_access) = conn.cast::<AdminOps>() {
-    AdminOps::dangerous_operation(&admin_access);
-} else {
-    println("Insufficient privileges");
-}
-
-// Pattern matching on capabilities
-match conn.capabilities() {
-    Capabilities::User(user_conn) => {
-        UserOps::read_data(&user_conn);
-    }
-    Capabilities::Admin(admin_conn) => {
-        AdminOps::modify_system(&admin_conn);
-    }
-    Capabilities::Audit(audit_conn) => {
-        AuditOps::log_access(&audit_conn);
-    }
-}
-```
-
-### Performance Trade-offs
-
-| Access Type | Performance | Flexibility | Use Case |
-|-------------|-------------|-------------|----------|
-| Compile-time | Zero cost | Static only | Most operations |
-| Runtime | Small overhead | Dynamic capabilities | Plugin systems, configuration |
-
-## Advanced Access Patterns
-
-### Access Escalation
-
-Request higher privileges at runtime when needed:
+Access rights and interfaces work together:
 
 ```cpp
-functional class EscalationOps {
-    fn request_admin_access(user_conn: &Connection, justification: &str) -> Result<AdminConnection> {
-        // Check if escalation is allowed
-        if can_escalate(user_conn, justification) {
-            // Audit the escalation
-            audit_log("Access escalation granted", user_conn, justification);
-            
-            // Return upgraded connection
-            Ok(upgrade_to_admin(user_conn))
-        } else {
-            Err("Escalation denied")
-        }
+interface DataSource {
+    fn fetch_data(&self) -> Vec<u8>;
+}
+
+// Different access rights provide different implementations
+impl DataSource for FileData<ReadOps> {
+    fn fetch_data(&self) -> Vec<u8> {
+        ReadOps::read_all(self)
     }
 }
 
-// Usage
-let user_conn = create_user_connection(&creds)?;
-let admin_conn = EscalationOps::request_admin_access(&user_conn, "Emergency fix")?;
-AdminOps::emergency_repair(&admin_conn);
-```
-
-### Capability Composition
-
-Combine multiple access interfaces for complex operations:
-
-```cpp
-// Multiple capabilities required
-functional class ComplexOps {
-    fn complex_operation(
-        db_conn: &Connection,        // Database access
-        file_handle: &FileData,      // File system access  
-        network: &NetworkData        // Network access
-    ) -> Result<()> {
-        // Each parameter provides different capabilities
-        DatabaseOps::begin_transaction(&db_conn)?;
-        FileOps::create_backup(&file_handle)?;
-        NetworkOps::notify_completion(&network)?;
-        DatabaseOps::commit_transaction(&db_conn)
+impl DataSource for NetworkData<SecureOps> {
+    fn fetch_data(&self) -> Vec<u8> {
+        SecureOps::encrypted_read(self)
     }
 }
 
-// All capabilities must be provided
-let result = ComplexOps::complex_operation(&db_conn, &file, &network);
-```
-
-### Time-Limited Access
-
-Capabilities can have temporal constraints:
-
-```cpp
-class TemporaryAccess {
-    token: AccessToken,
-    expires_at: Timestamp,
-    constructed_by: TemporaryOps,
-}
-
-functional class TemporaryOps {
-    fn construct(duration: Duration) -> TemporaryAccess {
-        TemporaryAccess {
-            token: generate_token(),
-            expires_at: now() + duration,
-        }
-    }
-    
-    fn execute_with_timeout<T>(
-        access: &TemporaryAccess, 
-        operation: impl FnOnce() -> T
-    ) -> Result<T> {
-        if now() > access.expires_at {
-            return Err("Access expired");
-        }
-        
-        Ok(operation())
-    }
+// Generic function works with any DataSource
+fn process_data(source: &impl DataSource) {
+    let data = source.fetch_data();
+    // Process data...
 }
 ```
 
 ## Security Model
 
-### Capability Theory Foundation
+### Capability-Based Security
 
-CPrime's access rights are based on capability security principles:
-
-1. **Unforgeable**: Access rights cannot be created arbitrarily
-2. **Transferable**: Access rights can be passed to other functions
-3. **Revocable**: Access can be withdrawn (through module control)
-4. **Attenuated**: Access rights can be reduced but not increased
-
-### Security Properties
+Access rights provide unforgeable capabilities:
 
 ```cpp
-// Demonstration of security properties
-mod secure_module {
+mod secure {
     class ProtectedData {
         secret: Secret,
-        constructed_by: ProtectedOps,
+        
+        // Only SecureOps can access secret
+        exposes SecureOps { secret }
+        constructed_by: SecureModule,
     }
     
-    functional class ProtectedOps {
-        // Only this module can create instances
+    functional class SecureModule {
         fn construct(secret: Secret) -> ProtectedData {
             ProtectedData { secret }
         }
     }
     
-    // Public interface cannot access secret directly
-    pub functional class PublicInterface {
-        // Can only perform authorized operations
-        pub fn authorized_operation(data: &ProtectedData) -> PublicResult {
-            // Cannot access data.secret directly
-            ProtectedOps::internal_operation(data)
+    functional class SecureOps {
+        fn process_secret(data: &ProtectedData) -> Result<()> {
+            // Can access data.secret
+            validate_secret(&data.secret)
         }
     }
 }
 
 // External code cannot forge access
-// let fake_data = ProtectedData { secret: hacked_secret }; // ❌ Compile error
-// let data = secure_module::create(secret);                // ✓ Must use authorized constructor
+// let fake = ProtectedData { secret: stolen };  // ❌ Cannot construct
+// SecureOps::process_secret(&fake);             // ❌ Wrong type
 ```
 
-### Audit and Monitoring
+### Runtime Security Checks
 
-Access rights enable comprehensive security auditing:
+Runtime access rights enable dynamic security policies:
 
 ```cpp
-functional class AuditOps {
-    fn log_access(operation: &str, data_type: &str, user: &UserContext) {
-        audit_log::record(AuditEvent {
-            timestamp: now(),
-            operation,
-            data_type,
-            user_id: user.id,
-            access_level: user.access_level,
-        });
-    }
-}
-
-// Automatic audit logging
-functional class SecureFileOps {
-    fn read(file: &FileData, user: &UserContext) -> Result<Vec<u8>> {
-        AuditOps::log_access("read", "FileData", user);
-        // ... implementation
-    }
+class DynamicResource {
+    data: SensitiveData,
     
-    fn write(file: &mut FileData, data: &[u8], user: &UserContext) -> Result<()> {
-        AuditOps::log_access("write", "FileData", user);
-        // ... implementation
+    runtime exposes UserOps { data }
+    runtime exposes AdminOps { data }
+    runtime exposes AuditorOps { data }
+}
+
+fn enforce_security_policy(
+    resource: &runtime Resource,
+    user: &User,
+    operation: Operation
+) -> Result<()> {
+    // Check user permissions
+    match (user.role, operation) {
+        (Role::Admin, _) => {
+            if let Some(admin) = resource.cast::<AdminOps>() {
+                AdminOps::perform(&admin, operation)
+            } else {
+                Err("Resource doesn't support admin operations")
+            }
+        },
+        (Role::User, Operation::Read) => {
+            if let Some(user_ops) = resource.cast::<UserOps>() {
+                UserOps::read(&user_ops)
+            } else {
+                Err("Resource doesn't support user operations")
+            }
+        },
+        _ => Err("Permission denied"),
     }
 }
 ```
 
-## Implementation Strategies
-
-### Compile-Time Implementation
-
-Access rights compile to template parameters or namespace selection:
+## Comparison with C++ Inheritance
 
 ```cpp
-// CPrime code
-UserOps::read(&data);
-
-// Generated C++ (conceptual)
-namespace UserOps {
-    template<typename T>
-    requires HasUserAccess<T>
-    auto read(const T& data) -> decltype(data.value) {
-        return data.value;  // Only accessible fields
-    }
-}
-```
-
-### Runtime Implementation
-
-Runtime access uses vtables or similar dispatch mechanisms:
-
-```cpp
-// CPrime code
-let conn: runtime Connection = get_connection();
-if let Some(admin) = conn.cast::<AdminOps>() {
-    AdminOps::operation(&admin);
-}
-
-// Generated C++ (conceptual)
-class RuntimeConnection {
-    std::unique_ptr<ConnectionImpl> impl;
-    CapabilitySet capabilities;
-    
-    template<typename Ops>
-    std::optional<typename Ops::AccessType> cast() const {
-        if (capabilities.contains(Ops::required_capability())) {
-            return Ops::AccessType{impl.get()};
-        }
-        return std::nullopt;
-    }
-};
-```
-
-## Design Patterns with Access Rights
-
-### Decorator Pattern Replacement
-
-```cpp
-// Traditional decorator
-class DecoratedStream : public Stream {
-    Stream* base;
-    // ... decoration logic
+// C++ approach
+class Connection {
+    DbHandle handle;
 };
 
-// CPrime access rights approach
+class UserConnection : public Connection {
+    // Adds vtable, can downcast
+};
+
+class AdminConnection : public UserConnection {
+    // More inheritance, deeper hierarchy
+};
+
+// CPrime approach
+class Connection {
+    handle: DbHandle,
+    
+    exposes UserOps { handle }
+    exposes AdminOps { handle }
+}
+
+// Advantages:
+// 1. No deep hierarchies
+// 2. Explicit memory cost
+// 3. Multiple independent access rights
+// 4. Compile-time vs runtime choice
+// 5. No virtual destructor issues
+```
+
+## Best Practices
+
+### Choose Compile-Time When Possible
+
+```cpp
+// Good: Compile-time when access is known
+fn process_user_data(conn: &Connection<UserOps>) {
+    UserOps::read(conn);  // Zero overhead
+}
+
+// Use runtime only when needed
+fn process_plugin_data(conn: &runtime Connection) {
+    // Plugin might have any access rights
+    match conn.cast() {
+        Some(UserOps(u)) => UserOps::read(&u),
+        Some(AdminOps(a)) => AdminOps::read(&a),
+        _ => panic!("Unknown access type"),
+    }
+}
+```
+
+### Minimize Access Rights
+
+```cpp
+// Bad: Too many access rights
+class OverloadedData {
+    data: Vec<u8>,
+    
+    exposes ReadOps { data }
+    exposes WriteOps { data }
+    exposes AppendOps { data }
+    exposes TruncateOps { data }
+    exposes CompressOps { data }
+    // ... 10 more
+}
+
+// Good: Grouped logically
 class StreamData {
-    handle: FileHandle,
-    exposes BasicOps { handle }
-    exposes EncryptedOps { handle }
+    data: Vec<u8>,
+    
+    exposes IOOps { data }        // Read, Write, Seek
+    exposes AdminOps { data }     // Truncate, Resize
+}
+```
+
+### Use Interfaces for Common Operations
+
+```cpp
+// Instead of casting everywhere
+fn process_connections(conns: &[Connection]) {
+    for conn in conns {
+        if let Some(query) = conn.cast::<QueryOps>() {
+            QueryOps::execute(&query, "SELECT ...");
+        }
+    }
 }
 
-functional class BasicOps {
-    fn read(data: &StreamData) -> Vec<u8> { /* basic read */ }
-}
-
-functional class EncryptedOps {
-    fn read(data: &StreamData) -> Vec<u8> { 
-        let encrypted = BasicOps::read(data);
-        decrypt(encrypted)
+// Use interface
+fn process_queryables(conns: &[impl Queryable]) {
+    for conn in conns {
+        conn.execute_query("SELECT ...");  // No casting
     }
 }
 ```
 
-### Strategy Pattern Replacement
-
-```cpp
-// Different strategies through different access rights
-functional class FastProcessor {
-    fn process(data: &ProcessingData) -> Result { /* fast algorithm */ }
-}
-
-functional class SecureProcessor {  
-    fn process(data: &ProcessingData) -> Result { /* secure algorithm */ }
-}
-
-// Strategy selection through module construction
-let data = if need_security {
-    create_secure_data()   // Returns data with SecureProcessor access
-} else {
-    create_fast_data()     // Returns data with FastProcessor access
-};
-```
-
-The access rights system provides powerful security and abstraction capabilities while maintaining zero-cost performance for the common case.
+Access rights provide powerful inheritance-like polymorphism with explicit memory costs and the choice between compile-time performance and runtime flexibility.

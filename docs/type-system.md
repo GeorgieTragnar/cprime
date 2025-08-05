@@ -261,29 +261,150 @@ where T: Numeric + Copy
 }
 ```
 
+## Union Types (Memory Contracts)
+
+CPrime unions are **memory contracts** that reserve space for a collection of types. Rather than being objects themselves, unions act as memory reservations where actual objects live, integrating seamlessly with CPrime's vtable system.
+
+### Union as Memory Reservation
+
+```cpp
+// Union defines memory contract, not object type
+union ConnectionSpace {
+    UserConn(Connection<UserOps>),      // 40 bytes
+    AdminConn(Connection<AdminOps>),    // 48 bytes
+    PowerConn(Connection<UserOps, AdminOps>), // 56 bytes
+}
+// Memory contract: Reserve 56 bytes (largest variant)
+// No "union object" exists - just properly-sized memory space
+
+// You work with objects IN the union space
+fn process_connection(space: &ConnectionSpace) {
+    // Access actual objects living in union space
+    if let Some(user) = space.try_as::<Connection<UserOps>>() {
+        UserOps::query(&user, "SELECT ...");  // Normal object method
+    } else if let Some(admin) = space.try_as::<Connection<AdminOps>>() {
+        AdminOps::delete_table(&admin, "temp");  // Normal object method
+    }
+}
+```
+
+### Compile-Time vs Runtime Unions
+
+**Compile-Time Unions** use traditional pattern matching:
+
+```cpp
+union Message {
+    Connect { addr: String, port: u16 },
+    Data { payload: Vec<u8> },
+    Ping,
+}
+
+// Traditional pattern matching with discriminant
+fn handle_message(msg: Message) {
+    match msg {
+        Message::Connect { addr, port } => {
+            println!("Connecting to {}:{}", addr, port);
+        },
+        Message::Data { payload } => process_data(payload),
+        Message::Ping => send_pong(),
+    }
+}
+```
+
+**Runtime Unions** integrate with the vtable system:
+
+```cpp
+union runtime DynamicSpace {
+    TextMsg(runtime TextMessage),
+    BinaryMsg(runtime BinaryMessage),
+}
+
+// No pattern matching - use existing dynamic casting API
+fn handle_dynamic(space: &DynamicSpace) {
+    if let Some(text) = space.try_as::<TextMessage>() {
+        text.process();  // Normal method call via vtable
+    } else if let Some(binary) = space.try_as::<BinaryMessage>() {
+        binary.decode();  // Normal method call via vtable
+    }
+}
+```
+
+### Template Integration and Self-Expansion
+
+Unions enable powerful template integration with automatic expansion:
+
+```cpp
+// Self-expanding heterogeneous container
+let mut items: Vec<runtime Any> = Vec::new();
+
+// Behind the scenes, compiler maintains growing union:
+items.push(SmallItem{data: 42});          // Union: {SmallItem} - 8 bytes
+items.push(MediumItem{data: [1,2,3,4]});  // Union: {Small, Medium} - 16 bytes -> REALLOC!
+items.push(HugeItem{data: [0; 1024]});    // Union: {Small, Medium, Huge} - 1024 bytes -> REALLOC!
+
+// Access is seamless via unified API
+for item in &items {
+    if let Some(processable) = item.try_as::<dyn Processable>() {
+        processable.process();  // Interface call via vtable
+    }
+}
+```
+
+**Key Constraint**: Self-expanding containers require `runtime` objects (with vtables) for type identification and dynamic access.
+
+### Memory Layout Strategy
+
+Union memory layout depends on variant type:
+
+**Compile-Time Unions** (with discriminant):
+```cpp
+union NetworkPacket {
+    Data { header: Header, payload: [u8; 1024] },    // 1040 bytes
+    Control { header: Header, command: Command },     // 20 bytes  
+    Ack { header: Header, sequence: u32 },           // 20 bytes
+}
+// Layout: [discriminant][padding][data: max(variants)]
+// Size: 1 + 7 + 1040 = 1048 bytes
+```
+
+**Runtime Unions** (vtable-based):
+```cpp
+union runtime ObjectSpace {
+    SmallObj(runtime SmallObject),     // 32 bytes with vtable
+    LargeObj(runtime LargeObject),     // 1024 bytes with vtable
+}
+// Layout: [data: max(variants)] - no separate discriminant!
+// Type identification via existing vtable system  
+// Size: 1024 bytes (just the largest variant)
+```
+
+**Unified Type System**: Runtime unions eliminate duplicate type tracking by reusing vtable infrastructure.
+
+For detailed union documentation, see [unions.md](unions.md).
+
 ## Option and Result Types
 
 ### Option Type for Nullable Values
 
 ```cpp
 // Option represents optional values
-enum Option<T> {
+union Option<T> {
     Some(T),
     None,
 }
 
 // Usage
-let some_number: Option<i32> = Some(42);
-let no_number: Option<i32> = None;
+let some_number: Option<i32> = Option::Some(42);
+let no_number: Option<i32> = Option::None;
 
 // Pattern matching
 match some_number {
-    Some(value) => println("Got value: {}", value),
-    None => println("No value"),
+    Option::Some(value) => println("Got value: {}", value),
+    Option::None => println("No value"),
 }
 
 // Convenient methods
-if let Some(value) = some_number {
+if let Option::Some(value) = some_number {
     println("Value is {}", value);
 }
 
@@ -295,7 +416,7 @@ let doubled = some_number.map(|x| x * 2);
 
 ```cpp
 // Result represents success or failure
-enum Result<T, E> {
+union Result<T, E> {
     Ok(T),
     Err(E),
 }
@@ -303,25 +424,131 @@ enum Result<T, E> {
 // Function that can fail
 fn divide(a: f64, b: f64) -> Result<f64, String> {
     if b == 0.0 {
-        Err("Division by zero".to_string())
+        Result::Err("Division by zero".to_string())
     } else {
-        Ok(a / b)
+        Result::Ok(a / b)
     }
 }
 
 // Error handling
 match divide(10.0, 2.0) {
-    Ok(result) => println("Result: {}", result),
-    Err(error) => println("Error: {}", error),
+    Result::Ok(result) => println("Result: {}", result),
+    Result::Err(error) => println("Error: {}", error),
 }
 
 // Question mark operator for error propagation
 fn calculate() -> Result<f64, String> {
     let x = divide(10.0, 2.0)?;  // Propagates error if Err
     let y = divide(x, 3.0)?;     // Continues if Ok
-    Ok(y + 1.0)
+    Result::Ok(y + 1.0)
 }
 ```
+
+## Unions
+
+### Tagged Sum Types
+
+CPrime unions provide tagged sum types with pattern matching, offering a powerful alternative to inheritance-based polymorphism:
+
+```cpp
+// Basic union definition
+union Message {
+    Connect { addr: SocketAddr, timeout: Duration },
+    Data { payload: Vec<u8>, compressed: bool },
+    Disconnect { reason: String },
+    Ping,
+    Pong,
+}
+
+// Generic unions
+union Option<T> {
+    Some(T),
+    None,
+}
+
+union Result<T, E> {
+    Ok(T),
+    Err(E),
+}
+```
+
+### Pattern Matching
+
+Unions are consumed through pattern matching with exhaustiveness checking:
+
+```cpp
+fn handle_message(msg: Message) {
+    match msg {
+        Message::Connect { addr, timeout } => {
+            println("Connecting to {} with timeout {:?}", addr, timeout);
+        },
+        Message::Data { payload, compressed } => {
+            if compressed {
+                process_compressed_data(payload);
+            } else {
+                process_data(payload);
+            }
+        },
+        Message::Disconnect { reason } => {
+            println("Disconnecting: {}", reason);
+        },
+        Message::Ping => send_pong(),
+        Message::Pong => update_heartbeat(),
+    }
+}
+
+// Compiler ensures all variants are handled
+fn get_status(msg: &Message) -> &str {
+    match msg {
+        Message::Connect { .. } => "connecting",
+        Message::Data { .. } => "transferring",
+        Message::Disconnect { .. } => "disconnected",
+        // Compile error: Missing patterns Ping, Pong
+    }
+}
+```
+
+### Compile-Time vs Runtime Unions
+
+```cpp
+// Compile-time unions (default) - zero overhead when variant is known
+fn create_error() -> Result<i32, String> {
+    Result::Err("Error".to_string())  // Compiler knows it's Err
+}
+
+// Runtime unions - allow dynamic variant addition
+union runtime DynamicMessage {
+    Text(String),
+    Binary(Vec<u8>),
+    Json(JsonValue),
+}
+
+// Runtime pattern matching with tag checks
+fn process_dynamic(msg: runtime DynamicMessage) {
+    match msg {  // Runtime tag check required
+        DynamicMessage::Text(s) => process_text(s),
+        DynamicMessage::Binary(b) => process_binary(b),
+        DynamicMessage::Json(j) => process_json(j),
+    }
+}
+```
+
+### Union Memory Layout
+
+Unions store the largest variant plus a discriminant tag:
+
+```cpp
+union FileResult {
+    Success { data: Vec<u8>, size: usize },    // ~32 bytes
+    NotFound,                                   // 0 bytes
+    PermissionDenied { reason: String },       // ~24 bytes
+}
+
+// Memory layout: max(variants) + tag + alignment
+// Size: 32 bytes (data) + 1 byte (tag) + 7 bytes (padding) = 40 bytes
+```
+
+For more comprehensive union documentation, see [unions.md](unions.md).
 
 ## Traits and Interfaces
 
