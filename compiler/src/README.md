@@ -86,8 +86,8 @@ This will test all three layers of the architecture with sample CPrime code.
 ## Usage Example
 
 ```cpp
-#include "raw_token.h"
-#include "semantic_translator.h"
+#include "layer1/raw_token.h"
+#include "layer2/semantic_translator.h"
 
 using namespace cprime::v2;
 

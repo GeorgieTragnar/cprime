@@ -1,8 +1,8 @@
-#include "raw_token.h"
-#include "semantic_token.h"
-#include "semantic_translator.h"
-#include "context_stack.h"
-#include "ast_builder.h"
+#include "../layer1/raw_token.h"
+#include "../layer2/semantic_token.h"
+#include "../layer2/semantic_translator.h"
+#include "../layer1/context_stack.h"
+#include "../layer3/ast_builder.h"
 #include <iostream>
 #include <fstream>
 #include <string>

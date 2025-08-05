@@ -1,8 +1,9 @@
 #pragma once
 
 #include "ast.h"
-#include "raw_token.h"
-#include "context_stack.h"
+#include "../layer1/raw_token.h"
+#include "../layer1/context_stack.h"
+#include "../layer2/contextual_token.h"
 #include "symbol_table.h"
 #include <memory>
 #include <vector>

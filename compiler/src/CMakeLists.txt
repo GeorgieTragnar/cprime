@@ -4,13 +4,14 @@ project(cprime_compiler VERSION 1.0.0 LANGUAGES CXX)
 
 # Create a library for the compiler components
 add_library(cprime_compiler
-    raw_token.cpp
-    context_stack.cpp
-    semantic_token.cpp
-    semantic_translator.cpp
-    ast.cpp
-    symbol_table.cpp
-    ast_builder.cpp
+    layer1/raw_token.cpp
+    layer1/context_stack.cpp
+    layer2/semantic_token.cpp
+    layer2/semantic_translator.cpp
+    layer2/contextual_token.cpp
+    layer3/ast.cpp
+    layer3/symbol_table.cpp
+    layer3/ast_builder.cpp
 )
 
 target_include_directories(cprime_compiler PUBLIC .)
@@ -24,19 +25,19 @@ target_compile_options(cprime_compiler PRIVATE
 )
 
 # CLI executable
-add_executable(cprime_cli cprime_cli.cpp)
+add_executable(cprime_cli cli/cprime_cli.cpp)
 target_link_libraries(cprime_cli cprime_compiler)
 
 # Test executable
-add_executable(test_three_layer test_three_layer.cpp)
+add_executable(test_three_layer tests/test_three_layer.cpp)
 target_link_libraries(test_three_layer cprime_compiler)
 
 # Contextual tokens demo
-add_executable(test_contextual_tokens test_contextual_tokens.cpp)
+add_executable(test_contextual_tokens tests/test_contextual_tokens.cpp)
 target_link_libraries(test_contextual_tokens cprime_compiler)
 
 # AST builder test
-add_executable(test_ast_builder test_ast_builder.cpp)
+add_executable(test_ast_builder tests/test_ast_builder.cpp)
 target_link_libraries(test_ast_builder cprime_compiler)
 
 # Optional: Add to parent project if called from main CMakeLists.txt
