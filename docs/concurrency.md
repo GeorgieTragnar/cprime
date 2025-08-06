@@ -66,7 +66,7 @@ let result = handle.await;
 
 ### Channel Types
 
-Channels are the primary communication mechanism between coroutines:
+Channels are shared concurrent queues where each item is consumed by exactly ONE receiver (competitive consumption for work distribution):
 
 ```cpp
 // Unbuffered channel - synchronous communication
@@ -75,51 +75,131 @@ let ch = channel<Message>();
 // Buffered channel - asynchronous up to capacity
 let ch = channel<Message>(100);
 
-// Broadcast channel - one-to-many communication
-let (tx, rx) = broadcast<Event>();
+// Channels are shared - multiple coroutines can send/receive
+// but each message is consumed by only ONE receiver
+let work_ch = channel<Work>();
 
-// Multiple receivers from same channel
-let (tx, rx1) = channel<Work>();
-let rx2 = rx1.clone();  // Multiple consumers
+// Spawn multiple workers sharing the same channel
+for i in 0..4 {
+    spawn worker(work_ch.clone());  // All workers compete for work items
+}
 
-// Typed channels with different message types
-let control_ch = channel<ControlMessage>();
-let data_ch = channel<DataPacket>();
+// Different from broadcast (separate concept for events)
+// Broadcast: All observers see each message (event notification)
+// Channel: One receiver gets each message (work distribution)
+```
+
+### Broadcast Pattern (Different from Channels)
+
+Broadcast is a separate pattern for event notification where all subscribers see each event:
+
+```cpp
+// Event broadcast - all subscribers see all events
+class EventBus {
+    subscribers: Vec<EventHandler>,
+    constructed_by: EventBusOps,
+}
+
+functional class EventBusOps {
+    fn emit(bus: &EventBus, event: Event) {
+        // All subscribers receive the event
+        for subscriber in &bus.subscribers {
+            subscriber.handle(event.clone());
+        }
+    }
+}
+
+// This is fundamentally different from channels:
+// - Channels: send(1) → Receiver A OR B OR C gets it (work distribution)
+// - Broadcast: emit(1) → Receiver A AND B AND C get it (event notification)
 ```
 
 ### Channel Operations
 
 ```cpp
 // Sending (blocking if unbuffered/full)
-ch.send(message).await;                    // Async send
+co_await ch.send(message);                 // Async send with co_await
 ch.try_send(message)?;                     // Non-blocking send
 ch.send_timeout(message, 1.second())?;    // Timeout send
 
-// Receiving
-let msg = ch.recv().await;                 // Async receive
+// Receiving - returns Option<T> to handle close
+let msg = co_await ch.recv();              // Returns Option<Message>
+match msg {
+    Some(m) => process(m),                 // Got message
+    None => break,                          // Channel closed
+}
+
+// Non-blocking receive
 let msg = ch.try_recv()?;                  // Non-blocking receive
 let msg = ch.recv_timeout(1.second())?;    // Timeout receive
 
-// Channel closing
-ch.close();                                // Close sender
-for msg in ch {                            // Iterate until closed
-    process(msg);
+// Channel closing - language-level semantic
+ch.close();                                // Mark channel as closed
+                                          // Scheduler wakes all waiting coroutines
+                                          // Future receives return None
+
+// Iterate until closed
+loop {
+    match co_await ch.recv() {
+        Some(msg) => process(msg),
+        None => break,  // Channel closed
+    }
+}
+```
+
+### Channel Close Semantics
+
+Close is a fundamental language-level operation with scheduler-managed lifecycle:
+
+```cpp
+// Close behavior:
+// 1. Mark channel state as closed
+// 2. Wake all coroutines suspended on recv() 
+// 3. Future recv() calls return None immediately
+// 4. send() on closed channel returns error
+
+// Memory safety through reference counting:
+// - Scheduler holds references to channels with waiting coroutines
+// - Channel can't be freed while waiters exist
+// - Close just marks state, scheduler handles wake
+
+let ch = channel<Work>();
+
+// Worker that handles close gracefully
+async fn worker(ch: Channel<Work>) {
+    loop {
+        match co_await ch.recv() {
+            Some(work) => process(work),
+            None => {
+                println("Channel closed, worker terminating");
+                break;
+            }
+        }
+    }
 }
 ```
 
 ### Select Statement
 
-The select statement enables non-blocking communication patterns:
+The select statement enables non-blocking communication with block-scoped type flow:
 
 ```cpp
-// Basic select - first ready operation executes
+// Select creates implicit union of outcomes
+// Each branch has block-scoped types
 select {
-    msg = ch1.recv() => {
-        println("Received from ch1: {}", msg);
+    // Variables exist only in their branch scope
+    x: i32 = ch1.recv() => {
+        // x only exists here as i32
+        println("Received i32 from ch1: {}", x);
     }
-    ok = ch2.send(data) => {
-        if ok {
-            println("Sent to ch2");
+    s: String = ch2.recv() => {
+        // s only exists here as String
+        println("Received string from ch2: {}", s);
+    }
+    result = ch3.send(data) => {
+        // Check if send succeeded (channel might be closed)
+        if result.is_ok() {
+            println("Sent to ch3");
         }
     }
     _ = timer::after(1.second()) => {
@@ -159,32 +239,61 @@ select {
 #### Worker Pool Pattern
 
 ```cpp
+// Worker pool with competitive consumption
+// Each work item processed by exactly ONE worker
 fn worker_pool<T, R>(
-    work_ch: Receiver<T>,
-    result_ch: Sender<R>,
+    work_ch: Channel<T>,     // Shared channel - no cloning needed
+    result_ch: Channel<R>,
     worker_count: usize
 ) where
     T: Send,
     R: Send,
 {
     for worker_id in 0..worker_count {
-        let work = work_ch.clone();
-        let results = result_ch.clone();
-        
+        // All workers share the same channels
+        // Each competes to receive work items
         spawn async move {
             loop {
-                match work.recv().await {
-                    Ok(task) => {
+                // Competitive receive - only one worker gets each item
+                match co_await work_ch.recv() {
+                    Some(task) => {
                         let result = process_task(task);
-                        if results.send(result).await.is_err() {
+                        if co_await result_ch.send(result).is_err() {
                             break; // Result channel closed
                         }
                     }
-                    Err(_) => break, // Work channel closed
+                    None => break, // Work channel closed - mass termination
                 }
             }
+            println("Worker {} terminating", worker_id);
         };
     }
+}
+
+// Poison pill pattern for individual worker termination
+union WorkItem<T> {
+    Job(T),
+    Terminate,  // Poison pill for specific worker
+}
+
+fn worker_with_poison<T>(
+    work_ch: Channel<WorkItem<T>>
+) {
+    spawn async move {
+        loop {
+            match co_await work_ch.recv() {
+                Some(WorkItem::Job(job)) => process_job(job),
+                Some(WorkItem::Terminate) => {
+                    println("Worker received termination signal");
+                    break;  // Individual termination
+                }
+                None => {
+                    println("Channel closed, worker terminating");
+                    break;  // Mass termination
+                }
+            }
+        }
+    };
 }
 ```
 
@@ -192,54 +301,82 @@ fn worker_pool<T, R>(
 
 ```cpp
 // Fan-out: distribute work to multiple workers
-fn fan_out<T>(input: Receiver<T>, workers: Vec<Sender<T>>) {
+// Note: This creates separate channels for load distribution
+// Different from single shared channel pattern
+fn fan_out<T>(input: Channel<T>, workers: Vec<Channel<T>>) {
     spawn async move {
         let mut worker_idx = 0;
         loop {
-            match input.recv().await {
-                Ok(item) => {
-                    let worker = &workers[worker_idx % workers.len()];
-                    if worker.send(item).await.is_err() {
-                        break; // Worker disconnected
+            match co_await input.recv() {
+                Some(item) => {
+                    // Round-robin distribution to separate worker channels
+                    let worker_ch = &workers[worker_idx % workers.len()];
+                    if co_await worker_ch.send(item).is_err() {
+                        break; // Worker channel closed
                     }
                     worker_idx += 1;
                 }
-                Err(_) => break, // Input closed
+                None => break, // Input closed
             }
         }
     };
 }
 
-// Fan-in: collect results from multiple workers
-fn fan_in<T>(workers: Vec<Receiver<T>>, output: Sender<T>) {
+// Fan-in: collect results from multiple channels
+fn fan_in<T>(worker_channels: Vec<Channel<T>>, output: Channel<T>) {
     spawn async move {
+        // Use select to receive from multiple channels
         loop {
-            let mut any_active = false;
+            let mut all_closed = true;
             
-            for worker in &workers {
-                match worker.try_recv() {
+            // Try to receive from each worker channel
+            for worker_ch in &worker_channels {
+                match worker_ch.try_recv() {
                     Ok(result) => {
-                        if output.send(result).await.is_err() {
+                        if co_await output.send(result).is_err() {
                             return; // Output closed
                         }
-                        any_active = true;
+                        all_closed = false;
                     }
                     Err(TryRecvError::Empty) => {
-                        any_active = true; // Worker still active
+                        all_closed = false; // Channel still active
                     }
-                    Err(TryRecvError::Disconnected) => {
-                        // Worker finished
+                    Err(TryRecvError::Closed) => {
+                        // This worker channel is closed
                     }
                 }
             }
             
-            if !any_active {
-                break; // All workers finished
+            if all_closed {
+                break; // All worker channels closed
             }
             
-            yield_now().await; // Give other coroutines a chance
+            co_await yield_now(); // Give other coroutines a chance
         }
     };
+}
+
+// Alternative: Single shared channel pattern (simpler)
+fn shared_channel_workers<T, R>(
+    input: Channel<T>,
+    output: Channel<R>,
+    worker_count: usize
+) {
+    // All workers share the same input channel
+    // Automatic load balancing through competitive consumption
+    for _ in 0..worker_count {
+        spawn async move {
+            loop {
+                match co_await input.recv() {
+                    Some(work) => {
+                        let result = process(work);
+                        co_await output.send(result);
+                    }
+                    None => break,
+                }
+            }
+        };
+    }
 }
 ```
 
@@ -521,23 +658,36 @@ fn cpu_intensive_task() {
 
 ```cpp
 // Handle channel errors gracefully
-fn robust_channel_handler(ch: Receiver<Message>) {
+fn robust_channel_handler(ch: Channel<Message>) {
     spawn async move {
         loop {
-            match ch.recv().await {
-                Ok(msg) => {
-                    if let Err(e) = process_message(msg).await {
+            match co_await ch.recv() {
+                Some(msg) => {
+                    if let Err(e) = process_message(msg) {
                         eprintln("Error processing message: {}", e);
                         // Continue processing other messages
                     }
                 }
-                Err(RecvError::Closed) => {
+                None => {
                     println("Channel closed, shutting down");
-                    break;
+                    break;  // Clean termination on close
                 }
-                Err(RecvError::Timeout) => {
-                    println("No message received, continuing");
-                    // Continue waiting
+            }
+        }
+    };
+}
+
+// Handling send errors (channel might be closed)
+fn sender_with_error_handling(ch: Channel<Message>) {
+    spawn async move {
+        for msg in generate_messages() {
+            match co_await ch.send(msg) {
+                Ok(()) => {
+                    // Message sent successfully
+                }
+                Err(SendError::Closed(_)) => {
+                    println("Channel closed, cannot send");
+                    break;  // Stop sending when channel closes
                 }
             }
         }

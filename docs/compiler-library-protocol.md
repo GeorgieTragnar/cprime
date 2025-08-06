@@ -877,4 +877,508 @@ fn determine_micro_pool_count() -> usize {
 }
 ```
 
-The CPrime compiler-library protocol represents a significant innovation in cooperative multitasking systems, enabling unprecedented cooperation between static analysis and runtime optimization to achieve both safety and performance.
+## Channel Analysis Integration
+
+### Channel Usage in Coroutine Analysis
+
+The compiler extends its static analysis to include channel operations and their impact on coroutine behavior:
+
+```cpp
+// Compiler analysis of channel-using coroutines
+async fn message_processor(
+    input_ch: Channel<InputMessage>,
+    output_ch: Channel<OutputMessage>
+) -> ProcessorResult {
+    // Compiler analysis includes:
+    // - Local variables: 512 bytes
+    // - Channel references: 2 * 8 bytes = 16 bytes  
+    // - Suspension state per channel op: 2 * 64 bytes = 128 bytes
+    // - Channel buffer involvement: May affect suspension likelihood
+    // Total estimated: 656 bytes -> CoroSizeTag::Small
+    
+    loop {
+        let input = co_await input_ch.recv()?;    // Suspension point 1
+        let processed = process_message(input);
+        co_await output_ch.send(processed)?;      // Suspension point 2
+        
+        // Compiler tracks potential suspension at each channel operation
+    }
+}
+
+// Enhanced metadata for channel operations
+CoroMetadata {
+    function_id: hash_of!("message_processor"),
+    estimated_stack_size: 656,
+    max_stack_size: Some(1024),
+    is_bounded: true,
+    
+    // Channel-specific analysis
+    channel_operation_count: 2,
+    suspension_point_count: 2,
+    channel_patterns: vec![
+        ChannelPattern::RecvLoop(input_ch),
+        ChannelPattern::SendEach(output_ch),
+    ],
+    
+    // Suspension likelihood affected by channel usage
+    migration_likelihood: 0.4,  // Higher due to potential channel blocking
+    
+    // Channel-specific optimization hints
+    preferred_allocation: AllocationHint::ChannelHeavy,
+}
+```
+
+### Channel Pattern Recognition
+
+The compiler recognizes common channel usage patterns for optimization:
+
+```cpp
+// Pattern recognition examples
+enum ChannelPattern {
+    // Simple patterns
+    SendOnly(ChannelId),              // Only sends, never receives
+    RecvOnly(ChannelId),              // Only receives, never sends
+    
+    // Loop patterns  
+    RecvLoop(ChannelId),              // Receive loop (common worker pattern)
+    SendBatch(ChannelId, usize),      // Send multiple items in batch
+    
+    // Multi-channel patterns
+    Select(Vec<ChannelId>),           // Select on multiple channels
+    Pipeline(ChannelId, ChannelId),   // Input -> process -> output
+    Fanout(ChannelId, Vec<ChannelId>), // One input, multiple outputs
+    Fanin(Vec<ChannelId>, ChannelId), // Multiple inputs, one output
+}
+
+// Compiler generates pattern-specific optimizations
+struct ChannelAnalysis {
+    function_id: FunctionId,
+    patterns: Vec<ChannelPattern>,
+    blocking_probability: f32,        // Likelihood of blocking on channels
+    channel_affinity: ChannelAffinity, // Preferred coroutine pool type
+}
+
+enum ChannelAffinity {
+    SendOnly,     // Micro coroutines suitable
+    RecvOnly,     // Micro coroutines suitable  
+    Bidirectional, // Small coroutines needed
+    MultiSelect,  // Medium coroutines for select overhead
+    Pipeline,     // Optimized for throughput
+}
+
+// Pattern-based size classification
+fn classify_with_channels(base_analysis: &StackAnalysis, channels: &ChannelAnalysis) -> CoroSizeTag {
+    let base_size = base_analysis.estimated_stack_size;
+    
+    // Adjust based on channel usage patterns
+    let channel_overhead = match channels.channel_affinity {
+        ChannelAffinity::SendOnly | ChannelAffinity::RecvOnly => 64,      // Minimal
+        ChannelAffinity::Bidirectional => 128,                           // Moderate
+        ChannelAffinity::MultiSelect => 256,                             // Select state
+        ChannelAffinity::Pipeline => 192,                                // Buffer references
+    };
+    
+    let total_size = base_size + channel_overhead;
+    
+    match (total_size, channels.blocking_probability) {
+        (size, _) if size <= 256 => CoroSizeTag::Micro,
+        (size, prob) if size <= 2048 && prob < 0.3 => CoroSizeTag::Small,
+        (size, prob) if size <= 16384 && prob < 0.7 => CoroSizeTag::Medium,
+        _ => CoroSizeTag::Large,
+    }
+}
+```
+
+### Channel Operation Metadata Generation
+
+```cpp
+// Extended metadata for channel operations
+#[repr(C)]
+struct ChannelCoroMetadata {
+    // Base coroutine metadata
+    base: CoroMetadata,
+    
+    // Channel-specific metadata
+    channel_operations: *const ChannelOperation,
+    channel_operation_count: u32,
+    
+    // Pattern analysis
+    primary_pattern: ChannelPattern,
+    blocking_operations: u32,           // Number of potentially blocking ops
+    select_complexity: u32,             // Number of channels in largest select
+    
+    // Performance hints
+    channel_affinity: ChannelAffinity,
+    preferred_pool: ChannelPoolHint,
+    wake_frequency: WakeFrequency,      // Expected wake-ups per second
+}
+
+struct ChannelOperation {
+    operation_type: ChannelOpType,
+    channel_id: ChannelId,
+    suspension_likelihood: f32,         // 0.0 to 1.0
+    stack_usage: usize,                 // Stack space for this operation
+}
+
+enum ChannelOpType {
+    Send { is_blocking: bool },
+    Receive { is_blocking: bool },
+    Select { channel_count: u32 },
+    Close,
+}
+
+// Automatically generated metadata
+#[link_section = ".channel_metadata"]
+static CHANNEL_COROUTINE_METADATA: &[ChannelCoroMetadata] = &[
+    ChannelCoroMetadata {
+        base: CoroMetadata {
+            function_id: hash_of!("message_processor"),
+            estimated_stack_size: 656,
+            size_class: CoroSizeTag::Small,
+            // ... other fields
+        },
+        
+        channel_operations: &[
+            ChannelOperation {
+                operation_type: ChannelOpType::Receive { is_blocking: true },
+                channel_id: hash_of!("input_ch"),
+                suspension_likelihood: 0.8,     // High chance of blocking
+                stack_usage: 64,
+            },
+            ChannelOperation {
+                operation_type: ChannelOpType::Send { is_blocking: false },
+                channel_id: hash_of!("output_ch"),
+                suspension_likelihood: 0.2,     // Lower chance (buffered?)
+                stack_usage: 48,
+            },
+        ] as *const ChannelOperation,
+        channel_operation_count: 2,
+        
+        primary_pattern: ChannelPattern::Pipeline(
+            hash_of!("input_ch"), 
+            hash_of!("output_ch")
+        ),
+        blocking_operations: 1,
+        select_complexity: 0,
+        
+        channel_affinity: ChannelAffinity::Pipeline,
+        preferred_pool: ChannelPoolHint::PipelineOptimized,
+        wake_frequency: WakeFrequency::High,
+    },
+];
+```
+
+### Channel-Aware Pool Selection
+
+The library uses channel analysis for specialized pool selection:
+
+```cpp
+// Channel-aware coroutine allocation
+functional class ChannelCoroAllocator {
+    fn allocate_for_channel_pattern<F>(
+        pattern: ChannelPattern,
+        metadata: &ChannelCoroMetadata
+    ) -> CoroHandle<F::Output>
+    where F: CoroFunction {
+        let allocation_strategy = select_channel_strategy(pattern, metadata);
+        
+        match allocation_strategy {
+            ChannelStrategy::SendOnlyMicro => {
+                // Micro pool optimized for send-only patterns
+                allocate_from_send_micro_pool(metadata)
+            },
+            ChannelStrategy::RecvOnlyMicro => {
+                // Micro pool optimized for receive-only patterns  
+                allocate_from_recv_micro_pool(metadata)
+            },
+            ChannelStrategy::PipelineSmall => {
+                // Small pool with pipeline optimizations
+                allocate_from_pipeline_pool(metadata)
+            },
+            ChannelStrategy::SelectMedium => {
+                // Medium pool with select state space
+                allocate_from_select_pool(metadata)
+            },
+            ChannelStrategy::HighThroughput => {
+                // Specialized high-throughput allocation
+                allocate_from_throughput_pool(metadata)
+            },
+        }
+    }
+    
+    fn select_channel_strategy(
+        pattern: ChannelPattern,
+        metadata: &ChannelCoroMetadata
+    ) -> ChannelStrategy {
+        match pattern {
+            ChannelPattern::SendOnly(_) if metadata.base.estimated_stack_size <= 256 => {
+                ChannelStrategy::SendOnlyMicro
+            },
+            ChannelPattern::RecvOnly(_) if metadata.base.estimated_stack_size <= 256 => {
+                ChannelStrategy::RecvOnlyMicro
+            },
+            ChannelPattern::Pipeline(_, _) => {
+                ChannelStrategy::PipelineSmall
+            },
+            ChannelPattern::Select(channels) if channels.len() > 2 => {
+                ChannelStrategy::SelectMedium
+            },
+            _ if metadata.wake_frequency == WakeFrequency::High => {
+                ChannelStrategy::HighThroughput
+            },
+            _ => ChannelStrategy::General,
+        }
+    }
+}
+
+enum ChannelStrategy {
+    SendOnlyMicro,
+    RecvOnlyMicro,
+    PipelineSmall,
+    SelectMedium,
+    HighThroughput,
+    General,
+}
+```
+
+### Channel Usage Profiling
+
+Runtime channel usage profiling feeds back to the compiler:
+
+```cpp
+// Runtime profiling of channel operations
+class ChannelProfiler {
+    operation_stats: HashMap<FunctionId, ChannelOpStats>,
+    pattern_accuracy: HashMap<FunctionId, PatternAccuracy>,
+    wake_patterns: HashMap<FunctionId, WakePattern>,
+    
+    constructed_by: ChannelProfilerOps,
+}
+
+struct ChannelOpStats {
+    function_id: FunctionId,
+    total_operations: u64,
+    
+    // Per-operation stats
+    send_count: u64,
+    recv_count: u64,
+    select_count: u64,
+    
+    // Blocking statistics
+    send_blocks: u64,           // How often sends blocked
+    recv_blocks: u64,           // How often receives blocked
+    select_blocks: u64,         // How often selects blocked
+    
+    // Timing
+    avg_send_latency_ns: f64,
+    avg_recv_latency_ns: f64,
+    avg_select_latency_ns: f64,
+}
+
+struct PatternAccuracy {
+    predicted_pattern: ChannelPattern,
+    actual_pattern: ChannelPattern,
+    accuracy_score: f32,        // 0.0 to 1.0
+    misprediction_cost: u64,    // Nanoseconds lost to wrong predictions
+}
+
+functional class ChannelProfilerOps {
+    fn record_channel_operation(
+        profiler: &mut ChannelProfiler,
+        function_id: FunctionId,
+        operation: ChannelOpType,
+        latency_ns: u64,
+        did_block: bool
+    ) {
+        let stats = profiler.operation_stats
+            .entry(function_id)
+            .or_insert_with(|| ChannelOpStats::new(function_id));
+        
+        stats.total_operations += 1;
+        
+        match operation {
+            ChannelOpType::Send { .. } => {
+                stats.send_count += 1;
+                if did_block {
+                    stats.send_blocks += 1;
+                }
+                stats.avg_send_latency_ns = update_average(
+                    stats.avg_send_latency_ns,
+                    latency_ns as f64,
+                    stats.send_count
+                );
+            },
+            ChannelOpType::Receive { .. } => {
+                stats.recv_count += 1;
+                if did_block {
+                    stats.recv_blocks += 1;
+                }
+                stats.avg_recv_latency_ns = update_average(
+                    stats.avg_recv_latency_ns,
+                    latency_ns as f64,
+                    stats.recv_count
+                );
+            },
+            ChannelOpType::Select { .. } => {
+                stats.select_count += 1;
+                if did_block {
+                    stats.select_blocks += 1;
+                }
+                stats.avg_select_latency_ns = update_average(
+                    stats.avg_select_latency_ns,
+                    latency_ns as f64,
+                    stats.select_count
+                );
+            },
+            _ => {}
+        }
+    }
+    
+    fn analyze_channel_patterns(profiler: &ChannelProfiler) -> ChannelFeedback {
+        let mut feedback = ChannelFeedback::new();
+        
+        for (function_id, stats) in &profiler.operation_stats {
+            // Analyze blocking patterns
+            let send_block_rate = stats.send_blocks as f64 / stats.send_count.max(1) as f64;
+            let recv_block_rate = stats.recv_blocks as f64 / stats.recv_count.max(1) as f64;
+            
+            // Detect pattern mismatches
+            if send_block_rate > 0.5 && recv_block_rate < 0.1 {
+                // Mostly blocked on sends, rarely on receives
+                feedback.suggest_pattern_change(*function_id, ChannelPattern::SendHeavy);
+            } else if recv_block_rate > 0.5 && send_block_rate < 0.1 {
+                // Mostly blocked on receives, rarely on sends
+                feedback.suggest_pattern_change(*function_id, ChannelPattern::RecvHeavy);
+            }
+            
+            // Suggest size class changes based on blocking frequency
+            let total_block_rate = (stats.send_blocks + stats.recv_blocks) as f64 / 
+                                 stats.total_operations as f64;
+            
+            if total_block_rate > 0.8 {
+                // High blocking rate - suggest larger coroutines for better batching
+                feedback.suggest_size_increase(*function_id, "high blocking rate");
+            } else if total_block_rate < 0.1 {
+                // Low blocking rate - could use smaller coroutines
+                feedback.suggest_size_decrease(*function_id, "low blocking rate");
+            }
+        }
+        
+        feedback
+    }
+}
+
+// Feedback structure for compiler
+struct ChannelFeedback {
+    pattern_suggestions: Vec<PatternSuggestion>,
+    size_suggestions: Vec<SizeSuggestion>,
+    pool_optimizations: Vec<PoolOptimization>,
+}
+
+struct PatternSuggestion {
+    function_id: FunctionId,
+    current_pattern: ChannelPattern,
+    suggested_pattern: ChannelPattern,
+    confidence: f32,
+    performance_gain_estimate: f32,
+}
+```
+
+### Channel-Specific Debugging Support
+
+Enhanced debugging information for channel operations:
+
+```cpp
+// Debug information for channel operations
+struct ChannelDebugInfo {
+    coroutine_id: CoroId,
+    function_name: &'static str,
+    
+    // Channel usage
+    active_channels: Vec<ChannelId>,
+    suspended_on_channel: Option<ChannelId>,
+    suspension_reason: SuspensionReason,
+    
+    // Performance data
+    channel_operations_count: u64,
+    total_suspension_time_us: u64,
+    avg_wake_latency_ns: f64,
+    
+    // Pattern analysis
+    detected_pattern: ChannelPattern,
+    pattern_efficiency: f32,    // 0.0 to 1.0
+}
+
+enum SuspensionReason {
+    SendBlocked { channel_id: ChannelId, queue_length: usize },
+    RecvBlocked { channel_id: ChannelId, queue_empty: bool },
+    SelectBlocked { channels: Vec<ChannelId>, timeout: Option<Duration> },
+    NotSuspended,
+}
+
+functional class ChannelDebugger {
+    fn print_channel_coroutine_info(coro_id: CoroId) {
+        let info = get_channel_debug_info(coro_id);
+        
+        println("Channel Coroutine Debug Info:");
+        println("  Function: {}", info.function_name);
+        println("  Active channels: {:?}", info.active_channels);
+        
+        match info.suspended_on_channel {
+            Some(ch_id) => {
+                println("  Currently suspended on channel: {:?}", ch_id);
+                println("  Suspension reason: {:?}", info.suspension_reason);
+            },
+            None => {
+                println("  Not currently suspended on channels");
+            }
+        }
+        
+        println("  Channel operations: {}", info.channel_operations_count);
+        println("  Total suspension time: {} μs", info.total_suspension_time_us);
+        println("  Average wake latency: {:.2} ns", info.avg_wake_latency_ns);
+        
+        println("  Detected pattern: {:?}", info.detected_pattern);
+        println("  Pattern efficiency: {:.1}%", info.pattern_efficiency * 100.0);
+        
+        if info.pattern_efficiency < 0.7 {
+            println("  ⚠️  Low pattern efficiency - consider optimization");
+        }
+    }
+    
+    fn validate_channel_metadata() -> ChannelValidationReport {
+        let mut report = ChannelValidationReport::new();
+        
+        for metadata in CHANNEL_COROUTINE_METADATA {
+            let runtime_stats = get_runtime_channel_stats(metadata.base.function_id);
+            
+            // Validate blocking predictions
+            let predicted_blocking = metadata.blocking_operations as f64 / 
+                                   metadata.channel_operation_count as f64;
+            let actual_blocking = runtime_stats.blocking_rate;
+            
+            if (predicted_blocking - actual_blocking).abs() > 0.3 {
+                report.blocking_mismatches.push(BlockingMismatch {
+                    function_id: metadata.base.function_id,
+                    predicted: predicted_blocking,
+                    actual: actual_blocking,
+                    impact: calculate_performance_impact(predicted_blocking, actual_blocking),
+                });
+            }
+            
+            // Validate pattern recognition
+            if runtime_stats.actual_pattern != metadata.primary_pattern {
+                report.pattern_mismatches.push(PatternMismatch {
+                    function_id: metadata.base.function_id,
+                    predicted: metadata.primary_pattern,
+                    actual: runtime_stats.actual_pattern,
+                });
+            }
+        }
+        
+        report
+    }
+}
+```
+
+The CPrime compiler-library protocol represents a significant innovation in cooperative multitasking systems, enabling unprecedented cooperation between static analysis and runtime optimization to achieve both safety and performance. The channel analysis extension provides deep insights into communication patterns, enabling optimal coroutine allocation and specialized pool strategies for high-performance concurrent applications.

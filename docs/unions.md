@@ -941,4 +941,471 @@ union Extended {
 }
 ```
 
-Unions provide a powerful, zero-cost abstraction for variant types that integrates cleanly with CPrime's three-class system and offers superior ergonomics compared to traditional inheritance-based polymorphism.
+## Channel-Specific Union Patterns
+
+### WorkItem Union for Poison Pill Pattern
+
+One of the most important channel patterns uses unions to support both normal work and termination signals:
+
+```cpp
+// Union for work distribution with termination control
+union WorkItem<T> {
+    Job(T),        // Normal work item
+    Terminate,     // Poison pill for individual worker termination
+}
+
+// Usage in worker coroutines
+async fn smart_worker<T>(
+    worker_id: WorkerId,
+    ch: Channel<WorkItem<T>>
+) where T: Send {
+    loop {
+        match co_await ch.recv() {
+            Some(WorkItem::Job(work)) => {
+                println("Worker {} processing job", worker_id);
+                process_work(work);
+            },
+            Some(WorkItem::Terminate) => {
+                println("Worker {} received poison pill, terminating", worker_id);
+                break;  // Individual worker termination
+            },
+            None => {
+                println("Channel closed, worker {} mass termination", worker_id);
+                break;  // All workers terminate when channel closes
+            }
+        }
+    }
+    
+    cleanup_worker(worker_id);
+}
+
+// Controller can terminate workers individually or all at once
+functional class WorkerController {
+    fn terminate_specific_worker(ch: &Channel<WorkItem<Work>>) {
+        // Send poison pill - only one worker gets it
+        co_await ch.send(WorkItem::Terminate);
+    }
+    
+    fn terminate_all_workers(ch: &Channel<WorkItem<Work>>) {
+        // Close channel - all workers get None on next recv()
+        ch.close();
+    }
+}
+```
+
+### Select Statement Union Generation
+
+The select statement implicitly generates unions for type-safe multi-channel operations:
+
+```cpp
+// Select statement with different channel types
+async fn channel_multiplexer(
+    work_ch: Channel<WorkRequest>,
+    control_ch: Channel<ControlMessage>,
+    data_ch: Channel<DataPacket>
+) {
+    loop {
+        // Compiler generates implicit union for select outcomes
+        select {
+            work: WorkRequest = work_ch.recv() => {
+                // work is WorkRequest type in this block
+                process_work_request(work);
+            },
+            
+            control: ControlMessage = control_ch.recv() => {
+                // control is ControlMessage type in this block
+                match control {
+                    ControlMessage::Pause => pause_processing(),
+                    ControlMessage::Resume => resume_processing(),
+                    ControlMessage::Shutdown => return,
+                }
+            },
+            
+            data: DataPacket = data_ch.recv() => {
+                // data is DataPacket type in this block
+                forward_data_packet(data);
+            },
+        }
+    }
+}
+
+// Compiler internally generates something like this union:
+union SelectOutcome {
+    WorkReceived(WorkRequest),
+    ControlReceived(ControlMessage),
+    DataReceived(DataPacket),
+    AllChannelsClosed,  // When all channels return None
+}
+
+// The select becomes:
+let outcome = runtime_select(&[
+    SelectCase::Recv(&work_ch),
+    SelectCase::Recv(&control_ch),
+    SelectCase::Recv(&data_ch),
+]);
+
+match outcome {
+    SelectOutcome::WorkReceived(work) => process_work_request(work),
+    SelectOutcome::ControlReceived(control) => handle_control(control),
+    SelectOutcome::DataReceived(data) => forward_data_packet(data),
+    SelectOutcome::AllChannelsClosed => break,
+}
+```
+
+### Channel Storage Strategy Unions
+
+Libraries can use unions to implement different channel storage strategies:
+
+```cpp
+// Union of different channel implementation strategies
+union ChannelStorage<T> {
+    WorkQueue(ConcurrentQueue<T>),         // FIFO work distribution
+    EventLog(BTreeMap<EventId, T>),        // Event sourcing with replay
+    RingBuffer(CircularBuffer<T>),         // Fixed-size bounded
+    Priority(BinaryHeap<PriorityItem<T>>), // Priority-ordered
+}
+
+// Channel that can adapt its storage strategy
+class AdaptiveChannel<T> {
+    storage: ChannelStorage<T>,
+    strategy: StorageStrategy,
+    
+    constructed_by: AdaptiveChannelOps<T>,
+}
+
+functional class AdaptiveChannelOps<T> {
+    fn construct_for_pattern(pattern: UsagePattern) -> AdaptiveChannel<T> {
+        let storage = match pattern {
+            UsagePattern::WorkDistribution => {
+                ChannelStorage::WorkQueue(ConcurrentQueue::new())
+            },
+            UsagePattern::EventSourcing => {
+                ChannelStorage::EventLog(BTreeMap::new())
+            },
+            UsagePattern::BoundedBuffer => {
+                ChannelStorage::RingBuffer(CircularBuffer::new(1000))
+            },
+            UsagePattern::PriorityQueue => {
+                ChannelStorage::Priority(BinaryHeap::new())
+            },
+        };
+        
+        AdaptiveChannel { storage, strategy: pattern.into() }
+    }
+    
+    fn send(channel: &mut AdaptiveChannel<T>, value: T) -> SendResult {
+        match &mut channel.storage {
+            ChannelStorage::WorkQueue(queue) => {
+                queue.push(value);
+                wake_one_receiver(channel);
+            },
+            ChannelStorage::EventLog(log) => {
+                let event_id = next_event_id();
+                log.insert(event_id, value);
+                wake_all_subscribers(channel);  // Event log wakes all
+            },
+            ChannelStorage::RingBuffer(buffer) => {
+                if buffer.is_full() {
+                    return SendResult::WouldBlock;
+                }
+                buffer.push(value);
+                wake_one_receiver(channel);
+            },
+            ChannelStorage::Priority(heap) => {
+                heap.push(PriorityItem::new(value));
+                wake_one_receiver(channel);
+            },
+        }
+        SendResult::Ok
+    }
+    
+    fn recv(channel: &mut AdaptiveChannel<T>) -> Option<T> {
+        match &mut channel.storage {
+            ChannelStorage::WorkQueue(queue) => queue.pop(),
+            ChannelStorage::EventLog(log) => {
+                // Event log needs subscriber tracking
+                recv_next_event(log, get_current_subscriber())
+            },
+            ChannelStorage::RingBuffer(buffer) => buffer.pop(),
+            ChannelStorage::Priority(heap) => heap.pop().map(|item| item.value),
+        }
+    }
+}
+```
+
+### Message Type Unions for Protocol Handling
+
+Channels often carry protocol messages represented as unions:
+
+```cpp
+// Network protocol messages as union
+union NetworkMessage {
+    Connect { client_id: ClientId, version: u32 },
+    Data { client_id: ClientId, payload: Vec<u8> },
+    Ping { client_id: ClientId, timestamp: u64 },
+    Pong { client_id: ClientId, timestamp: u64 },
+    Disconnect { client_id: ClientId, reason: String },
+}
+
+// Protocol handler using channel with message union
+async fn network_protocol_handler(
+    incoming: Channel<NetworkMessage>,
+    outgoing: Channel<NetworkMessage>
+) {
+    let mut connected_clients = HashMap::new();
+    
+    loop {
+        match co_await incoming.recv() {
+            Some(msg) => {
+                match msg {
+                    NetworkMessage::Connect { client_id, version } => {
+                        println("Client {} connecting with version {}", client_id, version);
+                        connected_clients.insert(client_id, ClientState::new(version));
+                    },
+                    
+                    NetworkMessage::Data { client_id, payload } => {
+                        if let Some(client) = connected_clients.get_mut(&client_id) {
+                            let response = process_data(client, payload);
+                            co_await outgoing.send(NetworkMessage::Data {
+                                client_id,
+                                payload: response,
+                            });
+                        }
+                    },
+                    
+                    NetworkMessage::Ping { client_id, timestamp } => {
+                        // Respond with pong
+                        co_await outgoing.send(NetworkMessage::Pong {
+                            client_id,
+                            timestamp,
+                        });
+                    },
+                    
+                    NetworkMessage::Pong { client_id, timestamp } => {
+                        if let Some(client) = connected_clients.get_mut(&client_id) {
+                            client.update_latency(timestamp);
+                        }
+                    },
+                    
+                    NetworkMessage::Disconnect { client_id, reason } => {
+                        println("Client {} disconnecting: {}", client_id, reason);
+                        connected_clients.remove(&client_id);
+                    },
+                }
+            },
+            None => {
+                println("Incoming channel closed, shutting down protocol handler");
+                break;
+            }
+        }
+    }
+}
+```
+
+### Request-Response Union Pattern
+
+Channels can carry request-response pairs using unions:
+
+```cpp
+// Union for request-response pattern
+union ServiceMessage<Req, Resp> {
+    Request { 
+        id: RequestId, 
+        payload: Req, 
+        response_channel: Channel<ServiceResponse<Resp>> 
+    },
+    Response { 
+        id: RequestId, 
+        payload: Result<Resp, ServiceError> 
+    },
+}
+
+// Specialized response type
+union ServiceResponse<T> {
+    Success(T),
+    Error { 
+        code: ErrorCode, 
+        message: String,
+        retry_after: Option<Duration> 
+    },
+    Timeout,
+}
+
+// Service that handles requests via channels
+async fn database_service(
+    requests: Channel<ServiceMessage<DbQuery, DbResult>>
+) {
+    loop {
+        match co_await requests.recv() {
+            Some(ServiceMessage::Request { id, payload, response_channel }) => {
+                // Process request
+                let result = match execute_query(payload) {
+                    Ok(data) => ServiceResponse::Success(data),
+                    Err(e) => ServiceResponse::Error {
+                        code: ErrorCode::QueryFailed,
+                        message: e.to_string(),
+                        retry_after: Some(Duration::seconds(5)),
+                    },
+                };
+                
+                // Send response back
+                co_await response_channel.send(result);
+            },
+            
+            Some(ServiceMessage::Response { .. }) => {
+                // Shouldn't receive responses on request channel
+                log::warn!("Received response on request channel");
+            },
+            
+            None => {
+                println("Request channel closed, service shutting down");
+                break;
+            }
+        }
+    }
+}
+
+// Client making requests
+async fn database_client(
+    service_ch: Channel<ServiceMessage<DbQuery, DbResult>>
+) -> Result<DbResult> {
+    let (response_tx, response_rx) = channel<ServiceResponse<DbResult>>(1);
+    
+    // Send request
+    let request_id = generate_request_id();
+    co_await service_ch.send(ServiceMessage::Request {
+        id: request_id,
+        payload: DbQuery::Select("SELECT * FROM users"),
+        response_channel: response_tx,
+    });
+    
+    // Wait for response
+    match co_await response_rx.recv() {
+        Some(ServiceResponse::Success(result)) => Ok(result),
+        Some(ServiceResponse::Error { message, .. }) => Err(ServiceError(message)),
+        Some(ServiceResponse::Timeout) => Err(ServiceError("Request timeout")),
+        None => Err(ServiceError("Service unavailable")),
+    }
+}
+```
+
+### Channel State Machine Unions
+
+Channels can carry state machine transitions as unions:
+
+```cpp
+// State machine events as union
+union StateMachineEvent {
+    Start { initial_state: State },
+    Transition { from: State, to: State, trigger: Trigger },
+    Complete { final_state: State, result: ProcessingResult },
+    Error { current_state: State, error: ProcessingError },
+}
+
+// State machine processor
+async fn state_machine_processor(
+    events: Channel<StateMachineEvent>
+) {
+    let mut current_state = State::Initial;
+    
+    loop {
+        match co_await events.recv() {
+            Some(event) => {
+                match event {
+                    StateMachineEvent::Start { initial_state } => {
+                        current_state = initial_state;
+                        println("State machine started in state {:?}", current_state);
+                    },
+                    
+                    StateMachineEvent::Transition { from, to, trigger } => {
+                        if from == current_state {
+                            println("Transitioning from {:?} to {:?} via {:?}", 
+                                    from, to, trigger);
+                            current_state = to;
+                        } else {
+                            println("Invalid transition: expected {:?}, got {:?}", 
+                                    current_state, from);
+                        }
+                    },
+                    
+                    StateMachineEvent::Complete { final_state, result } => {
+                        println("State machine completed in state {:?} with result {:?}", 
+                                final_state, result);
+                        break;
+                    },
+                    
+                    StateMachineEvent::Error { current_state, error } => {
+                        println("State machine error in state {:?}: {:?}", 
+                                current_state, error);
+                        // Could transition to error state or terminate
+                    },
+                }
+            },
+            None => {
+                println("Event channel closed, state machine terminating");
+                break;
+            }
+        }
+    }
+}
+```
+
+### Self-Expanding Channel Message Unions
+
+Channels can use self-expanding unions for protocol evolution:
+
+```cpp
+// Protocol that can evolve over time
+union EvolvingProtocolMessage {
+    V1(ProtocolV1Message),
+    V2(ProtocolV2Message),
+    // V3 can be added later without breaking existing code
+}
+
+// Initial protocol version
+union ProtocolV1Message {
+    Hello { name: String },
+    Data { content: Vec<u8> },
+    Goodbye,
+}
+
+// Extended protocol version
+union ProtocolV2Message {
+    Hello { name: String, capabilities: Vec<String> },  // Extended hello
+    Data { content: Vec<u8> },
+    DataStreaming { stream_id: u32, chunk: Vec<u8> },   // New streaming
+    Goodbye,
+}
+
+// Protocol handler that supports version evolution
+async fn evolving_protocol_handler(
+    messages: Channel<EvolvingProtocolMessage>
+) {
+    loop {
+        match co_await messages.recv() {
+            Some(msg) => {
+                match msg {
+                    EvolvingProtocolMessage::V1(v1_msg) => {
+                        handle_v1_message(v1_msg);
+                    },
+                    EvolvingProtocolMessage::V2(v2_msg) => {
+                        handle_v2_message(v2_msg);
+                    },
+                    // Future versions handled here
+                }
+            },
+            None => break,
+        }
+    }
+}
+
+// As protocol evolves, union self-expands
+// This causes reallocation of channel storage, but maintains compatibility
+fn send_new_protocol_version(ch: &Channel<EvolvingProtocolMessage>) {
+    // Adding V3 message triggers union expansion
+    co_await ch.send(EvolvingProtocolMessage::V3(ProtocolV3Message::NewFeature));
+    // Channel storage reallocated to accommodate larger union
+}
+```
+
+Unions provide a powerful, zero-cost abstraction for variant types that integrates cleanly with CPrime's three-class system and offers superior ergonomics compared to traditional inheritance-based polymorphism. In the channel system, unions enable sophisticated messaging patterns, protocol handling, and storage strategy selection while maintaining type safety and performance.

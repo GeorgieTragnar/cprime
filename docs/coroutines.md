@@ -728,4 +728,375 @@ async fn size_stable_function(input: BoundedInput) -> Output {
 3. **Compiler-Runtime Co-design**: Tighter integration between analysis and execution
 4. **Formal Verification**: Proving safety properties of the stack management system
 
-CPrime coroutines represent a significant advance in cooperative multitasking, combining the best aspects of existing approaches while introducing revolutionary optimizations like stack-allocated micro pools and compiler-guided allocation strategies.
+## Channel Integration
+
+### Coroutine Suspension on Channels
+
+Coroutines seamlessly suspend and resume on channel operations, with the scheduler managing channel references to prevent use-after-free:
+
+```cpp
+// Coroutine suspending on channel operations
+async fn channel_worker(work_ch: Channel<WorkItem>) -> Result<()> {
+    loop {
+        // Coroutine suspends here if channel is empty
+        // Scheduler holds reference to channel during suspension
+        match co_await work_ch.recv() {
+            Some(work) => {
+                // Process work item
+                let result = process_work_item(work);
+                
+                // May suspend again if result channel is full
+                co_await result_ch.send(result);
+            },
+            None => {
+                // Channel closed - clean termination
+                println("Work channel closed, terminating");
+                break;
+            }
+        }
+    }
+    Ok(())
+}
+
+// How suspension works internally
+functional class ChannelCoroManager {
+    fn suspend_on_recv<T>(
+        coro: &mut Coroutine,
+        channel: &Channel<T>
+    ) -> SuspensionToken {
+        // 1. Save coroutine state
+        save_register_context(&mut coro.register_context);
+        
+        // 2. Register with scheduler (prevents channel deallocation)
+        let token = SchedulerOps::register_channel_waiter(
+            coro.id,
+            channel.get_shared_ref()  // Increment ref count
+        );
+        
+        // 3. Add to channel's wait queue
+        channel.recv_waiters.push(coro.id);
+        
+        // 4. Suspend coroutine
+        coro.state = CoroState::SuspendedOnChannel(channel.id);
+        
+        token
+    }
+    
+    fn resume_from_channel<T>(
+        coro: &mut Coroutine,
+        value: Option<T>
+    ) -> CoroResult {
+        // 1. Restore register context
+        restore_register_context(&coro.register_context);
+        
+        // 2. Remove from scheduler's channel tracking
+        SchedulerOps::unregister_channel_waiter(coro.id);
+        
+        // 3. Resume with received value
+        coro.state = CoroState::Running;
+        context_switch_to(coro.stack_memory, value)
+    }
+}
+```
+
+### Scheduler's Role in Channel Lifecycle
+
+The scheduler is critical for channel safety, holding references to prevent premature deallocation:
+
+```cpp
+// Scheduler manages channel references for safety
+class ChannelScheduler {
+    // Channels with suspended coroutines - can't be freed
+    active_channels: HashMap<ChannelId, SharedPtr<ChannelData>>,
+    
+    // Mapping of coroutines to channels they're waiting on
+    channel_waiters: HashMap<CoroId, ChannelId>,
+    
+    // Reverse mapping for efficient wake operations
+    waiting_on_channel: HashMap<ChannelId, Vec<CoroId>>,
+    
+    constructed_by: ChannelSchedulerOps,
+}
+
+functional class ChannelSchedulerOps {
+    fn register_channel_waiter(
+        scheduler: &mut ChannelScheduler,
+        coro_id: CoroId,
+        channel_ref: SharedPtr<ChannelData>
+    ) {
+        let channel_id = channel_ref.id();
+        
+        // Hold reference to prevent deallocation
+        scheduler.active_channels.insert(channel_id, channel_ref);
+        
+        // Track suspension relationship
+        scheduler.channel_waiters.insert(coro_id, channel_id);
+        scheduler.waiting_on_channel
+            .entry(channel_id)
+            .or_default()
+            .push(coro_id);
+    }
+    
+    fn handle_channel_close(
+        scheduler: &mut ChannelScheduler,
+        channel_id: ChannelId
+    ) {
+        // Wake all coroutines waiting on this channel
+        if let Some(waiters) = scheduler.waiting_on_channel.remove(&channel_id) {
+            for coro_id in waiters {
+                // Wake with None to indicate channel closed
+                Self::wake_with_closed_signal(scheduler, coro_id);
+                
+                // Remove waiter tracking
+                scheduler.channel_waiters.remove(&coro_id);
+            }
+        }
+        
+        // Release scheduler's reference
+        // Channel deallocated when last reference dropped
+        scheduler.active_channels.remove(&channel_id);
+    }
+    
+    fn wake_with_closed_signal(
+        scheduler: &mut ChannelScheduler,
+        coro_id: CoroId
+    ) {
+        // Resume coroutine with None to indicate closed channel
+        let coro = get_coroutine_mut(coro_id);
+        ChannelCoroManager::resume_from_channel(coro, None);
+    }
+}
+```
+
+### Channel Operations in Coroutine Stack Analysis
+
+The compiler includes channel operations in stack size analysis:
+
+```cpp
+// Compiler analysis of channel-using coroutines
+async fn analyzed_channel_handler(
+    input: Channel<Request>,
+    output: Channel<Response>
+) -> Result<()> {
+    // Compiler analysis:
+    // - Local vars: Request (256B) + Response (128B) = 384B
+    // - Channel refs: 2 * 8B = 16B
+    // - Suspension state: 2 * 32B = 64B (two suspension points)
+    // Total: 464B -> CoroSizeTag::Small
+    
+    loop {
+        let request = co_await input.recv()?;     // Suspension point 1
+        let response = process_request(request);
+        co_await output.send(response)?;          // Suspension point 2
+    }
+}
+
+// Metadata generated by compiler
+CoroMetadata {
+    function_id: hash_of!("analyzed_channel_handler"),
+    estimated_stack_size: 464,
+    max_stack_size: Some(512),
+    suspension_point_count: 2,
+    channel_operation_count: 2,
+    size_class: CoroSizeTag::Small,
+    // Channel operations may cause more suspensions
+    migration_likelihood: 0.3,
+}
+```
+
+### Select Statement in Coroutines
+
+Coroutines can use select to wait on multiple channels efficiently:
+
+```cpp
+async fn multi_channel_handler(
+    work_ch: Channel<Work>,
+    control_ch: Channel<Control>,
+    timeout_ms: u64
+) -> Result<()> {
+    loop {
+        // Select suspends coroutine until one channel is ready
+        select {
+            work = work_ch.recv() => {
+                match work {
+                    Some(w) => process_work(w),
+                    None => return Ok(()),  // Work channel closed
+                }
+            },
+            
+            control = control_ch.recv() => {
+                match control {
+                    Some(Control::Pause) => {
+                        co_await pause_processing();
+                    },
+                    Some(Control::Resume) => {
+                        resume_processing();
+                    },
+                    Some(Control::Stop) | None => {
+                        return Ok(());  // Stop or channel closed
+                    }
+                }
+            },
+            
+            _ = timer::after(timeout_ms) => {
+                println("Timeout - no activity");
+                check_health();
+            }
+        }
+    }
+}
+
+// Select implementation for coroutines
+functional class SelectCoroManager {
+    fn setup_select(
+        coro: &mut Coroutine,
+        cases: &[SelectCase]
+    ) -> SelectToken {
+        // Register with all channels in select
+        let mut registrations = Vec::new();
+        
+        for case in cases {
+            match case {
+                SelectCase::Recv(channel) => {
+                    let reg = SchedulerOps::register_select_waiter(
+                        coro.id,
+                        channel.get_shared_ref()
+                    );
+                    registrations.push(reg);
+                },
+                SelectCase::Send(channel, value) => {
+                    let reg = SchedulerOps::register_select_sender(
+                        coro.id,
+                        channel.get_shared_ref(),
+                        value
+                    );
+                    registrations.push(reg);
+                },
+                SelectCase::Timeout(duration) => {
+                    SchedulerOps::register_timeout(coro.id, duration);
+                },
+            }
+        }
+        
+        SelectToken { registrations }
+    }
+    
+    fn resume_from_select(
+        coro: &mut Coroutine,
+        ready_case: SelectResult
+    ) -> CoroResult {
+        // Clean up all select registrations
+        SchedulerOps::cleanup_select_registrations(coro.id);
+        
+        // Resume with the ready case result
+        context_switch_to(coro.stack_memory, ready_case)
+    }
+}
+```
+
+### Coroutine Pools with Channel Affinity
+
+Optimize coroutine allocation for channel-heavy workloads:
+
+```cpp
+// Pool optimization for channel-based coroutines
+class ChannelCoroPool {
+    // Pools organized by channel access pattern
+    send_only_pool: MicroCoroPool,      // Send-only coroutines
+    recv_only_pool: MicroCoroPool,      // Receive-only coroutines  
+    send_recv_pool: SmallCoroPool,      // Both send and receive
+    select_pool: MediumCoroPool,        // Select on multiple channels
+    
+    constructed_by: ChannelCoroPoolOps,
+}
+
+functional class ChannelCoroPoolOps {
+    fn allocate_for_pattern(
+        pool: &mut ChannelCoroPool,
+        pattern: ChannelAccessPattern
+    ) -> CoroAllocation {
+        match pattern {
+            ChannelAccessPattern::SendOnly => {
+                // Minimal stack needed for send-only
+                pool.send_only_pool.allocate()
+            },
+            ChannelAccessPattern::RecvOnly => {
+                // Minimal stack for receive-only
+                pool.recv_only_pool.allocate()
+            },
+            ChannelAccessPattern::SendRecv => {
+                // More stack for bidirectional
+                pool.send_recv_pool.allocate()
+            },
+            ChannelAccessPattern::MultiSelect => {
+                // Larger stack for complex select
+                pool.select_pool.allocate()
+            },
+        }
+    }
+}
+
+// Compiler hints for channel patterns
+#[channel_pattern(SendOnly)]
+async fn producer(ch: Channel<Item>) {
+    loop {
+        let item = generate_item();
+        co_await ch.send(item);
+    }
+}
+
+#[channel_pattern(RecvOnly)]
+async fn consumer(ch: Channel<Item>) {
+    loop {
+        match co_await ch.recv() {
+            Some(item) => process(item),
+            None => break,
+        }
+    }
+}
+```
+
+### Access Rights with Channel Coroutines
+
+Coroutines preserve channel access rights across suspensions:
+
+```cpp
+// Coroutine with channel access rights
+class ChannelWorkerCoro {
+    stack_memory: *mut u8,
+    channel_ref: &Channel<Message>,
+    
+    // Access rights preserved across suspensions
+    exposes SendOps { channel_ref }
+    exposes RecvOps { channel_ref }
+    
+    constructed_by: ChannelWorkerManager,
+}
+
+async fn typed_channel_worker(ch: &Channel<Message> with RecvOps) {
+    // This coroutine can only receive, not send
+    loop {
+        match co_await RecvOps::recv(ch) {
+            Some(msg) => process_message(msg),
+            None => break,
+        }
+        // co_await SendOps::send(ch, response);  // Compile error!
+    }
+}
+
+// Spawn coroutines with specific channel capabilities
+fn spawn_channel_workers(bus: &MessageBus) {
+    // Producers get send-only access
+    spawn producer_coro(bus with SendOps);
+    spawn producer_coro(bus with SendOps);
+    
+    // Consumers get receive-only access  
+    spawn consumer_coro(bus with RecvOps);
+    spawn consumer_coro(bus with RecvOps);
+    
+    // Supervisor gets both capabilities
+    spawn supervisor_coro(bus with SendOps, RecvOps);
+}
+```
+
+CPrime coroutines represent a significant advance in cooperative multitasking, combining the best aspects of existing approaches while introducing revolutionary optimizations like stack-allocated micro pools and compiler-guided allocation strategies. The seamless integration with channels provides a powerful foundation for concurrent programming with memory safety guaranteed through scheduler-managed reference counting.

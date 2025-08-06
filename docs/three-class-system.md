@@ -862,4 +862,431 @@ functional class DatabaseAdapter {
 }
 ```
 
-The three-class system enforces good architectural patterns while maintaining the performance characteristics essential for systems programming.
+## Channel Examples with Three-Class System
+
+### Channel as Data Class
+
+Channels fit perfectly into the three-class system as data classes holding communication state:
+
+```cpp
+// Channel data class holds communication state
+class MessageChannel<T> {
+    // Internal channel state (pure data)
+    buffer: CircularBuffer<T>,
+    capacity: usize,
+    closed: AtomicBool,
+    
+    // Synchronization state
+    send_waiters: WaitQueue,
+    recv_waiters: WaitQueue,
+    
+    // Reference counting for safety
+    ref_count: AtomicUsize,
+    
+    // Access rights for channel capabilities
+    exposes SendOps { buffer, send_waiters, closed }
+    exposes RecvOps { buffer, recv_waiters, closed }
+    
+    // Construction control
+    constructed_by: MessageChannelOps<T>,
+}
+```
+
+### Channel Operations as Functional Class
+
+All channel operations are implemented as stateless functional classes:
+
+```cpp
+// Channel operations as functional class (stateless)
+functional class MessageChannelOps<T> {
+    // Constructor creates channel data
+    fn construct(capacity: usize) -> MessageChannel<T> {
+        MessageChannel {
+            buffer: CircularBuffer::with_capacity(capacity),
+            capacity,
+            closed: AtomicBool::new(false),
+            send_waiters: WaitQueue::new(),
+            recv_waiters: WaitQueue::new(),
+            ref_count: AtomicUsize::new(1),
+        }
+    }
+    
+    // Destructor handles cleanup
+    fn destruct(channel: &mut MessageChannel<T>) {
+        // Mark as closed and wake all waiters
+        channel.closed.store(true, Ordering::Release);
+        Self::wake_all_waiters(channel);
+    }
+    
+    // Utility operations
+    fn wake_all_waiters(channel: &MessageChannel<T>) {
+        // Wake all suspended coroutines
+        while let Some(waiter) = channel.send_waiters.pop() {
+            SchedulerOps::wake_coroutine(waiter);
+        }
+        while let Some(waiter) = channel.recv_waiters.pop() {
+            SchedulerOps::wake_coroutine(waiter);
+        }
+    }
+    
+    fn is_closed(channel: &MessageChannel<T>) -> bool {
+        channel.closed.load(Ordering::Acquire)
+    }
+}
+
+// Send operations as functional class
+functional class SendOps<T> {
+    suspend fn send(channel: &MessageChannel<T>, value: T) -> SendResult {
+        if MessageChannelOps::is_closed(channel) {
+            return SendResult::Closed;
+        }
+        
+        // Try immediate send
+        if let Some(receiver) = channel.recv_waiters.pop() {
+            // Direct handoff to waiting receiver
+            SchedulerOps::wake_with_value(receiver, value);
+            return SendResult::Ok;
+        }
+        
+        // Try buffer
+        if channel.buffer.try_push(value) {
+            return SendResult::Ok;
+        }
+        
+        // Must suspend - add to wait queue
+        let current_coro = SchedulerOps::current_coroutine_id();
+        channel.send_waiters.push(current_coro);
+        
+        // Suspend until space available or channel closed
+        co_await SchedulerOps::suspend();
+        
+        // Resume here when woken
+        if MessageChannelOps::is_closed(channel) {
+            SendResult::Closed
+        } else {
+            // Space should be available now
+            channel.buffer.push(value);
+            SendResult::Ok
+        }
+    }
+}
+
+// Receive operations as functional class
+functional class RecvOps<T> {
+    suspend fn recv(channel: &MessageChannel<T>) -> Option<T> {
+        // Try immediate receive from buffer
+        if let Some(value) = channel.buffer.try_pop() {
+            // Wake a waiting sender if any
+            if let Some(sender) = channel.send_waiters.pop() {
+                SchedulerOps::wake_coroutine(sender);
+            }
+            return Some(value);
+        }
+        
+        // Check if closed and empty
+        if MessageChannelOps::is_closed(channel) {
+            return None;
+        }
+        
+        // Must suspend - add to wait queue
+        let current_coro = SchedulerOps::current_coroutine_id();
+        channel.recv_waiters.push(current_coro);
+        
+        // Suspend until item available or channel closed
+        co_await SchedulerOps::suspend();
+        
+        // Resume here when woken
+        if let Some(value) = channel.buffer.try_pop() {
+            // Wake a sender if buffer has space now
+            if let Some(sender) = channel.send_waiters.pop() {
+                SchedulerOps::wake_coroutine(sender);
+            }
+            Some(value)
+        } else {
+            // Channel must be closed
+            None
+        }
+    }
+}
+
+// Usage follows three-class pattern
+let mut msg_channel = MessageChannelOps::construct(100);
+defer MessageChannelOps::destruct(&mut msg_channel);
+
+// Send using functional class method
+co_await SendOps::send(&msg_channel, Message::new("hello"));
+
+// Receive using functional class method
+let received = co_await RecvOps::recv(&msg_channel);
+```
+
+### Message Bus Following Three-Class Pattern
+
+A more complex example with message routing:
+
+```cpp
+// Message bus data class
+class MessageBus {
+    // Multiple channels for different message types
+    user_channel: MessageChannel<UserMessage>,
+    system_channel: MessageChannel<SystemMessage>,
+    broadcast_channel: MessageChannel<BroadcastMessage>,
+    
+    // Bus metadata
+    subscriber_count: AtomicUsize,
+    message_count: AtomicU64,
+    
+    // Access rights for different capabilities
+    exposes UserPublisher { user_channel }
+    exposes UserSubscriber { user_channel }
+    exposes SystemPublisher { system_channel }
+    exposes SystemSubscriber { system_channel }
+    exposes BroadcastPublisher { broadcast_channel }
+    exposes BroadcastSubscriber { broadcast_channel }
+    
+    // Construction control
+    constructed_by: MessageBusManager,
+}
+
+// Bus management as functional class
+functional class MessageBusManager {
+    fn construct(
+        user_capacity: usize,
+        system_capacity: usize,
+        broadcast_capacity: usize
+    ) -> MessageBus {
+        MessageBus {
+            user_channel: MessageChannelOps::construct(user_capacity),
+            system_channel: MessageChannelOps::construct(system_capacity),
+            broadcast_channel: MessageChannelOps::construct(broadcast_capacity),
+            subscriber_count: AtomicUsize::new(0),
+            message_count: AtomicU64::new(0),
+        }
+    }
+    
+    fn destruct(bus: &mut MessageBus) {
+        // Clean up all channels
+        MessageChannelOps::destruct(&mut bus.user_channel);
+        MessageChannelOps::destruct(&mut bus.system_channel);
+        MessageChannelOps::destruct(&mut bus.broadcast_channel);
+    }
+    
+    // Factory methods for different access levels
+    fn create_user_session(bus: &MessageBus) -> UserSession {
+        UserSession {
+            bus_ref: bus,  // Reference to data class
+        }
+    }
+    
+    fn create_system_service(bus: &MessageBus) -> SystemService {
+        SystemService {
+            bus_ref: bus,  // Reference to data class
+        }
+    }
+}
+
+// User session wraps bus with specific access rights
+class UserSession {
+    bus_ref: &MessageBus,
+    
+    exposes UserOps { bus_ref }
+    constructed_by: UserSessionOps,
+}
+
+functional class UserOps {
+    fn publish_message(session: &UserSession, msg: UserMessage) -> Result<()> {
+        // Can only access user channel through access rights
+        co_await SendOps::send(&session.bus_ref.user_channel, msg)
+    }
+    
+    fn subscribe_to_messages(session: &UserSession) -> Option<UserMessage> {
+        // Can only receive from user channel
+        co_await RecvOps::recv(&session.bus_ref.user_channel)
+    }
+    
+    // Cannot access system or broadcast channels - compile error
+    // fn publish_system_message(...) // Would not compile
+}
+
+// System service has broader access
+class SystemService {
+    bus_ref: &MessageBus,
+    
+    exposes SystemOps { bus_ref }
+    constructed_by: SystemServiceOps,
+}
+
+functional class SystemOps {
+    fn publish_system_message(service: &SystemService, msg: SystemMessage) -> Result<()> {
+        co_await SendOps::send(&service.bus_ref.system_channel, msg)
+    }
+    
+    fn publish_broadcast(service: &SystemService, msg: BroadcastMessage) -> Result<()> {
+        // System can broadcast to all users
+        co_await SendOps::send(&service.bus_ref.broadcast_channel, msg)
+    }
+    
+    fn monitor_user_messages(service: &SystemService) -> Option<UserMessage> {
+        // System can monitor user traffic
+        co_await RecvOps::recv(&service.bus_ref.user_channel)
+    }
+}
+```
+
+### Channel-Based Worker Pool
+
+A complete worker pool implementation using the three-class system:
+
+```cpp
+// Worker pool data class
+class WorkerPool<T> {
+    // Work distribution channel
+    work_channel: MessageChannel<WorkItem<T>>,
+    
+    // Result collection channel
+    result_channel: MessageChannel<WorkResult<T>>,
+    
+    // Pool metadata
+    worker_count: usize,
+    active_workers: AtomicUsize,
+    processed_count: AtomicU64,
+    
+    // Access rights for different roles
+    exposes WorkProducer { work_channel }
+    exposes WorkConsumer { work_channel, result_channel }
+    exposes ResultCollector { result_channel }
+    
+    constructed_by: WorkerPoolManager<T>,
+}
+
+// Pool management operations
+functional class WorkerPoolManager<T> {
+    fn construct(
+        worker_count: usize,
+        work_capacity: usize,
+        result_capacity: usize
+    ) -> WorkerPool<T> {
+        WorkerPool {
+            work_channel: MessageChannelOps::construct(work_capacity),
+            result_channel: MessageChannelOps::construct(result_capacity),
+            worker_count,
+            active_workers: AtomicUsize::new(0),
+            processed_count: AtomicU64::new(0),
+        }
+    }
+    
+    fn destruct(pool: &mut WorkerPool<T>) {
+        // Ensure all workers are terminated
+        Self::shutdown_all_workers(pool);
+        
+        // Clean up channels
+        MessageChannelOps::destruct(&mut pool.work_channel);
+        MessageChannelOps::destruct(&mut pool.result_channel);
+    }
+    
+    fn start_workers(pool: &WorkerPool<T>) {
+        for worker_id in 0..pool.worker_count {
+            // Each worker gets WorkConsumer access rights
+            let worker_access = WorkerConsumer {
+                pool_ref: pool,
+                worker_id,
+            };
+            
+            spawn worker_task(worker_access);
+            pool.active_workers.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+    
+    fn shutdown_all_workers(pool: &WorkerPool<T>) {
+        // Close work channel - all workers will terminate
+        MessageChannelOps::close(&mut pool.work_channel);
+        
+        // Wait for workers to finish
+        while pool.active_workers.load(Ordering::Acquire) > 0 {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+}
+
+// Worker with access to both work and result channels
+class WorkerConsumer<T> {
+    pool_ref: &WorkerPool<T>,
+    worker_id: usize,
+    
+    exposes WorkerOps { pool_ref }
+    constructed_by: WorkerOps<T>,
+}
+
+functional class WorkerOps<T> {
+    fn process_work(worker: &WorkerConsumer<T>) -> WorkerResult {
+        loop {
+            // Receive work (competitive consumption)
+            match co_await RecvOps::recv(&worker.pool_ref.work_channel) {
+                Some(WorkItem::Job(work)) => {
+                    // Process the work item
+                    let result = process_work_item(work);
+                    
+                    // Send result back
+                    let work_result = WorkResult {
+                        worker_id: worker.worker_id,
+                        result,
+                        processed_at: SystemTime::now(),
+                    };
+                    
+                    co_await SendOps::send(&worker.pool_ref.result_channel, work_result);
+                    
+                    // Update counters
+                    worker.pool_ref.processed_count.fetch_add(1, Ordering::Relaxed);
+                },
+                Some(WorkItem::Terminate) => {
+                    println("Worker {} received termination signal", worker.worker_id);
+                    break;
+                },
+                None => {
+                    println("Work channel closed, worker {} terminating", worker.worker_id);
+                    break;
+                }
+            }
+        }
+        
+        // Worker cleanup
+        worker.pool_ref.active_workers.fetch_sub(1, Ordering::Relaxed);
+        WorkerResult::Terminated
+    }
+}
+
+// Usage of the worker pool system
+fn worker_pool_example() {
+    // Create pool following three-class pattern
+    let mut pool = WorkerPoolManager::construct(4, 100, 50);
+    defer WorkerPoolManager::destruct(&mut pool);
+    
+    // Start workers
+    WorkerPoolManager::start_workers(&pool);
+    
+    // Create producer with limited access
+    let producer = WorkProducer { pool_ref: &pool };
+    
+    // Create result collector with limited access
+    let collector = ResultCollector { pool_ref: &pool };
+    
+    // Send work
+    spawn producer_task(producer);
+    spawn result_collector_task(collector);
+    
+    // Wait for processing to complete
+    std::thread::sleep(Duration::from_secs(10));
+    
+    // Shutdown (automatic via defer)
+}
+```
+
+### Three-Class Benefits in Channel Design
+
+1. **Clear Separation**: Channel state (data), operations (functional), and access control are distinct
+2. **Memory Safety**: Construction control ensures proper initialization of complex channel structures
+3. **Performance**: Functional classes enable aggressive inlining and optimization
+4. **Testability**: Stateless operations are easily unit tested
+5. **Composability**: Channels, access rights, and coroutines all follow the same pattern
+
+The three-class system enforces good architectural patterns while maintaining the performance characteristics essential for systems programming. Channels exemplify this approach by cleanly separating data (communication state), operations (send/receive logic), and capabilities (access rights), resulting in a powerful yet safe concurrency primitive.

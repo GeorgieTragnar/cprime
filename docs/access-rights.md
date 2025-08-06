@@ -688,4 +688,382 @@ fn process_queryables(conns: &[impl Queryable]) {
 }
 ```
 
-Access rights provide powerful inheritance-like polymorphism with explicit memory costs and the choice between compile-time performance and runtime flexibility.
+## Channel Subscription through Access Rights
+
+### Access Rights as Automatic Subscription
+
+In CPrime's channel system, **access rights ARE the subscription mechanism**. There's no need for explicit subscribe/unsubscribe - creating a coroutine with channel access rights automatically subscribes it:
+
+```cpp
+// Message bus with internal channel
+class MessageBus {
+    internal_channel: Channel<Message>,
+    
+    // Access rights define channel capabilities
+    exposes SendOps { internal_channel }    // Send capability
+    exposes RecvOps { internal_channel }    // Receive capability
+    
+    constructed_by: MessageBusManager,
+}
+
+functional class MessageBusManager {
+    fn construct(capacity: usize) -> MessageBus {
+        MessageBus {
+            internal_channel: channel<Message>(capacity),
+        }
+    }
+    
+    // Create producer with send-only access
+    fn create_producer(bus: &MessageBus) -> &MessageBus with SendOps {
+        bus with SendOps  // Producer gets send capability only
+    }
+    
+    // Create consumer with receive-only access
+    fn create_consumer(bus: &MessageBus) -> &MessageBus with RecvOps {
+        bus with RecvOps  // Consumer gets receive capability only
+    }
+}
+
+// Subscription happens through coroutine spawning
+fn setup_message_system() {
+    let bus = MessageBusManager::construct(1000);
+    
+    // Spawn producers - automatically subscribed through SendOps access
+    spawn producer_task(MessageBusManager::create_producer(&bus));
+    spawn producer_task(MessageBusManager::create_producer(&bus));
+    
+    // Spawn consumers - automatically subscribed through RecvOps access
+    spawn consumer_task(MessageBusManager::create_consumer(&bus));
+    spawn consumer_task(MessageBusManager::create_consumer(&bus));
+    
+    // No explicit subscribe/unsubscribe needed!
+    // When coroutine terminates, access right is dropped = automatic unsubscribe
+}
+
+async fn producer_task(bus: &MessageBus with SendOps) {
+    loop {
+        let msg = generate_message();
+        // Can only send - receive would be compile error
+        co_await SendOps::send(bus, msg);
+    }
+    // When this coroutine ends, SendOps access dropped = unsubscribed
+}
+
+async fn consumer_task(bus: &MessageBus with RecvOps) {
+    loop {
+        // Can only receive - send would be compile error
+        match co_await RecvOps::recv(bus) {
+            Some(msg) => process_message(msg),
+            None => break,  // Channel closed
+        }
+    }
+    // When this coroutine ends, RecvOps access dropped = unsubscribed
+}
+```
+
+### Access Rights Need Data Class Instances
+
+A key insight from the channel design: **access rights require actual data class instances**. You can't have access rights floating independently:
+
+```cpp
+// CORRECT: Access rights with data class instance
+class DatabaseConnection {
+    handle: DbHandle,
+    cache: QueryCache,
+    
+    // Access rights operate on the data class fields
+    exposes ReadOps { handle, cache }    // Can access handle and cache
+    exposes WriteOps { handle }          // Can only access handle
+    
+    constructed_by: ConnectionManager,
+}
+
+// INCORRECT: Access rights without data
+// functional class FloatingOps {  // This doesn't make sense!
+//     // What data would these operations work on?
+// }
+
+// Channel operations need the channel data
+functional class ReadOps {
+    fn execute_query(conn: &DatabaseConnection, sql: &str) -> QueryResult {
+        // Operations work on the actual connection data
+        let result = query_database(conn.handle, sql);
+        conn.cache.store(sql, result.clone());  // Cache the result
+        result
+    }
+}
+```
+
+### Channel Access Rights Pattern
+
+The standard pattern for channel access rights:
+
+```cpp
+// Step 1: Data class holds the channel
+class WorkBus {
+    work_channel: Channel<WorkItem>,
+    result_channel: Channel<Result>,
+    
+    // Step 2: Expose access rights to channel operations
+    exposes WorkProducer { work_channel }
+    exposes WorkConsumer { work_channel, result_channel }
+    exposes ResultCollector { result_channel }
+    
+    constructed_by: WorkBusManager,
+}
+
+// Step 3: Functional classes operate on the channels
+functional class WorkProducer {
+    fn submit_work(bus: &WorkBus, work: WorkItem) -> Result<()> {
+        // Access to work_channel through access rights
+        co_await bus.work_channel.send(work)
+    }
+}
+
+functional class WorkConsumer {
+    fn process_work(bus: &WorkBus) -> Option<WorkItem> {
+        // Access to both channels through access rights
+        if let Some(work) = co_await bus.work_channel.recv() {
+            let result = process_work_item(work);
+            co_await bus.result_channel.send(result);
+            Some(work)
+        } else {
+            None  // Work channel closed
+        }
+    }
+}
+
+functional class ResultCollector {
+    fn collect_result(bus: &WorkBus) -> Option<Result> {
+        // Access only to result_channel
+        co_await bus.result_channel.recv()
+    }
+}
+
+// Step 4: Spawn with specific access rights
+fn setup_work_system() {
+    let work_bus = WorkBusManager::construct(100, 50);
+    
+    // Producer coroutines - can only submit work
+    spawn work_producer(work_bus with WorkProducer);
+    spawn work_producer(work_bus with WorkProducer);
+    
+    // Consumer coroutines - can consume work and send results
+    spawn work_consumer(work_bus with WorkConsumer);
+    spawn work_consumer(work_bus with WorkConsumer);
+    spawn work_consumer(work_bus with WorkConsumer);
+    
+    // Result collector - can only collect results
+    spawn result_collector(work_bus with ResultCollector);
+}
+
+async fn work_producer(bus: &WorkBus with WorkProducer) {
+    loop {
+        let work_item = generate_work();
+        WorkProducer::submit_work(bus, work_item)?;
+    }
+    // Access automatically dropped when coroutine ends
+}
+
+async fn work_consumer(bus: &WorkBus with WorkConsumer) {
+    loop {
+        match WorkConsumer::process_work(bus) {
+            Some(_) => continue,  // Processed work item
+            None => break,        // Work channel closed
+        }
+    }
+    // Access automatically dropped when coroutine ends
+}
+```
+
+### Capability-based Channel Security
+
+Access rights provide unforgeable channel capabilities:
+
+```cpp
+// Secure channel system with different privilege levels
+class SecureMessageBus {
+    user_channel: Channel<UserMessage>,
+    admin_channel: Channel<AdminMessage>,
+    audit_channel: Channel<AuditEvent>,
+    
+    // Different privilege levels
+    exposes UserAccess { user_channel }                    // Users can only use user channel
+    exposes AdminAccess { user_channel, admin_channel }    // Admins can use both user and admin
+    exposes AuditorAccess { audit_channel }               // Auditors only see audit events
+    exposes SystemAccess { user_channel, admin_channel, audit_channel }  // Full access
+    
+    constructed_by: SecureMessageManager,
+}
+
+functional class SecureMessageManager {
+    fn create_user_session(bus: &SecureMessageBus, user: &User) -> Result<&SecureMessageBus with UserAccess> {
+        if verify_user_credentials(user) {
+            Ok(bus with UserAccess)  // User gets limited access
+        } else {
+            Err("Authentication failed")
+        }
+    }
+    
+    fn create_admin_session(bus: &SecureMessageBus, admin: &Admin) -> Result<&SecureMessageBus with AdminAccess> {
+        if verify_admin_credentials(admin) && admin.has_admin_privileges() {
+            Ok(bus with AdminAccess)  // Admin gets elevated access
+        } else {
+            Err("Admin authentication failed")
+        }
+    }
+}
+
+// User coroutines are automatically limited by their access rights
+async fn user_session(bus: &SecureMessageBus with UserAccess) {
+    loop {
+        match co_await UserAccess::recv_user_message(bus) {
+            Some(msg) => {
+                let response = process_user_message(msg);
+                UserAccess::send_user_message(bus, response)?;
+                // CANNOT access admin or audit channels - compile error
+                // AdminAccess::send_admin_message(bus, admin_msg);  // ERROR!
+            },
+            None => break,
+        }
+    }
+}
+
+// Admin coroutines have broader access
+async fn admin_session(bus: &SecureMessageBus with AdminAccess) {
+    loop {
+        select {
+            user_msg = UserAccess::recv_user_message(bus) => {
+                if let Some(msg) = user_msg {
+                    // Admin can handle user messages
+                    handle_user_message(msg);
+                }
+            },
+            
+            admin_msg = AdminAccess::recv_admin_message(bus) => {
+                if let Some(msg) = admin_msg {
+                    // Admin can handle admin-only messages
+                    handle_admin_message(msg);
+                }
+            }
+        }
+    }
+}
+```
+
+### Dynamic Channel Access Rights
+
+Using runtime access rights for dynamic capability management:
+
+```cpp
+// Dynamic privilege escalation/de-escalation
+class DynamicChannelBus {
+    message_channel: Channel<Message>,
+    
+    runtime exposes UserOps { message_channel }
+    runtime exposes AdminOps { message_channel }
+    runtime exposes SuperuserOps { message_channel }
+}
+
+async fn dynamic_session(bus: &runtime DynamicChannelBus) {
+    loop {
+        // Runtime capability checking
+        if let Some(user_ops) = bus.cast::<UserOps>() {
+            // User-level operations
+            match co_await UserOps::recv_message(&user_ops) {
+                Some(msg) => process_user_message(msg),
+                None => break,
+            }
+        } else if let Some(admin_ops) = bus.cast::<AdminOps>() {
+            // Admin-level operations
+            match co_await AdminOps::recv_privileged_message(&admin_ops) {
+                Some(msg) => process_admin_message(msg),
+                None => break,
+            }
+        } else {
+            // No valid access rights
+            log::error!("Session has no valid channel access");
+            break;
+        }
+    }
+}
+
+// Privilege escalation through re-authentication
+fn escalate_privileges(
+    current_session: &runtime DynamicChannelBus,
+    credentials: &AdminCredentials
+) -> Result<runtime DynamicChannelBus> {
+    if verify_admin_credentials(credentials) {
+        // Create new session with elevated privileges
+        let elevated_bus: runtime DynamicChannelBus = upgrade_to_admin_access(current_session)?;
+        Ok(elevated_bus)
+    } else {
+        Err("Privilege escalation denied")
+    }
+}
+```
+
+### Subscription Lifecycle Management
+
+Access rights automatically manage subscription lifecycle:
+
+```cpp
+// Subscription lifecycle tied to access right lifetime
+fn subscription_lifecycle_demo() {
+    let event_bus = EventBusManager::construct();
+    
+    {
+        // Create subscriber with access rights
+        let subscriber = EventBusManager::create_subscriber(&event_bus);
+        
+        // Spawn coroutine with subscription access
+        let handle = spawn event_processor(subscriber);
+        
+        // Subscription is active while access rights exist
+        co_await handle;  // Wait for coroutine completion
+        
+    }  // subscriber dropped here - automatic unsubscription!
+    
+    // event_bus continues to exist, but subscriber is unsubscribed
+}
+
+async fn event_processor(bus: &EventBus with RecvOps) {
+    // Automatic subscription through access rights
+    loop {
+        match co_await RecvOps::recv(bus) {
+            Some(event) => {
+                process_event(event);
+                // Subscription remains active
+            },
+            None => {
+                println("Event channel closed");
+                break;  // Clean termination
+            }
+        }
+    }
+    // When coroutine ends, access right is dropped
+    // Scheduler automatically removes from channel's wait queue
+}
+
+// Explicit subscription management when needed
+functional class SubscriptionManager {
+    fn create_managed_subscription(
+        bus: &EventBus,
+        subscriber_id: SubscriberId
+    ) -> ManagedSubscription {
+        ManagedSubscription {
+            bus_access: bus with RecvOps,
+            subscriber_id,
+            is_active: true,
+        }
+    }
+    
+    fn terminate_subscription(subscription: &mut ManagedSubscription) {
+        subscription.is_active = false;
+        // Access rights still exist but marked inactive
+        // Subscriber can choose when to drop access
+    }
+}
+```
+
+Access rights provide powerful inheritance-like polymorphism with explicit memory costs and the choice between compile-time performance and runtime flexibility. In the channel system, they serve as the automatic subscription mechanism, eliminating the need for explicit subscribe/unsubscribe operations while providing strong capability-based security.
