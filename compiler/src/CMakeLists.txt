@@ -12,6 +12,7 @@ add_library(cprime_compiler
     layer3/ast.cpp
     layer3/symbol_table.cpp
     layer3/ast_builder.cpp
+    layer4/raii_injector.cpp
 )
 
 target_include_directories(cprime_compiler PUBLIC .)
@@ -39,6 +40,10 @@ target_link_libraries(test_contextual_tokens cprime_compiler)
 # AST builder test
 add_executable(test_ast_builder tests/test_ast_builder.cpp)
 target_link_libraries(test_ast_builder cprime_compiler)
+
+# RAII injector test
+add_executable(test_raii_injector tests/test_raii_injector.cpp)
+target_link_libraries(test_raii_injector cprime_compiler)
 
 # Optional: Add to parent project if called from main CMakeLists.txt
 if(NOT CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
