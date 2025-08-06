@@ -12,7 +12,7 @@ CPrime coroutines represent a revolutionary approach to cooperative multitasking
 
 ### Memory Management Philosophy
 
-Unlike traditional C++ coroutines that use compiler-generated state machines, CPrime coroutines use dedicated stack memory for each coroutine instance:
+Unlike traditional C++ coroutines that use compiler-generated state machines, CPrime coroutines use dedicated stack memory for each coroutine instance. This approach also integrates with CPrime's interface memory contract system for N:M composition patterns:
 
 ```cpp
 // Coroutine as data class
@@ -897,10 +897,223 @@ CoroMetadata {
     estimated_stack_size: 464,
     max_stack_size: Some(512),
     suspension_point_count: 2,
-    channel_operation_count: 2,
     size_class: CoroSizeTag::Small,
-    // Channel operations may cause more suspensions
-    migration_likelihood: 0.3,
+    uses_channels: true,
+}
+```
+
+## N:M Composition with Interface Memory Contracts
+
+### Generic Coroutine Operations
+
+Interface memory contracts enable generic coroutine operations that work across different coroutine types:
+
+```cpp
+// Interface for coroutines that can be scheduled
+interface Schedulable {
+    memory_contract {
+        coro_id: u64,           // Unique coroutine identifier
+        priority: u32,          // Scheduling priority
+        state: u32,             // Current execution state
+        stack_usage: u32,       // Current stack utilization
+    }
+    
+    fn can_resume(&self) -> bool;
+    fn get_next_wake_time(&self) -> Option<SystemTime>;
+}
+
+// HTTP handler coroutine implementing Schedulable
+class HttpHandlerCoro {
+    coroutine_id: u64,      // Maps to coro_id
+    request_priority: u32,  // Maps to priority
+    execution_state: CoroState, // Maps to state (as u32)
+    stack_used: u32,        // Maps to stack_usage
+    
+    stack_memory: *mut u8,
+    response: HttpResponse,
+    processing_stage: ProcessingStage,
+    
+    implements Schedulable {
+        coro_id <- coroutine_id,
+        priority <- request_priority,
+        state <- execution_state as u32,
+        stack_usage <- stack_used,
+    }
+    
+    exposes HttpCoroOps { stack_memory, response, processing_stage }
+    constructed_by: HttpCoroManager,
+}
+
+// Database coroutine implementing same interface
+class DatabaseCoro {
+    db_task_id: u64,        // Maps to coro_id
+    query_priority: u32,    // Maps to priority
+    task_state: u32,        // Maps to state
+    memory_usage: u32,      // Maps to stack_usage
+    
+    connection: DbConnection,
+    query_buffer: QueryBuffer,
+    result_cache: ResultCache,
+    
+    implements Schedulable {
+        coro_id <- db_task_id,
+        priority <- query_priority,
+        state <- task_state,
+        stack_usage <- memory_usage,
+    }
+    
+    exposes DatabaseCoroOps { connection, query_buffer, result_cache }
+    constructed_by: DatabaseCoroManager,
+}
+
+// Generic scheduler working with any Schedulable coroutine
+functional class SchedulerOps<T: Schedulable> {
+    fn should_preempt(current: &T, candidate: &T) -> bool {
+        // Priority-based scheduling decision
+        candidate.priority > current.priority &&
+        candidate.can_resume()
+    }
+    
+    fn estimate_completion_time(coro: &T) -> Option<Duration> {
+        // Generic estimation based on interface data
+        if coro.stack_usage > 80 {
+            // High stack usage suggests complex operation
+            Some(Duration::from_millis(100))
+        } else if coro.priority > 7 {
+            // High priority suggests quick task
+            Some(Duration::from_millis(10))
+        } else {
+            coro.get_next_wake_time()
+                .map(|wake_time| wake_time.duration_since(SystemTime::now()).unwrap_or_default())
+        }
+    }
+    
+    fn calculate_scheduling_score(coro: &T) -> f64 {
+        let priority_factor = coro.priority as f64 / 10.0;
+        let efficiency_factor = 1.0 - (coro.stack_usage as f64 / 100.0);
+        
+        priority_factor * efficiency_factor
+    }
+}
+
+// Usage: Single scheduler implementation works with multiple coroutine types
+let http_coro = HttpCoroManager::construct(request);
+let db_coro = DatabaseCoroManager::construct(query);
+
+let http_score = SchedulerOps::calculate_scheduling_score(&http_coro);
+let db_score = SchedulerOps::calculate_scheduling_score(&db_coro);
+
+if SchedulerOps::should_preempt(&http_coro, &db_coro) {
+    scheduler.preempt_and_schedule(db_coro);
+}
+```
+
+### Multi-Type Coroutine Containers
+
+Interface contracts enable heterogeneous coroutine collections:
+
+```cpp
+// Interface for coroutines that can be suspended/resumed
+interface Resumable {
+    memory_contract {
+        task_id: u64,
+        resume_point: u32,
+        last_activity: u64,
+    }
+    
+    fn resume(&mut self) -> ResumeResult;
+    fn can_suspend(&self) -> bool;
+}
+
+// Multiple coroutine types implementing Resumable
+impl Resumable for HttpHandlerCoro {
+    // Maps fields to interface contract
+    task_id <- coroutine_id,
+    resume_point <- processing_stage as u32,
+    last_activity <- last_request_time,
+    
+    fn resume(&mut self) -> ResumeResult {
+        HttpCoroOps::resume_http_processing(self)
+    }
+    
+    fn can_suspend(&self) -> bool {
+        matches!(self.processing_stage, ProcessingStage::WaitingForResponse)
+    }
+}
+
+impl Resumable for DatabaseCoro {
+    // Maps different fields to same interface contract
+    task_id <- db_task_id,
+    resume_point <- current_query_step,
+    last_activity <- last_query_time,
+    
+    fn resume(&mut self) -> ResumeResult {
+        DatabaseCoroOps::resume_query_processing(self)
+    }
+    
+    fn can_suspend(&self) -> bool {
+        self.connection.is_idle()
+    }
+}
+
+// Generic coroutine pool using interface contracts
+class CoroutinePool {
+    // Heterogeneous collection of resumable coroutines
+    active_tasks: Vec<Box<dyn Resumable>>,
+    task_count: usize,
+    
+    constructed_by: CoroutinePoolOps,
+}
+
+functional class CoroutinePoolOps {
+    fn add_task<T: Resumable + 'static>(
+        pool: &mut CoroutinePool,
+        task: T
+    ) {
+        pool.active_tasks.push(Box::new(task));
+        pool.task_count += 1;
+    }
+    
+    fn resume_all_ready(pool: &mut CoroutinePool) -> Vec<ResumeResult> {
+        let mut results = Vec::new();
+        
+        for task in &mut pool.active_tasks {
+            if !task.can_suspend() {
+                results.push(task.resume());
+            }
+        }
+        
+        results
+    }
+    
+    fn cleanup_completed(pool: &mut CoroutinePool) {
+        pool.active_tasks.retain(|task| {
+            let age = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() - task.last_activity;
+                
+            age < 300  // Keep tasks active for 5 minutes
+        });
+        
+        pool.task_count = pool.active_tasks.len();
+    }
+}
+
+// Usage: Add different coroutine types to same pool
+let mut pool = CoroutinePoolOps::construct();
+
+CoroutinePoolOps::add_task(&mut pool, http_handler_coro);
+CoroutinePoolOps::add_task(&mut pool, database_coro);
+CoroutinePoolOps::add_task(&mut pool, file_io_coro);
+
+// Resume all ready tasks regardless of their concrete type
+let results = CoroutinePoolOps::resume_all_ready(&mut pool);
+```
+
+This N:M composition approach enables powerful coroutine management patterns where a single scheduler implementation can work with multiple coroutine types, and heterogeneous coroutine collections can be managed uniformly through interface contracts.
+
+The combination of CPrime's three-class system with interface memory contracts makes coroutines extremely composable while maintaining the revolutionary performance characteristics of the underlying implementation.
 }
 ```
 

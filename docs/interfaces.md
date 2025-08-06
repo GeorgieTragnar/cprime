@@ -2,7 +2,14 @@
 
 ## Overview
 
-CPrime interfaces provide common vtable contracts that supplement the access rights system. While access rights provide inheritance-like polymorphism with explicit memory costs, interfaces offer a way to define shared operations across different types without requiring casting. They serve as the middle tier in CPrime's three-level polymorphism system, bridging the gap between access rights (inheritance-like) and unions (pattern matching).
+CPrime interfaces act as **polymorphic glue** between RAII state holders (data classes) and RAII state modifiers (functional classes). They provide constructs for exact memory contracts and function signature contracts, enabling abstractable work on different types using the same function calls.
+
+They offer two distinct capabilities:
+
+1. **Traditional Interfaces**: Common vtable contracts for shared operations across different types
+2. **Interface Memory Contracts**: Memory access patterns enabling N:M composition between data classes and functional classes
+
+While access rights provide inheritance-like polymorphism with explicit memory costs, interfaces serve as the crucial bridging mechanism in CPrime's four-level polymorphism system: access rights (inheritance-like), traditional interfaces (shared operations), interface memory contracts (N:M composition), and unions (pattern matching).
 
 ## Core Concepts
 
@@ -550,4 +557,185 @@ fn process_items_dynamic(items: &[&dyn Display]) {
 // Choose static when types are known, dynamic for flexibility
 ```
 
-Interfaces provide a clean, type-safe way to define common operations across different types, complementing CPrime's access rights system by avoiding the need for frequent casting while maintaining compile-time safety and performance.
+## Interface Memory Contracts: N:M Composition
+
+### Overview of Memory Contracts
+
+In addition to traditional functional contracts, CPrime interfaces can serve as **memory copy contracts** that enable N:M composition. This allows multiple data classes to work with multiple functional classes through shared interface bindings.
+
+For comprehensive documentation on interface memory contracts, see [interface-memory-contracts.md](interface-memory-contracts.md).
+
+### Compile-Time vs Runtime Memory Contracts
+
+#### Compile-Time Interface Memory Contracts
+Require exact memory layout compliance and provide zero-cost access:
+
+```cpp
+interface Cacheable {
+    memory_contract {
+        id: u64,           // Must be at offset 0
+        timestamp: u64,    // Must be at offset 8
+        void[32],          // Exactly 32 bytes at offset 16-47
+        hash: u32,         // Must be at offset 48
+    }
+    
+    fn cache_key(&self) -> CacheKey;
+}
+
+// Data class with exact layout compliance
+class UserData {
+    user_id: u64,        // Offset 0 - maps to id
+    created: u64,        // Offset 8 - maps to timestamp
+    profile: UserProfile, // Offset 16 - fits in void[32]
+    status_hash: u32,    // Offset 48 - maps to hash
+    permissions: Vec<Permission>, // After interface contract
+    
+    implements Cacheable {
+        id <- user_id,
+        timestamp <- created,
+        hash <- status_hash,
+        void[32] <- memory_region(16, 32),
+    }
+}
+
+// Generic functional class with zero-cost access
+functional class CacheOps<T: Cacheable> {
+    fn store_in_cache(data: &T) -> Result<()> {
+        // Direct memory access - zero overhead
+        let key = unsafe { *(data as *const _ as *const u64) };
+        let timestamp = unsafe { *(data as *const _ as *const u64).offset(1) };
+        
+        cache_system::store(key, timestamp, data)
+    }
+}
+```
+
+#### Runtime Interface Memory Contracts
+Allow flexible memory layouts with accessor methods:
+
+```cpp
+runtime interface FlexibleCacheable {
+    data_contract {
+        id: u64,           // Must be accessible, any layout
+        timestamp: u64,    // Must be accessible, any layout
+        hash: u32,         // Must be accessible, any layout
+    }
+    
+    fn cache_key(&self) -> CacheKey;
+}
+
+// Data class with any memory layout
+class ProductData {
+    category: String,       // Any offset
+    product_id: u64,       // Anywhere in memory
+    name: String,          // Any layout
+    modified_at: u64,      // Anywhere in memory
+    content_hash: u32,     // Anywhere in memory
+    
+    implements FlexibleCacheable {
+        id <- product_id,        // Generates accessor method
+        timestamp <- modified_at, // Generates accessor method
+        hash <- content_hash,    // Generates accessor method
+    }
+    
+    // Compiler generates:
+    // fn _flexible_cacheable_id(&self) -> u64 { self.product_id }
+    // fn _flexible_cacheable_timestamp(&self) -> u64 { self.modified_at }
+    // fn _flexible_cacheable_hash(&self) -> u32 { self.content_hash }
+}
+
+// Generic functional class with accessor access
+functional class FlexibleCacheOps<T: FlexibleCacheable> {
+    fn store_in_cache(data: &T) -> Result<()> {
+        // Accessor method calls - small performance cost
+        let key = data._flexible_cacheable_id();
+        let timestamp = data._flexible_cacheable_timestamp();
+        
+        cache_system::store(key, timestamp, data)
+    }
+}
+```
+
+### Single Declaration Principle
+
+Each interface can be declared as **either** compile-time or runtime, but **never both**:
+
+```cpp
+// Option A: Compile-time interface (zero-cost, inflexible)
+interface Serializable {
+    memory_contract { ... }
+    fn serialize(&self) -> Vec<u8>;
+}
+
+// Option B: Runtime interface (flexible, accessor cost)
+runtime interface FlexibleSerializable {
+    data_contract { ... }  // Same fields, different access method
+    fn serialize(&self) -> Vec<u8>;
+}
+
+// FORBIDDEN: Cannot have both versions of same interface name
+```
+
+This prevents function explosion and maintains uniform access patterns within each interface type.
+
+### Benefits of Memory Contracts
+
+1. **N:M Composition**: Multiple data classes work with multiple functional classes
+2. **Zero-Cost Abstractions**: Compile-time interfaces provide direct memory access
+3. **Flexible Composition**: Runtime interfaces support dynamic layouts
+4. **Type Safety**: Compiler verifies interface implementations
+5. **Performance Control**: Explicit choice between speed and flexibility
+
+### Integration with Traditional Interfaces
+
+Memory contracts and traditional interfaces can coexist:
+
+```cpp
+// Both memory contract AND traditional interface
+interface Cacheable {
+    memory_contract {
+        id: u64,
+        timestamp: u64,
+        hash: u32,
+    }
+    
+    // Traditional interface methods
+    fn cache_key(&self) -> CacheKey;
+    fn is_expired(&self, max_age: Duration) -> bool;
+}
+
+// Implementation provides both
+class UserData implements Cacheable {
+    // Memory layout linking
+    id <- user_id,
+    timestamp <- last_login,
+    hash <- profile_hash,
+    
+    // Traditional interface implementation
+    fn cache_key(&self) -> CacheKey {
+        CacheKey::from_user(self.user_id)
+    }
+    
+    fn is_expired(&self, max_age: Duration) -> bool {
+        let age = SystemTime::now().duration_since(
+            UNIX_EPOCH + Duration::from_secs(self.last_login)
+        ).unwrap_or_default();
+        age > max_age
+    }
+}
+```
+
+This dual capability makes CPrime interfaces uniquely powerful, supporting both traditional polymorphism and revolutionary N:M composition patterns.
+
+## Interface Design Evolution
+
+CPrime's interface system has evolved to support increasingly sophisticated composition patterns:
+
+1. **Traditional Interfaces**: Shared vtable contracts (like other languages)
+2. **Memory Contracts**: Direct memory access patterns for performance
+3. **N:M Composition**: Multiple data classes with multiple functional classes
+4. **Hybrid Interfaces**: Both traditional methods and memory contracts
+
+This evolution maintains backward compatibility while enabling new architectural patterns that were previously impossible or costly.
+
+Interfaces provide a clean, type-safe way to define both common operations and memory access patterns across different types, complementing CPrime's access rights system by avoiding the need for frequent casting while enabling powerful N:M composition patterns and maintaining compile-time safety and performance.

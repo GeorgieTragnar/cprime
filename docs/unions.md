@@ -2,6 +2,8 @@
 
 ## Overview
 
+CPrime unions allow templates to work with classes even though their memory layouts as a whole don't match, and furthermore allow through polymorphic tags or compile-time resolution to work with an object through switch case statements.
+
 Unions in CPrime are **memory contracts** that reserve space for a collection of types, providing a powerful alternative to inheritance-based polymorphism. Rather than being objects themselves, unions act as namespace-like memory reservations where actual objects live. This design eliminates type tracking duplication and integrates seamlessly with CPrime's existing vtable system for runtime polymorphism.
 
 ## Core Concepts
@@ -129,22 +131,24 @@ fn handle_dynamic(space: &runtime DynamicSpace) {
 }
 ```
 
-## Template Integration and Self-Expanding Unions
+## Template Enablement Despite Layout Differences
 
-One of the most powerful features is template integration with automatic union expansion:
+The most powerful feature of unions is enabling templates to work with classes even though their memory layouts as a whole don't match. This includes template integration with automatic union expansion:
 
 ### Self-Expanding Heterogeneous Containers
+
+Unions enable templates to work with different layout classes by providing a unified memory contract:
 
 ```cpp
 // User writes this simple code:
 let mut items: Vec<runtime Any> = Vec::new();
 
-// Behind the scenes, compiler maintains a growing union:
+// Behind the scenes, compiler maintains a growing union enabling template work:
 items.push(SmallItem{data: 42});          // Internal union: {SmallItem} - 8 bytes
 items.push(MediumItem{data: [1,2,3,4]});  // Internal union: {SmallItem, MediumItem} - 16 bytes -> REALLOCATION!  
 items.push(HugeItem{data: [0; 1024]});    // Internal union: {Small, Medium, Huge} - 1024 bytes -> REALLOCATION!
 
-// Access is seamless - no knowledge of internal union required
+// Template can now work with different layout classes through union abstraction
 for item in &items {
     if let Some(processable) = item.try_as::<dyn Processable>() {
         processable.process();  // Interface call via existing vtable

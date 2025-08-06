@@ -2,13 +2,19 @@
 
 ## Overview
 
-The three-class system is CPrime's fundamental architectural innovation that replaces traditional inheritance with a clear separation of concerns. Each class type serves a specific purpose and has specific constraints, enforcing good design patterns at the language level.
+The three-class system is CPrime's fundamental architectural innovation that replaces traditional inheritance with a clear separation of concerns:
+
+- **Data Classes**: RAII state holders
+- **Functional Classes**: RAII state modifiers  
+- **Danger Classes**: Full C++ semantics for interop
+
+Each class type serves a specific purpose with specific constraints, enforcing good design patterns at the language level while maintaining the RAII principle throughout.
 
 ## The Three Class Types
 
-### 1. Data Classes - Pure State
+### 1. Data Classes - RAII State Holders
 
-Data classes contain only state (fields) and basic memory management operations. They cannot have semantic methods or business logic. This includes regular data classes and unions (which are a special type of data class).
+Data classes are RAII state holders that contain only state (fields) and basic memory management operations. They cannot have semantic methods or business logic, focusing purely on holding state safely through RAII principles. This includes regular data classes and unions (which are a special type of data class).
 
 #### Syntax and Structure
 
@@ -104,9 +110,9 @@ functional class ConnectionManager {
 
 For comprehensive union documentation, see [unions.md](unions.md).
 
-### 2. Functional Classes - Pure Operations
+### 2. Functional Classes - RAII State Modifiers
 
-Functional classes contain only stateless operations. They cannot have member variables and serve as namespaces for related functionality.
+Functional classes are RAII state modifiers that contain only stateless operations. They cannot have member variables and serve as the exclusive means to modify data class state while maintaining RAII safety. They act as namespaces for related state modification functionality.
 
 #### Syntax and Structure
 
@@ -725,9 +731,9 @@ functional class MetadataRegistry {
 
 This architecture enables CPrime's revolutionary coroutine performance (100x memory density, 50-100 cycle context switches) while maintaining safety and composability.
 
-## Polymorphism in the Three-Class System
+## Polymorphism: Interfaces as Polymorphic Glue
 
-The three-class system works with CPrime's three-tier polymorphism approach:
+The three-class system works with CPrime's four-tier polymorphism approach, with interfaces acting as polymorphic glue between RAII state holders and RAII state modifiers:
 
 ### 1. Access Rights (Inheritance-like)
 Data classes can expose access rights for inheritance-like behavior:
@@ -782,7 +788,88 @@ impl Drawable for ShapeUnion {
 }
 ```
 
-### 3. Unions (Memory Contracts)
+### 3. Interface Memory Contracts (Polymorphic Glue for N:M Composition)
+Interfaces act as polymorphic glue through memory contracts, enabling N:M composition where multiple RAII state holders work with multiple RAII state modifiers through shared interface bindings, allowing abstractable work on different types using the same function calls:
+
+```cpp
+// Interface defining memory access pattern
+interface Cacheable {
+    memory_contract {
+        id: u64,           // 8 bytes at offset 0
+        timestamp: u64,    // 8 bytes at offset 8
+        void[32],          // Skip region at offset 16-47
+        hash: u32,         // 4 bytes at offset 48
+    }
+    
+    fn cache_key(&self) -> CacheKey;
+}
+
+// Multiple data classes implement same interface contract
+class UserData {
+    user_id: u64,        // Maps to id
+    created: u64,        // Maps to timestamp
+    name: String,        // Fits in void[32] region
+    status_hash: u32,    // Maps to hash
+    permissions: Vec<Permission>,  // After interface contract
+    
+    implements Cacheable {
+        id <- user_id,
+        timestamp <- created,
+        hash <- status_hash,
+        void[32] <- memory_region(16, 32),
+    }
+}
+
+class ProductData {
+    product_id: u64,     // Maps to id
+    modified: u64,       // Maps to timestamp
+    description: String, // Fits in void[32] region
+    content_hash: u32,   // Maps to hash
+    metadata: ProductMeta, // After interface contract
+    
+    implements Cacheable {
+        id <- product_id,
+        timestamp <- modified,
+        hash <- content_hash,
+        void[32] <- memory_region(16, 32),
+    }
+}
+
+// Single templated functional class works with all Cacheable implementations
+functional class CacheOps<T: Cacheable> {
+    fn store_in_cache(data: &T) -> CacheResult {
+        // Direct memory access through interface contract (zero-cost)
+        let key = data.id ^ data.timestamp;  // Same for all T
+        let entry = CacheEntry {
+            key,
+            hash: data.hash,
+            timestamp: data.timestamp,
+        };
+        
+        cache_system::insert(entry)
+    }
+    
+    fn validate_cache_entry(data: &T) -> bool {
+        // Generic validation logic works for UserData, ProductData, etc.
+        data.timestamp > 0 && data.hash != 0
+    }
+}
+
+// Usage: Single implementation works with multiple data types
+let user = UserData { ... };
+let product = ProductData { ... };
+
+CacheOps::store_in_cache(&user)?;     // Same code path
+CacheOps::store_in_cache(&product)?;  // Same code path
+```
+
+This enables powerful N:M composition where:
+- **Multiple data classes** (UserData, ProductData, etc.) can implement the same interface
+- **Multiple functional classes** can work generically across interface implementations
+- **Zero-cost abstractions** through compile-time interfaces with direct memory access
+- **Flexible abstractions** through runtime interfaces with accessor methods
+
+### 4. Unions (Memory Contracts)
 Unions are data classes that provide memory reservation for different object types:
 
 ```cpp
@@ -805,6 +892,106 @@ functional class MessageProcessor {
     }
 }
 ```
+
+## Interface Memory Contracts in the Three-Class System
+
+### Compile-Time Interface Contracts
+Compile-time interfaces require exact memory layout compliance and provide zero-cost access:
+
+```cpp
+interface Serializable {
+    memory_contract {
+        type_id: u32,       // Must be at offset 0
+        version: u16,       // Must be at offset 4
+        void[10],          // Exactly 10 bytes at offset 6-15
+        data_size: u32,     // Must be at offset 16
+    }
+    
+    fn serialize(&self) -> Vec<u8>;
+}
+
+// Data class with matching memory layout
+class DocumentData {
+    doc_type: u32,      // Offset 0 - maps to type_id
+    format_version: u16, // Offset 4 - maps to version
+    metadata: [u8; 10], // Offset 6 - fits in void[10]
+    content_length: u32, // Offset 16 - maps to data_size
+    content: String,    // After interface contract
+    
+    implements Serializable {
+        type_id <- doc_type,
+        version <- format_version,
+        void[10] <- memory_region(&metadata, 10),
+        data_size <- content_length,
+    }
+}
+
+// Zero-cost functional class operations
+functional class SerializationOps<T: Serializable> {
+    fn get_type_info(data: &T) -> (u32, u16) {
+        // Direct memory access - zero overhead
+        unsafe {
+            let type_id = *(data as *const _ as *const u32);
+            let version = *(data as *const _ as *const u16).offset(1);
+            (type_id, version)
+        }
+    }
+}
+```
+
+### Runtime Interface Contracts
+Runtime interfaces allow flexible memory layouts with accessor methods:
+
+```cpp
+runtime interface FlexibleSerializable {
+    data_contract {
+        type_id: u32,       // Must be accessible, any layout
+        version: u16,       // Must be accessible, any layout
+        data_size: u32,     // Must be accessible, any layout
+    }
+    
+    fn serialize(&self) -> Vec<u8>;
+}
+
+// Data class with any memory layout
+class FlexibleDocument {
+    title: String,          // Any offset
+    doc_type: u32,         // Anywhere in memory
+    content: Vec<u8>,       // Any layout
+    format_version: u16,    // Anywhere in memory
+    
+    implements FlexibleSerializable {
+        type_id <- doc_type,        // Generates accessor method
+        version <- format_version,  // Generates accessor method
+        data_size <- content.len() as u32,  // Computed accessor
+    }
+    
+    // Compiler generates:
+    // fn _flexible_serializable_type_id(&self) -> u32 { self.doc_type }
+    // fn _flexible_serializable_version(&self) -> u16 { self.format_version }
+    // fn _flexible_serializable_data_size(&self) -> u32 { self.content.len() as u32 }
+}
+
+// Runtime functional class operations
+functional class FlexibleSerializationOps<T: FlexibleSerializable> {
+    fn get_type_info(data: &T) -> (u32, u16) {
+        // Accessor method calls - small performance cost
+        let type_id = data._flexible_serializable_type_id();
+        let version = data._flexible_serializable_version();
+        (type_id, version)
+    }
+}
+```
+
+### Benefits of Interface Memory Contracts in Three-Class System
+
+1. **Architectural Consistency**: Interface contracts maintain the separation between data (memory layout), operations (functional classes), and capabilities
+2. **N:M Composition**: Multiple data classes can work with multiple functional classes through shared interface contracts
+3. **Performance Control**: Choose between zero-cost compile-time contracts and flexible runtime contracts
+4. **Type Safety**: Compiler verifies interface implementations and field mappings
+5. **Evolution Path**: Interface versioning through new interface names enables gradual migration
+
+The interface memory contract system revolutionizes CPrime's compositional capabilities while maintaining the three-class system's architectural clarity and performance characteristics.
 
 ## Benefits of the Three-Class System
 

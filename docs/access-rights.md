@@ -2,7 +2,9 @@
 
 ## Overview
 
-CPrime's access rights system provides **one-level mixin polymorphism** through vtable extensions. Unlike traditional hierarchical inheritance, access rights use **single-level capability composition** where multiple capabilities can be mixed together without creating inheritance hierarchies. Each access right adds its own vtable pointer and memory, similar to C++ multiple inheritance but without the complexity of deep inheritance chains.
+CPrime's access rights system provides **RAII state modifiers** that enable one-level mixin polymorphism through vtable extensions. These functional classes serve as the exclusive means to modify data class state while maintaining RAII safety.
+
+Unlike traditional hierarchical inheritance, access rights use **single-level capability composition** where multiple RAII state modifiers can be mixed together without creating inheritance hierarchies. Each access right adds its own vtable pointer and memory, similar to C++ multiple inheritance but without the complexity of deep inheritance chains.
 
 This system offers both compile-time (static) and runtime (dynamic) variants, allowing developers to choose between zero-cost abstractions and dynamic flexibility.
 
@@ -58,9 +60,9 @@ LoggingOps::log_send(&full_connection, data.len());
 | **Memory Layout** | Base + derived fields in sequence | Base + capability vtables |
 | **Casting** | Upcast/downcast through hierarchy | Direct capability casting |
 
-### Access Rights Are Inheritance Extensions
+### Access Rights Are RAII State Modifier Extensions
 
-Access rights in CPrime work like C++ inheritance, adding vtable pointers and memory to the base data class:
+Access rights in CPrime work as RAII state modifiers, adding vtable pointers and memory to the base data class to enable safe state modification:
 
 ```cpp
 // Base data class
@@ -1066,4 +1068,332 @@ functional class SubscriptionManager {
 }
 ```
 
-Access rights provide powerful inheritance-like polymorphism with explicit memory costs and the choice between compile-time performance and runtime flexibility. In the channel system, they serve as the automatic subscription mechanism, eliminating the need for explicit subscribe/unsubscribe operations while providing strong capability-based security.
+## Templated Access Rights through Interface Memory Contracts
+
+### N:M Composition with Interface Contracts
+
+Interface memory contracts revolutionize access rights by enabling **templated access rights** that work generically across multiple data classes. This enables true N:M composition where multiple data classes can work with multiple access rights through shared interface bindings.
+
+### Generic Functional Classes
+
+Instead of creating separate functional classes for each data type, interfaces enable generic operations:
+
+```cpp
+// Traditional approach: Separate functional classes for each type
+functional class UserCacheOps {
+    fn store(user: &UserData) -> Result<()> { ... }
+    fn retrieve(user_id: u64) -> Option<UserData> { ... }
+}
+
+functional class ProductCacheOps {
+    fn store(product: &ProductData) -> Result<()> { ... }
+    fn retrieve(product_id: u64) -> Option<ProductData> { ... }
+}
+
+// Interface-enabled approach: Single generic functional class
+interface Cacheable {
+    memory_contract {
+        id: u64,
+        timestamp: u64,
+        void[32],
+        hash: u32,
+    }
+    fn cache_key(&self) -> CacheKey;
+}
+
+// Generic functional class works with ANY Cacheable implementation
+functional class CacheOps<T: Cacheable> {
+    fn store(data: &T) -> Result<()> {
+        let key = data.id;  // Direct access through interface contract
+        let entry = CacheEntry {
+            key,
+            timestamp: data.timestamp,
+            hash: data.hash,
+            data: serialize_cacheable(data),
+        };
+        CACHE_STORE.insert(entry)
+    }
+    
+    fn retrieve_by_key(key: u64) -> Option<T> {
+        CACHE_STORE.get(&key)
+            .and_then(|entry| deserialize_cacheable::<T>(&entry.data))
+    }
+    
+    fn invalidate_expired(max_age: Duration) -> usize {
+        let cutoff = SystemTime::now() - max_age;
+        let cutoff_timestamp = cutoff.duration_since(UNIX_EPOCH).unwrap().as_secs();
+        
+        CACHE_STORE.retain(|_, entry| entry.timestamp >= cutoff_timestamp);
+        // Returns count of invalidated entries
+        CACHE_STORE.len()
+    }
+}
+```
+
+### Multiple Data Classes Implementing Same Interface
+
+Multiple data classes can implement the same interface contract, enabling uniform access:
+
+```cpp
+// User data implementing Cacheable
+class UserData {
+    user_id: u64,        // Maps to id
+    last_login: u64,     // Maps to timestamp
+    profile: UserProfile, // Fits in void[32]
+    profile_hash: u32,   // Maps to hash
+    permissions: Vec<Permission>,
+    
+    implements Cacheable {
+        id <- user_id,
+        timestamp <- last_login,
+        hash <- profile_hash,
+        void[32] <- memory_region(&profile, sizeof(UserProfile)),
+    }
+    
+    exposes UserOps { user_id, profile, permissions }
+    constructed_by: UserManager,
+}
+
+// Product data implementing Cacheable  
+class ProductData {
+    product_id: u64,     // Maps to id
+    modified_at: u64,    // Maps to timestamp
+    metadata: ProductMeta, // Fits in void[32]
+    content_hash: u32,   // Maps to hash
+    inventory: ProductInventory,
+    
+    implements Cacheable {
+        id <- product_id,
+        timestamp <- modified_at,
+        hash <- content_hash,
+        void[32] <- memory_region(&metadata, sizeof(ProductMeta)),
+    }
+    
+    exposes ProductOps { product_id, metadata, inventory }
+    constructed_by: ProductManager,
+}
+
+// Order data implementing Cacheable
+class OrderData {
+    order_id: u64,       // Maps to id
+    created_at: u64,     // Maps to timestamp
+    order_summary: OrderSummary, // Fits in void[32]
+    summary_hash: u32,   // Maps to hash
+    items: Vec<OrderItem>,
+    
+    implements Cacheable {
+        id <- order_id,
+        timestamp <- created_at,
+        hash <- summary_hash,
+        void[32] <- memory_region(&order_summary, sizeof(OrderSummary)),
+    }
+    
+    exposes OrderOps { order_id, order_summary, items }
+    constructed_by: OrderManager,
+}
+```
+
+### Cross-Type Operations with Template Constraints
+
+Generic functional classes can operate across all types implementing the interface:
+
+```cpp
+// Audit operations work with any data type implementing Auditable
+interface Auditable {
+    memory_contract {
+        entity_id: u64,
+        user_id: u64,
+        event_timestamp: u64,
+        audit_hash: u32,
+    }
+    fn audit_signature(&self) -> AuditSignature;
+}
+
+// Generic audit operations
+functional class AuditOps<T: Auditable> {
+    fn log_access(data: &T, accessing_user: UserId) -> Result<()> {
+        let audit_entry = AuditEntry {
+            entity_id: data.entity_id,      // Direct interface access
+            accessed_by: accessing_user,
+            accessed_at: SystemTime::now(),
+            original_user: data.user_id,    // Direct interface access
+            event_time: data.event_timestamp, // Direct interface access
+            integrity_hash: data.audit_hash, // Direct interface access
+        };
+        
+        AUDIT_LOG.append(audit_entry)
+    }
+    
+    fn verify_integrity(data: &T) -> IntegrityResult {
+        let computed_hash = calculate_audit_hash(
+            data.entity_id,
+            data.user_id,
+            data.event_timestamp
+        );
+        
+        if computed_hash == data.audit_hash {
+            IntegrityResult::Valid
+        } else {
+            IntegrityResult::Corrupted {
+                expected: data.audit_hash,
+                computed: computed_hash,
+            }
+        }
+    }
+    
+    fn find_related_events(data: &T, time_window: Duration) -> Vec<AuditEntry> {
+        let start_time = data.event_timestamp.saturating_sub(time_window.as_secs());
+        let end_time = data.event_timestamp + time_window.as_secs();
+        
+        AUDIT_LOG.entries()
+            .filter(|entry| {
+                entry.entity_id == data.entity_id &&
+                entry.event_time >= start_time &&
+                entry.event_time <= end_time
+            })
+            .collect()
+    }
+}
+
+// Multiple data types can implement Auditable
+impl Auditable for UserData {
+    // Maps UserData fields to Auditable contract
+    entity_id <- user_id,
+    user_id <- user_id,
+    event_timestamp <- last_login,
+    audit_hash <- profile_hash,
+}
+
+impl Auditable for OrderData {
+    // Maps OrderData fields to Auditable contract  
+    entity_id <- order_id,
+    user_id <- customer_id,
+    event_timestamp <- created_at,
+    audit_hash <- summary_hash,
+}
+
+// Single implementation works across types
+let user = UserData { ... };
+let order = OrderData { ... };
+
+AuditOps::log_access(&user, current_user_id)?;   // Same code path
+AuditOps::log_access(&order, current_user_id)?;  // Same code path
+```
+
+### Interface-Based Access Rights Composition
+
+Data classes can implement multiple interfaces, enabling rich compositional patterns:
+
+```cpp
+// Data class implementing multiple interface contracts
+class CustomerTransaction {
+    transaction_id: u64,
+    customer_id: u64,
+    amount: Money,
+    processed_at: u64,
+    transaction_hash: u32,
+    details: TransactionDetails,
+    
+    // Implements multiple interfaces
+    implements Cacheable {
+        id <- transaction_id,
+        timestamp <- processed_at,
+        hash <- transaction_hash,
+        void[32] <- memory_region(&amount, sizeof(Money)),
+    }
+    
+    implements Auditable {
+        entity_id <- transaction_id,
+        user_id <- customer_id,
+        event_timestamp <- processed_at,
+        audit_hash <- transaction_hash,
+    }
+    
+    implements Billable {
+        bill_id <- transaction_id,
+        amount <- amount,
+        customer <- customer_id,
+        processed <- processed_at,
+    }
+    
+    // Traditional access rights for specific operations
+    exposes TransactionOps { transaction_id, amount, details }
+    exposes AccountingOps { transaction_id, amount, processed_at }
+    
+    constructed_by: TransactionManager,
+}
+
+// Can be used with multiple generic functional classes
+let transaction = CustomerTransaction { ... };
+
+// Interface-based generic operations
+CacheOps::store(&transaction)?;           // Through Cacheable
+AuditOps::log_access(&transaction, user_id)?; // Through Auditable  
+BillingOps::process_payment(&transaction)?;   // Through Billable
+
+// Traditional access rights operations
+TransactionOps::validate(&transaction)?;      // Specific operations
+AccountingOps::reconcile(&transaction)?;      // Specific operations
+```
+
+### Performance Characteristics of Templated Access Rights
+
+#### Compile-Time Interface Access (Zero-Cost)
+```cpp
+functional class FastCacheOps<T: Cacheable> {  // Compile-time interface
+    fn get_cache_key(data: &T) -> u64 {
+        // Direct memory access - zero overhead
+        unsafe {
+            let id = *(data as *const _ as *const u64);
+            let timestamp = *(data as *const _ as *const u64).offset(1);
+            id ^ timestamp
+        }
+    }
+}
+```
+
+#### Runtime Interface Access (Flexible)
+```cpp
+functional class FlexibleCacheOps<T: FlexibleCacheable> {  // Runtime interface
+    fn get_cache_key(data: &T) -> u64 {
+        // Accessor method calls - small cost for flexibility
+        let id = data._flexible_cacheable_id();
+        let timestamp = data._flexible_cacheable_timestamp();
+        id ^ timestamp
+    }
+}
+```
+
+### Benefits of Templated Access Rights
+
+1. **Code Reuse**: Single implementation works across multiple data types
+2. **Type Safety**: Compiler verifies interface contracts at compile time
+3. **Performance Options**: Choose between zero-cost and flexible access
+4. **Compositional Power**: Data classes can implement multiple interfaces
+5. **Evolution**: Add new interfaces without changing existing code
+
+### Migration from Traditional to Templated Access Rights
+
+```cpp
+// Before: Multiple separate functional classes
+functional class UserCacheOps { ... }
+functional class ProductCacheOps { ... }
+functional class OrderCacheOps { ... }
+
+// After: Single templated functional class
+functional class CacheOps<T: Cacheable> { ... }
+
+// Data classes implement interface
+class UserData implements Cacheable { ... }
+class ProductData implements Cacheable { ... }  
+class OrderData implements Cacheable { ... }
+
+// Usage becomes uniform
+CacheOps::store(&user_data)?;
+CacheOps::store(&product_data)?;
+CacheOps::store(&order_data)?;
+```
+
+This represents a fundamental evolution in CPrime's access rights system, enabling powerful generic programming while maintaining type safety and performance characteristics.
+
+Access rights provide powerful inheritance-like polymorphism with explicit memory costs and the choice between compile-time performance and runtime flexibility. With interface memory contracts, they now also enable N:M composition through templated functional classes that work generically across multiple data types. In the channel system, they serve as the automatic subscription mechanism, eliminating the need for explicit subscribe/unsubscribe operations while providing strong capability-based security.
