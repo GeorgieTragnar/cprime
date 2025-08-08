@@ -2,15 +2,22 @@
 
 ## Overview
 
-CPrime unions allow templates to work with classes even though their memory layouts as a whole don't match, and furthermore allow through polymorphic tags or compile-time resolution to work with an object through switch case statements.
+CPrime unions are **memory space constructs** (not classes) that enable polymorphic object storage through two distinct mechanisms: compile-time locked memory contracts with discriminants, or runtime elevators with polymorphic tagging for dynamic type identification.
 
-Unions in CPrime are **memory contracts** that reserve space for a collection of types, providing a powerful alternative to inheritance-based polymorphism. Rather than being objects themselves, unions act as namespace-like memory reservations where actual objects live. This design eliminates type tracking duplication and integrates seamlessly with CPrime's existing vtable system for runtime polymorphism.
+**Important**: Unions are not objects or classes themselves - they are language constructs that manage memory space for different object types.
+
+Unions offer two variants:
+
+1. **Compile-time Unions**: Fixed memory size with discriminant tags - locked memory contracts
+2. **Runtime Unions**: Growable size with resize overhead - runtime elevators using polymorphic tagging
+
+Rather than being objects themselves, unions act as memory space managers where actual objects live. This design integrates with CPrime's three-class system and existing vtable system for runtime polymorphism.
 
 ## Core Concepts
 
-### Unions as Memory Contracts
+### Unions as Memory Space Constructs
 
-Unions are **not objects** - they are memory layout contracts that reserve enough space to hold any of their variants:
+Unions are **not objects** - they are memory space constructs that manage storage for different object types through two mechanisms:
 
 ```cpp
 union ConnectionSpace {
@@ -22,37 +29,38 @@ union ConnectionSpace {
 // No union "object" exists - just properly-sized memory space
 ```
 
-### How Unions Differ from Other Polymorphism
+### How Union Constructs Differ from Other Polymorphism
 
-1. **Access Rights**: Same object, different vtable views, casting required
-2. **Interfaces**: Common contracts across types, shared vtable patterns  
-3. **Unions**: Memory space for different objects, direct object access
+1. **Functional Classes (Access Rights)**: Same object, different vtable views, casting required
+2. **Interface Constructs**: Common contracts across types via memory contracts or accessors
+3. **Union Constructs**: Memory space for different objects with polymorphic tagging for identification
 
-**Key Insight**: You never work with "the union" - you work with objects that live in union-managed memory.
+**Key Insight**: You never work with "the union" - you work with objects that live in union-managed memory space, identified through polymorphic tagging.
 
-### Memory Layout Strategy
+### Memory Layout Strategy: Two Union Variants
 
-Union memory layout depends on whether the variants have runtime type information:
+Union constructs manage memory through two distinct approaches:
 
-**Compile-Time Variants (with discriminant):**
+**Compile-Time Unions (Fixed Size, Locked Memory Contracts):**
 ```cpp
 union CompileTimeMessage {
     Connect { addr: String, port: u16 },
     Data { payload: Vec<u8> },
 }
 // Layout: [discriminant: u8][padding][data: max(variants)]
-// Total: 1 + 7 + 32 = 40 bytes
+// Total: Fixed size - 1 + 7 + 32 = 40 bytes
+// No resize overhead - size determined at compile time
 ```
 
-**Runtime Variants (vtable-based):**
+**Runtime Unions (Growable Size, Runtime Elevators with Polymorphic Tagging):**
 ```cpp
 union runtime RuntimeSpace {
     UserConn(runtime Connection<UserOps>),
     AdminConn(runtime Connection<AdminOps>),
 }
-// Layout: [data: max(variants)] - no separate discriminant!
-// Type identification via existing vtable system
-// Total: 56 bytes (just the largest variant)
+// Layout: [data: current_variant_size] - polymorphic tagging for identification
+// Growable size with resize overhead when switching between different-sized variants
+// Uses polymorphic tagging (vtables/type info) for runtime type identification
 
 ## Working with Union Memory Spaces
 

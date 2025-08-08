@@ -2,7 +2,7 @@
 
 ## Core Architecture
 
-### Four-Class System
+### Three-Class System
 
 **Data Classes**: RAII state holders
 - Pure state with memory operations only
@@ -10,20 +10,28 @@
 - Foundation for all other systems
 - **`semconst` fields**: Enforce 1:1 move-in/move-out policy within local scope for atomic value replacement
 
-**Access Rights (Functional Classes)**: RAII state modifiers
+**Functional Classes (Access Rights)**: RAII state modifiers
 - Stateless operations that modify data class state
 - Enable inheritance-like polymorphism with explicit memory costs
 - Can be templated through interface contracts
 
-**Interfaces**: Constructs for exact memory contracts and function signature contracts acting as polymorphic glue between state holders and state modifiers, allowing abstractable work on different types using the same function calls
-- Traditional interfaces: Common vtable contracts
-- Memory contracts: Enable N:M composition
-- Single declaration principle: Either compile-time OR runtime, never both
+**Danger Classes**: C++ equivalent for interop
+- Full C++ semantics (stateful and functional)
+- Used for C++ compatibility and legacy integration
 
-**Unions**: Allow templates to work with classes even though their memory layouts as a whole don't match, and furthermore allow through polymorphic tags or compile-time resolution to work with an object through switch case statements
-- Memory contracts reserving space for largest variant
-- Objects live inside union space, not "the union" itself
-- Enable heterogeneous containers and generic programming
+### Supporting Constructs
+
+**Interfaces**: Memory contracts or accessor constructs for polymorphic glue between classes
+- **Compile-time interfaces**: Memory contracts with zero overhead
+- **Runtime interfaces**: Accessor-based with overhead
+- Single declaration principle: Either compile-time OR runtime, never both
+- Enable N:M composition between data and functional classes
+
+**Unions**: Memory space constructs with polymorphic tagging
+- **Compile-time unions**: Fixed memory size, locked memory contracts
+- **Runtime unions**: Growable size with resize overhead, runtime elevators for objects
+- Use polymorphic tagging for type identification
+- Enable heterogeneous containers and pattern matching
 
 ## Revolutionary Systems
 
@@ -79,12 +87,12 @@
 
 ## Polymorphism Tiers
 
-1. **Access Rights**: Inheritance-like with explicit memory costs
-2. **Traditional Interfaces**: Shared operations across types
-3. **Interface Memory Contracts**: N:M composition enablement
-4. **Unions**: Heterogeneous collections and pattern matching
+1. **Functional Classes (Access Rights)**: Inheritance-like with explicit memory costs
+2. **Traditional Interfaces**: Shared operations across types via constructs
+3. **Interface Memory Contracts**: N:M composition enablement via constructs
+4. **Union Pattern Matching**: Heterogeneous collections via runtime elevators
 
-Each tier serves specific use cases while maintaining type safety and performance characteristics.
+Each tier serves specific use cases while maintaining type safety and performance characteristics. Interfaces and unions are constructs that enable polymorphism, not classes themselves.
 
 ## Design Philosophy
 

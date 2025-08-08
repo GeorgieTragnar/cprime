@@ -14,7 +14,7 @@ Each class type serves a specific purpose with specific constraints, enforcing g
 
 ### 1. Data Classes - RAII State Holders
 
-Data classes are RAII state holders that contain only state (fields) and basic memory management operations. They cannot have semantic methods or business logic, focusing purely on holding state safely through RAII principles. This includes regular data classes and unions (which are a special type of data class).
+Data classes are RAII state holders that contain only state (fields) and basic memory management operations. They cannot have semantic methods or business logic, focusing purely on holding state safely through RAII principles.
 
 #### Syntax and Structure
 
@@ -187,9 +187,9 @@ This three-tier field system complements CPrime's class architecture by:
 - **Assign**: Private by default, accessible to stack containers  
 - **Drop**: Called automatically at end of scope (RAII)
 
-#### Union Data Classes (Memory Contracts)
+#### Union Constructs (Memory Space Management)
 
-Unions are special data classes that act as **memory contracts** - they reserve enough space for any of their variants but never exist as objects themselves:
+While not classes themselves, unions are **memory space constructs** that work with the three-class system. They reserve memory space for different object types but never exist as objects themselves:
 
 ```cpp
 union ConnectionSpace {
@@ -221,16 +221,16 @@ functional class ConnectionManager {
 }
 ```
 
-**Union Characteristics:**
-- **Memory contracts**: Reserve space for largest variant, objects live inside
-- **No union objects**: You never work with "the union", only objects in union space
-- **Unified type system**: Runtime unions use existing vtable system (no duplicate tracking)
-- **Template integration**: Enable self-expanding heterogeneous containers
-- **Performance**: Compile-time (traditional) or runtime (vtable-based) variants
+**Union Construct Characteristics:**
+- **Memory space constructs**: Reserve space for objects, with polymorphic tagging for identification
+- **Not objects**: You never work with "the union", only objects in union-managed space
+- **Two variants**: Compile-time (fixed size) or runtime (growable with resize overhead)
+- **Polymorphic tagging**: Runtime unions use tagging (vtables/type info) for type identification
+- **Integration**: Work seamlessly with the three-class system
 
-**Union vs Access Rights:**
-- **Unions**: Memory reservation for different objects, direct object access
-- **Access Rights**: Same object with different vtable views, casting required
+**Union Constructs vs Functional Classes (Access Rights):**
+- **Union Constructs**: Memory space management for different objects with polymorphic tagging
+- **Functional Classes (Access Rights)**: Same object with different vtable views, casting required
 
 For comprehensive union documentation, see [unions.md](unions.md).
 
@@ -334,17 +334,17 @@ functional class StringOps {
 #### Key Rules for Functional Classes
 
 1. **No member variables**: Enforced at compile time
-2. **Optional constructor/destructor**: For managing paired data classes or unions
+2. **Optional constructor/destructor**: For managing paired data classes or objects in union constructs
 3. **Without constructor = module**: Pure utility functions
 4. **All operations are static**: No `self` parameter except in constructor/destructor
 5. **Stateless by design**: Cannot maintain state between calls
-6. **Can operate on unions**: Pattern matching on union variants is allowed
+6. **Can operate on union constructs**: Pattern matching on objects in union space is allowed
 
 #### Constructor/Destructor Semantics
 
-- **Constructor**: Returns instance of paired data class or union
-- **Destructor**: Cleans up data class/union instance (called automatically)
-- **Pairing**: One functional class can manage one data class or union type
+- **Constructor**: Returns instance of paired data class or object in union construct
+- **Destructor**: Cleans up data class/object instance (called automatically) 
+- **Pairing**: One functional class can manage one data class or objects in union construct
 - **No constructor**: Functional class becomes a pure module
 
 ### 3. Danger Classes - Full C++ Semantics

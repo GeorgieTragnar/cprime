@@ -2,20 +2,22 @@
 
 ## Overview
 
-CPrime interfaces act as **polymorphic glue** between RAII state holders (data classes) and RAII state modifiers (functional classes). They provide constructs for exact memory contracts and function signature contracts, enabling abstractable work on different types using the same function calls.
+CPrime interfaces are **polymorphic constructs** (not classes) that act as glue between RAII state holders (data classes) and RAII state modifiers (functional classes). These constructs provide either memory contracts or accessor methods for abstractable work on different types using the same function calls.
 
-They offer two distinct capabilities:
+**Important**: Interfaces are not objects or classes themselves - they are language constructs that enable polymorphism.
 
-1. **Traditional Interfaces**: Common vtable contracts for shared operations across different types
-2. **Interface Memory Contracts**: Memory access patterns enabling N:M composition between data classes and functional classes
+They offer two distinct variants:
 
-While access rights provide inheritance-like polymorphism with explicit memory costs, interfaces serve as the crucial bridging mechanism in CPrime's four-level polymorphism system: access rights (inheritance-like), traditional interfaces (shared operations), interface memory contracts (N:M composition), and unions (pattern matching).
+1. **Compile-time Interfaces**: Memory contracts with zero overhead - direct memory access
+2. **Runtime Interfaces**: Accessor-based with method call overhead - flexible layouts
+
+While functional classes (access rights) provide inheritance-like polymorphism with explicit memory costs, interfaces serve as constructs in CPrime's polymorphism system: functional classes (inheritance-like), traditional interfaces (shared operations via constructs), interface memory contracts (N:M composition via constructs), and unions (pattern matching via constructs).
 
 ## Core Concepts
 
-### Interfaces vs Access Rights
+### Interface Constructs vs Functional Classes (Access Rights)
 
-Interfaces and access rights serve different purposes in CPrime's polymorphism system:
+Interface constructs and functional classes (access rights) serve different purposes in CPrime's polymorphism system:
 
 ```cpp
 // Access rights: Inheritance-like with memory cost
@@ -656,9 +658,9 @@ functional class FlexibleCacheOps<T: FlexibleCacheable> {
 }
 ```
 
-### Single Declaration Principle
+### Single Declaration Principle for Interface Constructs
 
-Each interface can be declared as **either** compile-time or runtime, but **never both**:
+Each interface construct can be declared as **either** compile-time or runtime, but **never both**:
 
 ```cpp
 // Option A: Compile-time interface (zero-cost, inflexible)
