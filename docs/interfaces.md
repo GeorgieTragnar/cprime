@@ -11,16 +11,16 @@ They offer two distinct variants:
 1. **Compile-time Interfaces**: Memory contracts with zero overhead - direct memory access
 2. **Runtime Interfaces**: Accessor-based with method call overhead - flexible layouts
 
-While functional classes (access rights) provide inheritance-like polymorphism with explicit memory costs, interfaces serve as constructs in CPrime's polymorphism system: functional classes (inheritance-like), traditional interfaces (shared operations via constructs), interface memory contracts (N:M composition via constructs), and unions (pattern matching via constructs).
+While functional classes provide inheritance-like polymorphism (gaining access rights to data classes with explicit memory costs), interfaces serve as constructs in CPrime's polymorphism system: functional classes (inheritance-like), traditional interfaces (shared operations via constructs), interface memory contracts (N:M composition via constructs), and unions (pattern matching via constructs).
 
 ## Core Concepts
 
-### Interface Constructs vs Functional Classes (Access Rights)
+### Interface Constructs vs Functional Classes
 
-Interface constructs and functional classes (access rights) serve different purposes in CPrime's polymorphism system:
+Interface constructs and functional classes serve different purposes in CPrime's polymorphism system:
 
 ```cpp
-// Access rights: Inheritance-like with memory cost
+// Functional class: Inheritance-like with memory cost via access rights
 class Connection {
     handle: DbHandle,
     
@@ -34,7 +34,7 @@ interface Queryable {
     fn get_connection_info(&self) -> ConnectionInfo;
 }
 
-// Access rights implement interfaces
+// Functional classes implement interfaces
 impl Queryable for Connection<UserOps> {
     fn execute_query(&self, sql: &str) -> Result<QueryResult> {
         UserOps::execute_limited_query(self, sql)
@@ -161,7 +161,7 @@ impl MathConstants for Point {
 }
 ```
 
-### Implementing for Access Rights
+### Implementing for Functional Classes
 
 ```cpp
 class FileData {
@@ -172,7 +172,7 @@ class FileData {
     exposes WriteOps { handle }
 }
 
-// Different access rights provide different interface implementations
+// Different functional classes provide different interface implementations
 impl Readable for FileData<ReadOps> {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         ReadOps::read_bytes(self, buf)
@@ -207,7 +207,7 @@ where T: Display
     }
 }
 
-// Implement for access rights with specific capabilities
+// Implement for functional classes with specific capabilities
 impl<A> Queryable for Connection<A>
 where A: DatabaseAccess
 {
@@ -364,9 +364,9 @@ where T: Readable + Writable
 {}
 ```
 
-## Interfaces with Access Rights Integration
+## Interfaces with Functional Classes Integration
 
-### Access Rights Implementing Common Interfaces
+### Functional Classes Implementing Common Interfaces
 
 ```cpp
 // Common interface across different access levels
@@ -375,7 +375,7 @@ interface DatabaseOperation {
     fn get_permissions(&self) -> PermissionSet;
 }
 
-// Different access rights provide different implementations
+// Different functional classes provide different implementations
 impl DatabaseOperation for Connection<UserOps> {
     fn execute(&self, query: &str) -> Result<QueryResult> {
         if is_safe_query(query) {
@@ -418,7 +418,7 @@ where T: DatabaseOperation
 ### Runtime Interface Resolution
 
 ```cpp
-// Dynamic interface dispatch with access rights
+// Dynamic interface dispatch with functional classes
 fn process_dynamic_connection(conn: &runtime Connection) -> Result<String> {
     // Try different interfaces based on runtime type
     if let Some(queryable) = conn.as_interface::<dyn Queryable>() {
@@ -508,7 +508,7 @@ interface Seek {
 interface RandomAccess: Read + Write + Seek {}
 ```
 
-### When to Use Interfaces vs Access Rights
+### When to Use Interfaces vs Functional Classes
 
 ```cpp
 // Use interfaces for:
@@ -524,7 +524,7 @@ fn save_to_file<T: Serializable>(item: &T, path: &str) -> Result<()> {
     std::fs::write(path, data)
 }
 
-// Use access rights for:
+// Use functional classes for:
 // 1. Capability-based security
 class SecureData {
     secret: Secret,
@@ -1042,4 +1042,4 @@ CPrime's interface system has evolved to support increasingly sophisticated comp
 
 This evolution maintains backward compatibility while enabling new architectural patterns that were previously impossible or costly.
 
-Interfaces provide a clean, type-safe way to define both common operations and memory access patterns across different types, complementing CPrime's access rights system by avoiding the need for frequent casting while enabling powerful N:M composition patterns and maintaining compile-time safety and performance.
+Interfaces provide a clean, type-safe way to define both common operations and memory access patterns across different types, complementing CPrime's functional classes system by avoiding the need for frequent casting while enabling powerful N:M composition patterns and maintaining compile-time safety and performance.

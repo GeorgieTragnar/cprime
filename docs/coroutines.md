@@ -247,9 +247,9 @@ defer WebSocketManager::destruct(&mut websocket_handler);
 let response = WebSocketManager::handle_message(&mut websocket_handler, incoming_msg)?;
 ```
 
-### Access Rights for Coroutine Capabilities
+### Functional Classes for Coroutine Capabilities
 
-Coroutines integrate with CPrime's access rights system for capability-based security:
+Coroutines integrate with CPrime's functional classes, gaining access rights for capability-based security:
 
 ```cpp
 class DatabaseCoro {
@@ -431,7 +431,7 @@ async fn parser_with_growth(input: &str) -> ParseResult {
 
 ## Integration with CPrime's Polymorphism
 
-### Access Rights Across Suspensions
+### Functional Classes Across Suspensions
 
 ```cpp
 class ServiceCoro {
@@ -456,7 +456,7 @@ async fn handle_user_request(request: UserRequest) -> UserResponse {
     }
 }
 
-// Coroutine maintains access rights across all suspension points
+// Coroutine maintains functional class access rights across all suspension points
 let user_coro = ServiceManager::construct_user_handler(request);
 // user_coro can only use UserServiceOps, not AdminServiceOps
 ```
@@ -1292,17 +1292,17 @@ async fn consumer(ch: Channel<Item>) {
 }
 ```
 
-### Access Rights with Channel Coroutines
+### Functional Classes with Channel Coroutines
 
-Coroutines preserve channel access rights across suspensions:
+Coroutines preserve functional class access rights to channels across suspensions:
 
 ```cpp
-// Coroutine with channel access rights
+// Coroutine with functional class access rights to channel
 class ChannelWorkerCoro {
     stack_memory: *mut u8,
     channel_ref: &Channel<Message>,
     
-    // Access rights preserved across suspensions
+    // Functional class access rights preserved across suspensions
     exposes SendOps { channel_ref }
     exposes RecvOps { channel_ref }
     

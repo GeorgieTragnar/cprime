@@ -10,8 +10,9 @@
 - Foundation for all other systems
 - **`semconst` fields**: Enforce 1:1 move-in/move-out policy within local scope for atomic value replacement
 
-**Functional Classes (Access Rights)**: RAII state modifiers
+**Functional Classes**: RAII state modifiers
 - Stateless operations that modify data class state
+- Gain access rights to data classes through interface contracts at instantiation
 - Enable inheritance-like polymorphism with explicit memory costs
 - Can be templated through interface contracts
 
@@ -44,7 +45,7 @@
 ### Channels
 - Three-layer architecture: Language (semantics), Library (storage), Scheduler (lifecycle)
 - Competitive consumption: Each message consumed by exactly ONE receiver
-- Access rights as automatic subscription mechanism
+- Functional classes as automatic subscription mechanism through access rights
 - Memory safety through reference counting
 
 ### Interface Memory Contracts
@@ -87,7 +88,7 @@
 
 ## Polymorphism Tiers
 
-1. **Functional Classes (Access Rights)**: Inheritance-like with explicit memory costs
+1. **Functional Classes**: Inheritance-like with explicit memory costs (via access rights mechanism)
 2. **Traditional Interfaces**: Shared operations across types via constructs
 3. **Interface Memory Contracts**: N:M composition enablement via constructs
 4. **Union Pattern Matching**: Heterogeneous collections via runtime elevators

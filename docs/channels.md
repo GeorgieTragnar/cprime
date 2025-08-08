@@ -289,16 +289,16 @@ functional class RecvOps<T> {
 }
 ```
 
-## Access Rights as Subscription
+## Functional Classes as Subscription
 
-Access rights provide automatic subscription management without explicit subscribe/unsubscribe:
+Functional classes provide automatic subscription management through access rights without explicit subscribe/unsubscribe:
 
 ```cpp
 // Message bus with channel inside
 class MessageBus {
     channel: Channel<Message>,
     
-    // Access rights define capabilities
+    // Functional classes gain access rights to define capabilities
     exposes SendOps { channel }
     exposes RecvOps { channel }
     
@@ -313,21 +313,21 @@ functional class MessageBusOps {
     }
     
     fn create_producer(bus: &MessageBus) -> Producer {
-        // Producer gets send capability through access rights
+        // Producer functional class gets send capability through access rights
         Producer {
             bus_ref: bus with SendOps,  // Only send access
         }
     }
     
     fn create_consumer(bus: &MessageBus) -> Consumer {
-        // Consumer gets receive capability through access rights
+        // Consumer functional class gets receive capability through access rights
         Consumer {
             bus_ref: bus with RecvOps,  // Only receive access
         }
     }
 }
 
-// Usage - subscription through access rights
+// Usage - functional classes gain subscription through access rights
 let bus = MessageBusOps::construct(100);
 
 // Create producers with send-only access

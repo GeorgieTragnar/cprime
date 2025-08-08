@@ -542,7 +542,7 @@ functional class ProcessorOps {
 }
 ```
 
-### Signal Handling with Access Rights
+### Signal Handling with Functional Classes
 
 ```cpp
 class SecureProcessor {

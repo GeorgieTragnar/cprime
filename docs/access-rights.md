@@ -1,10 +1,12 @@
-# CPrime Access Rights System
+# CPrime Functional Classes and Access Rights System
 
 ## Overview
 
-CPrime's access rights system provides **RAII state modifiers** that enable one-level mixin polymorphism through vtable extensions. These functional classes serve as the exclusive means to modify data class state while maintaining RAII safety.
+**Functional Classes** are RAII state modifiers that gain **access rights** to data classes through interface contracts at instantiation. This document explains both the functional classes themselves and the access rights mechanism that enables them to work with data classes.
 
-Unlike traditional hierarchical inheritance, access rights use **single-level capability composition** where multiple RAII state modifiers can be mixed together without creating inheritance hierarchies. Each access right adds its own vtable pointer and memory, similar to C++ multiple inheritance but without the complexity of deep inheritance chains.
+Functional classes enable one-level mixin polymorphism through vtable extensions. They serve as the exclusive means to modify data class state while maintaining RAII safety. The **access rights mechanism** occurs when functional classes are instantiated with data classes, granting them specific capabilities through interface contracts.
+
+Unlike traditional hierarchical inheritance, functional classes use **single-level capability composition** where multiple RAII state modifiers can be mixed together without creating inheritance hierarchies. Each functional class gains access rights by adding its own vtable pointer and memory to the data class, similar to C++ multiple inheritance but without the complexity of deep inheritance chains.
 
 This system offers both compile-time (static) and runtime (dynamic) variants, allowing developers to choose between zero-cost abstractions and dynamic flexibility.
 
@@ -60,9 +62,9 @@ LoggingOps::log_send(&full_connection, data.len());
 | **Memory Layout** | Base + derived fields in sequence | Base + capability vtables |
 | **Casting** | Upcast/downcast through hierarchy | Direct capability casting |
 
-### Access Rights Are RAII State Modifier Extensions
+### Functional Classes Gain Access Rights Through Interface Contracts
 
-Access rights in CPrime work as RAII state modifiers, adding vtable pointers and memory to the base data class to enable safe state modification:
+Functional classes in CPrime gain access rights to data classes by adding vtable pointers and memory to the base data class through interface contracts, enabling safe state modification:
 
 ```cpp
 // Base data class
@@ -100,11 +102,11 @@ let admin_conn: Connection<AdminOps> = create_admin_connection();
 AdminOps::delete_table(&admin_conn);  // ✓ Direct access
 ```
 
-## Compile-Time vs Runtime Access Rights
+## Compile-Time vs Runtime Functional Classes
 
-### Compile-Time Access Rights (Default)
+### Compile-Time Functional Classes (Default)
 
-By default, access rights are compile-time with restricted casting:
+By default, functional classes establish access rights at compile-time with restricted casting:
 
 ```cpp
 class SecureData {
@@ -131,9 +133,9 @@ let same = user_data.dynamic_cast::<UserOps>();  // ✓ Returns Some
 let diff = user_data.dynamic_cast::<AdminOps>(); // ✗ Returns None
 ```
 
-### Runtime Access Rights
+### Runtime Functional Classes
 
-Runtime access rights enable full polymorphism with dynamic dispatch:
+Runtime functional classes enable full polymorphism with dynamic dispatch through access rights:
 
 ```cpp
 class DynamicConnection {
@@ -165,9 +167,9 @@ if conn.has_capability::<AdminOps>() {
 }
 ```
 
-### Access Rights and Field Modifiers
+### Functional Classes and Field Modifiers
 
-Access rights provide a second dimension of control that interacts powerfully with field modifiers like `semconst`:
+Functional class access rights provide a second dimension of control that interacts powerfully with field modifiers like `semconst`:
 
 #### Two-Dimensional Access Control
 
@@ -286,9 +288,9 @@ impl DatabaseConfig {
 | Type erasure | No | Yes |
 | Zero-cost | Yes (when type known) | No |
 
-## How Access Rights Differ from Interfaces
+## How Functional Classes Differ from Interfaces
 
-While access rights provide inheritance-like polymorphism, interfaces provide common vtable patterns:
+While functional classes provide inheritance-like polymorphism through access rights, interfaces provide common vtable patterns:
 
 ```cpp
 // Interface defines common operations
@@ -355,9 +357,9 @@ class RuntimeFileData {
 
 ## Advanced Patterns
 
-### Multiple Access Rights
+### Multiple Functional Classes
 
-A single object can expose multiple access rights:
+A single object can expose multiple functional classes, granting different access rights:
 
 ```cpp
 class DatabaseConnection {
@@ -800,11 +802,11 @@ fn process_queryables(conns: &[impl Queryable]) {
 }
 ```
 
-## Channel Subscription through Access Rights
+## Channel Subscription through Functional Classes
 
-### Access Rights as Automatic Subscription
+### Functional Classes as Automatic Subscription Mechanism
 
-In CPrime's channel system, **access rights ARE the subscription mechanism**. There's no need for explicit subscribe/unsubscribe - creating a coroutine with channel access rights automatically subscribes it:
+In CPrime's channel system, **functional classes gaining access rights ARE the subscription mechanism**. There's no need for explicit subscribe/unsubscribe - creating a coroutine with functional class access rights to channels automatically subscribes it:
 
 ```cpp
 // Message bus with internal channel
@@ -873,9 +875,9 @@ async fn consumer_task(bus: &MessageBus with RecvOps) {
 }
 ```
 
-### Access Rights Need Data Class Instances
+### Functional Classes Need Data Class Instances for Access Rights
 
-A key insight from the channel design: **access rights require actual data class instances**. You can't have access rights floating independently:
+A key insight from the channel design: **functional classes require actual data class instances to establish access rights**. You can't have functional classes floating independently without data class instances:
 
 ```cpp
 // CORRECT: Access rights with data class instance
@@ -906,9 +908,9 @@ functional class ReadOps {
 }
 ```
 
-### Channel Access Rights Pattern
+### Channel Functional Class Pattern
 
-The standard pattern for channel access rights:
+The standard pattern for channel functional classes establishing access rights:
 
 ```cpp
 // Step 1: Data class holds the channel
@@ -1063,9 +1065,9 @@ async fn admin_session(bus: &SecureMessageBus with AdminAccess) {
 }
 ```
 
-### Dynamic Channel Access Rights
+### Dynamic Channel Functional Classes
 
-Using runtime access rights for dynamic capability management:
+Using runtime functional classes for dynamic capability management through access rights:
 
 ```cpp
 // Dynamic privilege escalation/de-escalation
@@ -1178,11 +1180,11 @@ functional class SubscriptionManager {
 }
 ```
 
-## Templated Access Rights through Interface Memory Contracts
+## Templated Functional Classes through Interface Memory Contracts
 
 ### N:M Composition with Interface Contracts
 
-Interface memory contracts revolutionize access rights by enabling **templated access rights** that work generically across multiple data classes. This enables true N:M composition where multiple data classes can work with multiple access rights through shared interface bindings.
+Interface memory contracts revolutionize functional classes by enabling **templated functional classes** that work generically across multiple data classes through shared access rights. This enables true N:M composition where multiple data classes can work with multiple functional classes through shared interface bindings.
 
 ### Generic Functional Classes
 
@@ -1390,9 +1392,9 @@ AuditOps::log_access(&user, current_user_id)?;   // Same code path
 AuditOps::log_access(&order, current_user_id)?;  // Same code path
 ```
 
-### Interface-Based Access Rights Composition
+### Interface-Based Functional Class Composition
 
-Data classes can implement multiple interfaces, enabling rich compositional patterns:
+Data classes can implement multiple interfaces, enabling rich functional class compositional patterns through access rights:
 
 ```cpp
 // Data class implementing multiple interface contracts
@@ -1446,7 +1448,7 @@ TransactionOps::validate(&transaction)?;      // Specific operations
 AccountingOps::reconcile(&transaction)?;      // Specific operations
 ```
 
-### Performance Characteristics of Templated Access Rights
+### Performance Characteristics of Templated Functional Classes
 
 #### Compile-Time Interface Access (Zero-Cost)
 ```cpp
@@ -1474,7 +1476,7 @@ functional class FlexibleCacheOps<T: FlexibleCacheable> {  // Runtime interface
 }
 ```
 
-### Benefits of Templated Access Rights
+### Benefits of Templated Functional Classes
 
 1. **Code Reuse**: Single implementation works across multiple data types
 2. **Type Safety**: Compiler verifies interface contracts at compile time
@@ -1482,7 +1484,7 @@ functional class FlexibleCacheOps<T: FlexibleCacheable> {  // Runtime interface
 4. **Compositional Power**: Data classes can implement multiple interfaces
 5. **Evolution**: Add new interfaces without changing existing code
 
-### Migration from Traditional to Templated Access Rights
+### Migration from Traditional to Templated Functional Classes
 
 ```cpp
 // Before: Multiple separate functional classes
