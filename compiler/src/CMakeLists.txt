@@ -62,6 +62,13 @@ target_link_libraries(cprime_layer2validation cprime_layer2)
 target_link_libraries(cprime_layer3validation cprime_layer3)
 target_link_libraries(cprime_layer4validation cprime_layer4)
 
+# Layer 2 depends on Layer 1 for ContextStack and ContextResolver
+target_link_libraries(cprime_layer2 cprime_layer1)
+# Layer 3 depends on Layer 2 for semantic tokens
+target_link_libraries(cprime_layer3 cprime_layer2)
+# Layer 4 depends on Layer 3 for AST
+target_link_libraries(cprime_layer4 cprime_layer3)
+
 # Link all layers and validation libraries
 target_link_libraries(cprime_compiler
     cprime_layer1 cprime_layer1validation
@@ -90,9 +97,25 @@ endforeach()
 add_executable(cprime_cli cli/cprime_cli.cpp)
 target_link_libraries(cprime_cli cprime_compiler)
 
-# Test executable
-add_executable(test_three_layer tests/test_three_layer.cpp)
-target_link_libraries(test_three_layer cprime_compiler)
+# Raw tokenization tests
+add_executable(test_raw_tokenization tests/test_raw_tokenization.cpp)
+target_link_libraries(test_raw_tokenization cprime_compiler)
+
+# Context stack tests
+add_executable(test_context_stack tests/test_context_stack.cpp)
+target_link_libraries(test_context_stack cprime_compiler)
+
+# Semantic translation tests
+add_executable(test_semantic_translation tests/test_semantic_translation.cpp)
+target_link_libraries(test_semantic_translation cprime_compiler)
+
+# Feature registry tests
+add_executable(test_feature_registry tests/test_feature_registry.cpp)
+target_link_libraries(test_feature_registry cprime_compiler)
+
+# Pipeline integration tests  
+add_executable(test_pipeline_integration tests/test_pipeline_integration.cpp)
+target_link_libraries(test_pipeline_integration cprime_compiler)
 
 # Contextual tokens demo
 add_executable(test_contextual_tokens tests/test_contextual_tokens.cpp)
@@ -119,7 +142,7 @@ if(NOT CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     set_target_properties(cprime_cli PROPERTIES 
         FOLDER "compiler"
     )
-    set_target_properties(test_three_layer PROPERTIES 
+    set_target_properties(test_pipeline_integration PROPERTIES 
         FOLDER "compiler/tests"
     )
 endif()

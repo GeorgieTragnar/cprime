@@ -19,7 +19,7 @@ echo "================================================"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 SOURCE_DIR="$PROJECT_ROOT/compiler/src"
-BUILD_DIR="$SOURCE_DIR/build"
+BUILD_DIR="$PROJECT_ROOT/build"
 
 # Verify source directory exists
 if [ ! -d "$SOURCE_DIR" ]; then
@@ -164,48 +164,80 @@ fi
 if [ -f "cprime_cli" ]; then
     echo -e "  ${GREEN}✓ cprime_cli${NC} - CPrime compiler CLI"
 fi
-if [ -f "test_three_layer" ]; then
-    echo -e "  ${GREEN}✓ test_three_layer${NC} - Test executable for context-sensitive parsing"
-fi
-if [ -f "test_contextual_tokens" ]; then
-    echo -e "  ${GREEN}✓ test_contextual_tokens${NC} - Context enrichment demo"
-fi
-if [ -f "test_ast_builder" ]; then
-    echo -e "  ${GREEN}✓ test_ast_builder${NC} - AST building test"
-fi
+
+# List test executables
+echo -e "  ${BLUE}Test Executables:${NC}"
+declare -a ALL_TESTS=(
+    "test_validation_layers:Validation System Tests"
+    "test_contextual_tokens:Contextual Token Tests"
+    "test_ast_builder:AST Builder Tests"
+    "test_raii_injector:RAII Injector Tests"
+    "test_raw_tokenization:Raw Tokenization Tests"
+    "test_context_stack:Context Stack Tests"
+    "test_semantic_translation:Semantic Translation Tests"
+    "test_feature_registry:Feature Registry Tests"
+    "test_pipeline_integration:Pipeline Integration Tests"
+)
+
+for test_entry in "${ALL_TESTS[@]}"; do
+    IFS=':' read -r test_exe test_desc <<< "$test_entry"
+    if [ -f "$test_exe" ]; then
+        echo -e "    ${GREEN}✓ $test_exe${NC} - $test_desc"
+    fi
+done
 
 # Run tests if requested
 if [ "$RUN_TESTS" = true ]; then
-    echo -e "${BLUE}Running compiler architecture tests...${NC}"
+    echo -e "${BLUE}Running CPrime compiler test suite...${NC}"
+    echo ""
     
-    if [ -f "test_contextual_tokens" ]; then
-        echo -e "${YELLOW}Testing context enrichment...${NC}"
-        ./test_contextual_tokens
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}✗ Context enrichment test failed${NC}"
-            exit 1
+    # List of all test executables with descriptions
+    declare -a TEST_EXECUTABLES=(
+        "test_validation_layers:Validation System Tests"
+        "test_contextual_tokens:Contextual Token Tests" 
+        "test_ast_builder:AST Builder Tests"
+        "test_raii_injector:RAII Injector Tests"
+        "test_raw_tokenization:Raw Tokenization Tests"
+        "test_context_stack:Context Stack Tests"
+        "test_semantic_translation:Semantic Translation Tests"
+        "test_feature_registry:Feature Registry Tests"
+        "test_pipeline_integration:Pipeline Integration Tests"
+    )
+    
+    TESTS_PASSED=0
+    TESTS_TOTAL=0
+    
+    for test_entry in "${TEST_EXECUTABLES[@]}"; do
+        # Split on ':' to get executable and description
+        IFS=':' read -r test_exe test_desc <<< "$test_entry"
+        
+        if [ -f "$test_exe" ]; then
+            echo -e "${YELLOW}Running $test_desc...${NC}"
+            
+            # Run the test and capture output
+            if ./"$test_exe"; then
+                TESTS_PASSED=$((TESTS_PASSED + 1))
+            else
+                echo -e "${RED}✗ $test_desc failed${NC}"
+                # Don't exit immediately - run all tests and report summary
+            fi
+            TESTS_TOTAL=$((TESTS_TOTAL + 1))
+            echo ""
+        else
+            echo -e "${YELLOW}Skipping $test_desc - executable not found${NC}"
         fi
-    fi
+    done
     
-    if [ -f "test_ast_builder" ]; then
-        echo -e "${YELLOW}Testing AST building...${NC}"
-        ./test_ast_builder
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}✗ AST builder test failed${NC}"
-            exit 1
-        fi
+    # Test summary
+    echo -e "${BLUE}=== Test Suite Summary ===${NC}"
+    if [ $TESTS_PASSED -eq $TESTS_TOTAL ] && [ $TESTS_TOTAL -gt 0 ]; then
+        echo -e "${GREEN}✓ All $TESTS_TOTAL tests passed!${NC}"
+    elif [ $TESTS_TOTAL -eq 0 ]; then
+        echo -e "${YELLOW}⚠ No test executables found${NC}"
+    else
+        echo -e "${RED}✗ $((TESTS_TOTAL - TESTS_PASSED))/$TESTS_TOTAL tests failed${NC}"
+        exit 1
     fi
-    
-    if [ -f "test_three_layer" ]; then
-        echo -e "${YELLOW}Testing full pipeline...${NC}"
-        ./test_three_layer
-        if [ $? -ne 0 ]; then
-            echo -e "${RED}✗ Full pipeline test failed${NC}"
-            exit 1
-        fi
-    fi
-    
-    echo -e "${GREEN}✓ All tests passed${NC}"
 fi
 
 echo ""
