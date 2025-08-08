@@ -514,4 +514,246 @@ cprimec frontend src/ --jobs=8 --timing
 # Total: 0.6s (4x speedup)
 ```
 
+## Template Instantiation and Library Linking
+
+### N:M Composition Challenge
+
+CPrime's N:M composition system creates exponential combinations between data classes and functional classes, requiring sophisticated compilation strategies:
+
+```cpp
+// Library provides:
+class Connection { /* ... */ }
+functional class ReadOps { /* ... */ }
+functional class WriteOps { /* ... */ }
+functional class AdminOps { /* ... */ }
+
+// Potential combinations:
+// Connection<ReadOps>
+// Connection<WriteOps>  
+// Connection<AdminOps>
+// Connection<ReadOps, WriteOps>
+// Connection<ReadOps, AdminOps>
+// Connection<WriteOps, AdminOps>
+// Connection<ReadOps, WriteOps, AdminOps>
+// ... exponential growth
+```
+
+### Forward Declaration Solution
+
+Libraries use `extern template` to declare which combinations they provide:
+
+```cpp
+// library.cprime - Explicit template instantiations
+module Database {
+    // Data classes and functional classes
+    class Connection { /* implementation */ }
+    functional class ReadOps { /* implementation */ }
+    functional class WriteOps { /* implementation */ }
+    functional class AdminOps { /* implementation */ }
+    
+    // Explicit combination contracts
+    extern template Connection<ReadOps>;
+    extern template Connection<WriteOps>;
+    extern template Connection<AdminOps>;
+    extern template Connection<ReadOps, WriteOps>;
+    extern template Connection<ReadOps, AdminOps>;
+    // Note: Connection<WriteOps, AdminOps> intentionally omitted (unsafe)
+}
+```
+
+### Compilation Strategies
+
+#### Pre-compiled Library Combinations
+
+```bash
+# Library compilation - generates binary with specific instantiations
+cprimec compile database.cprime --mode=library --output=libdatabase.so
+
+# Generated symbols in library:
+# Connection_ReadOps_construct
+# Connection_WriteOps_construct  
+# Connection_AdminOps_construct
+# Connection_ReadOps_WriteOps_construct
+# Connection_ReadOps_AdminOps_construct
+```
+
+#### User-defined Combinations
+
+```cpp
+// User code with custom functional class
+functional class CustomAnalyticsOps {
+    fn analyze_patterns(conn: &Connection, timeframe: Duration) -> Report;
+}
+
+// This requires header-based compilation
+let conn: Connection<CustomAnalyticsOps> = Database::connect(config);
+```
+
+Compilation process:
+
+```bash
+# User compilation - requires library headers for custom combinations
+cprimec compile user_app.cprime \
+    --link=libdatabase.so \
+    --headers=libdatabase/include/ \
+    --output=user_app
+
+# Compiles Connection<CustomAnalyticsOps> from headers
+# Links pre-compiled combinations from libdatabase.so
+```
+
+### Symbol Deduplication
+
+The linker automatically deduplicates symbols from multiple compilation units:
+
+```cpp
+// app.cprime
+let conn1: Connection<ReadOps> = Database::connect(config);
+
+// plugin.cprime  
+let conn2: Connection<ReadOps> = Database::connect(other_config);
+
+// Both generate Connection<ReadOps> symbols
+// Linker deduplicates to single implementation (ODR)
+```
+
+### Comptime Generation
+
+Avoid manual enumeration with programmatic instantiation:
+
+```cpp
+module Database {
+    comptime {
+        const base_ops = [ReadOps, WriteOps, AdminOps];
+        const cache_ops = [CacheOps, NoCache];
+        
+        // Generate combinations programmatically
+        for (base in base_ops) {
+            extern template Connection<{base}>;
+            
+            for (cache in cache_ops if cache != NoCache) {
+                if (is_valid_combination(base, cache)) {
+                    extern template Connection<{base}, {cache}>;
+                }
+            }
+        }
+    }
+}
+```
+
+Compiles to explicit instantiations:
+
+```cpp
+// Generated during compilation
+template class Connection<ReadOps>;
+template class Connection<WriteOps>;
+template class Connection<AdminOps>;
+template class Connection<ReadOps, CacheOps>;
+template class Connection<WriteOps, CacheOps>;
+template class Connection<AdminOps, CacheOps>;
+```
+
+### Mixed Compilation Model
+
+Programs can use both pre-compiled and header-compiled combinations:
+
+```cpp
+// Fast path - uses pre-compiled library symbol
+let standard_conn: Connection<ReadOps> = Database::connect(config);
+
+// Extension path - compiles from headers  
+let custom_conn: Connection<MyCustomOps> = Database::connect(config);
+
+// Both can coexist in the same program
+```
+
+#### Build Process
+
+```bash
+# 1. Library provides pre-compiled combinations
+g++ -shared -o libdatabase.so database_generated.cpp
+
+# 2. User app links library + compiles custom combinations
+cprimec compile app.cprime \
+    --link=libdatabase.so \              # Pre-compiled combinations
+    --headers=libdatabase/include/ \      # For custom combinations  
+    --output=app
+
+# Result: Mixed binary with both approaches
+```
+
+### Extension Modes and Compilation
+
+Different extension modes affect compilation strategy:
+
+```cpp
+// [closed, closed] - Only pre-compiled combinations
+#[extension(data_closed, access_closed)]
+module SecureDatabase {
+    extern template SecureConnection<UserOps>;
+    extern template SecureConnection<AdminOps>;
+    // Users cannot create new combinations
+}
+
+// [closed, access_open] - Header compilation for new operations
+#[extension(data_closed, access_open)]  
+module ExtensibleDatabase {
+    extern template Connection<ReadOps>;     // Pre-compiled
+    extern template Connection<WriteOps>;    // Pre-compiled
+    
+    // Users can create Connection<CustomOps> from headers
+}
+```
+
+#### Distribution Strategy
+
+| Extension Mode | Binary | Headers | Compilation |
+|----------------|--------|---------|-------------|
+| `[closed, closed]` | ✓ | API only | Library symbols only |
+| `[closed, access_open]` | ✓ | API + operation interfaces | Mixed: library + header compilation |
+| `[data_open, closed]` | ✓ | API + data classes | Mixed: library + header compilation |
+| `[open, open]` | ✓ | Full sources | Mixed: library + full header compilation |
+
+### Performance Characteristics
+
+#### Compilation Time
+
+```bash
+# Pre-compiled combinations - fast linking
+Connection<ReadOps> conn;           # ~0.001s link time
+
+# Header-compiled combinations - slower compilation  
+Connection<CustomOps> custom;       # ~0.1-1s compile time
+```
+
+#### Runtime Performance
+
+- Pre-compiled combinations: Same performance as library symbols
+- Header-compiled combinations: Same performance after optimization
+- Mixed usage: No runtime performance difference
+
+### Build System Integration
+
+```cmake
+# CMake integration for mixed compilation
+cprime_add_library(database
+    SOURCES database.cprime
+    EXPORT_COMBINATIONS
+        Connection<ReadOps>
+        Connection<WriteOps>
+        Connection<AdminOps>
+    EXPORT_HEADERS ON  # For custom combinations
+)
+
+cprime_add_executable(app
+    SOURCES app.cprime
+    DEPENDENCIES database
+    CUSTOM_COMBINATIONS
+        Connection<CustomAnalyticsOps>
+        Connection<UserReportOps>
+)
+```
+
+This compilation model provides the flexibility of C++ templates while giving libraries explicit control over which combinations are pre-compiled for performance and which require header-based compilation for extensibility.
+
 The compilation model provides fast incremental builds during development while enabling aggressive optimization for release builds, all while maintaining C++ compatibility for immediate adoption.

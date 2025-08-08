@@ -56,6 +56,7 @@
 - Performance costs are visible (runtime interfaces, accessor methods)
 - Memory layout controlled by data classes
 - Developer chooses between speed and flexibility
+- **Library Control**: Object owners control combinatorial possibilities through explicit extension modes
 
 ### Memory Safety
 - RAII enforced at language level

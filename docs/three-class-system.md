@@ -1600,4 +1600,291 @@ fn worker_pool_example() {
 4. **Testability**: Stateless operations are easily unit tested
 5. **Composability**: Channels, access rights, and coroutines all follow the same pattern
 
+## Composition Control in Libraries
+
+### Library Ownership of Combinatorial Possibilities
+
+The three-class system creates a fundamental principle: **if you own the object definitions, you control the combinatorial possibilities**. This becomes crucial for library design where N:M composition can create exponential combinations.
+
+#### The N:M Explosion Challenge
+
+```cpp
+// Library provides:
+class DatabaseConnection {
+    handle: DbHandle,
+    pool_info: PoolInfo,
+    constructed_by: ConnectionManager,
+}
+
+// And functional classes:
+functional class ReadOps { /* ... */ }
+functional class WriteOps { /* ... */ }
+functional class AdminOps { /* ... */ }
+functional class CacheOps { /* ... */ }
+functional class LoggingOps { /* ... */ }
+
+// Potential combinations explode exponentially:
+// DatabaseConnection<ReadOps>
+// DatabaseConnection<WriteOps>
+// DatabaseConnection<AdminOps>
+// DatabaseConnection<ReadOps, CacheOps>
+// DatabaseConnection<WriteOps, LoggingOps>
+// DatabaseConnection<AdminOps, CacheOps, LoggingOps>
+// ... and many more
+```
+
+#### Library Control Philosophy
+
+Libraries should explicitly control which combinations they support:
+
+```cpp
+module Database {
+    // Data classes
+    class Connection {
+        handle: DbHandle,
+        state: ConnectionState,
+        constructed_by: ConnectionManager,
+    }
+    
+    // Functional classes  
+    functional class ReadOps { /* ... */ }
+    functional class WriteOps { /* ... */ }
+    functional class AdminOps { /* ... */ }
+    
+    // Explicit combination control
+    comptime {
+        // Safe, tested combinations
+        extern template Connection<ReadOps>;
+        extern template Connection<WriteOps>;
+        extern template Connection<AdminOps>;
+        extern template Connection<ReadOps, WriteOps>;
+        
+        // Conditional combinations
+        #[cfg(feature = "admin")]
+        extern template Connection<AdminOps, WriteOps>;
+        
+        // Security-validated combinations only
+        for (ops_combo in generate_safe_combinations()) {
+            if (validate_security_model(ops_combo)) {
+                extern template Connection<{...ops_combo}>;
+            }
+        }
+    }
+    
+    // Some combinations deliberately omitted:
+    // extern template Connection<AdminOps, ReadOps>;  // Unnecessary
+    // extern template Connection<DebugOps>;           // Internal only
+    // extern template Connection<UnsafeTestOps>;      // Testing only
+}
+```
+
+### Security Boundaries Through Composition Control
+
+```cpp
+module PaymentProcessor {
+    class PaymentData {
+        card_number: EncryptedString,
+        amount: Currency,
+        merchant_id: MerchantId,
+        constructed_by: PaymentManager,
+    }
+    
+    functional class UserPaymentOps { /* safe operations */ }
+    functional class MerchantPaymentOps { /* merchant operations */ }
+    functional class AdminPaymentOps { /* admin operations */ }
+    functional class AuditOps { /* logging and compliance */ }
+    
+    // Library enforces security through combination control
+    comptime {
+        // Safe user combinations
+        extern template PaymentData<UserPaymentOps>;
+        extern template PaymentData<UserPaymentOps, AuditOps>;
+        
+        // Safe merchant combinations  
+        extern template PaymentData<MerchantPaymentOps>;
+        extern template PaymentData<MerchantPaymentOps, AuditOps>;
+        
+        // Admin combinations
+        extern template PaymentData<AdminPaymentOps, AuditOps>;  // Audit required
+        
+        // Forbidden combinations (security violations):
+        // extern template PaymentData<UserPaymentOps, AdminPaymentOps>;
+        // extern template PaymentData<MerchantPaymentOps, AdminPaymentOps>;
+        // extern template PaymentData<AdminPaymentOps>;  // No audit
+        
+        // Compile-time security validation
+        static_assert(!allows_escalation<UserPaymentOps, AdminPaymentOps>(),
+                     "Users cannot escalate to admin privileges");
+        static_assert(requires_audit<AdminPaymentOps>(),
+                     "Admin operations must include audit trail");
+    }
+}
+```
+
+### Testing Scope Control
+
+Libraries only test what they explicitly provide:
+
+```cpp
+module NetworkStack {
+    class TcpConnection {
+        socket: Socket,
+        buffer: Buffer,
+        constructed_by: TcpManager,
+    }
+    
+    // Testing matrix matches provided combinations
+    comptime {
+        const connection_types = [BasicTcp, SecureTcp, ReliableTcp];
+        const buffer_types = [SimpleBuffer, RingBuffer];
+        
+        // Generate test-validated combinations
+        for (conn_type in connection_types) {
+            extern template TcpConnection<{conn_type}>;
+            
+            for (buf_type in buffer_types) {
+                if (is_compatible(conn_type, buf_type)) {
+                    extern template TcpConnection<{conn_type}, {buf_type}>;
+                    
+                    // Each combination gets explicit test coverage
+                    #[test]
+                    fn test_{conn_type}_{buf_type}_combination() {
+                        // Comprehensive testing for this specific combination
+                    }
+                }
+            }
+        }
+    }
+    
+    // Users can only rely on tested combinations
+    // Custom combinations require user testing
+}
+```
+
+### Extension Control Matrix
+
+Libraries can use the extension control matrix to manage composition boundaries:
+
+```cpp
+// Fully controlled - library manages all combinations
+#[extension(data_closed, access_closed)]
+module CryptoLibrary {
+    class CryptoContext {
+        algorithm: CryptoAlgorithm,
+        key_material: SecureKey,
+        constructed_by: CryptoManager,
+    }
+    
+    // Only these security-validated combinations exist
+    extern template CryptoContext<AES256>;
+    extern template CryptoContext<ChaCha20>;
+    extern template CryptoContext<AES256, HMACAuth>;
+}
+
+// Operations extensible - users can add new operations to library data
+#[extension(data_closed, access_open)]
+module MonitoringLibrary {
+    class MetricsCollector {
+        counters: AtomicCounters,
+        timers: TimerArray,
+        constructed_by: MetricsManager,
+    }
+    
+    // Library provides core operations
+    extern template MetricsCollector<CoreMetrics>;
+    extern template MetricsCollector<PerformanceMetrics>;
+    
+    // Users can add: MetricsCollector<CustomAnalytics>
+    // But cannot modify MetricsCollector structure
+}
+
+// Data extensible - users implement interfaces on their types
+#[extension(data_open, access_closed)]
+module SerializationLibrary {
+    interface Serializable {
+        fn serialize(&self) -> Vec<u8>;
+        fn deserialize(data: &[u8]) -> Result<Self>;
+    }
+    
+    // Users can implement Serializable on any data class
+    // But cannot add methods to Serializable interface
+}
+
+// Fully extensible - complete protocol
+#[extension(data_open, access_open)]
+module PluginSystem {
+    interface PluginProtocol {
+        type Config;
+        type State;
+        
+        fn initialize(&mut self, config: Self::Config) -> Result<()>;
+        fn process(&mut self, input: &[u8]) -> Result<Vec<u8>>;
+    }
+    
+    // Users can implement complete custom plugins
+    // And extend the protocol with new methods
+}
+```
+
+### Distribution Strategy Implications
+
+Extension modes determine what libraries ship:
+
+```cpp
+libdatabase/
+  bin/
+    database.so              // Pre-compiled combinations
+  include/
+    public_api.h             // Always included - public API
+    connection_data.h        // Only if data_open
+    operation_interfaces.h   // Only if access_open
+    // private_internals.h   // Never shipped for closed components
+```
+
+| Extension Mode | Ships Binary | Ships Headers | User Capability |
+|----------------|--------------|---------------|-----------------|
+| `[closed, closed]` | ✓ | Public API only | Use pre-compiled combinations |
+| `[data_open, closed]` | ✓ | API + data class headers | Implement interfaces |
+| `[closed, access_open]` | ✓ | API + operation headers | Add new operations |
+| `[open, open]` | ✓ | Full source headers | Complete extensibility |
+
+### Benefits of Library Composition Control
+
+1. **Security Boundaries**: Prevent dangerous capability combinations
+2. **Testing Scope**: Only test what you provide, clear user responsibility
+3. **API Clarity**: Explicit about what combinations are supported
+4. **Performance**: Pre-compiled common cases, header compilation for extensions
+5. **Evolution**: Can add combinations without breaking existing code
+
+### Best Practices for Library Authors
+
+```cpp
+// 1. Start closed, open gradually
+#[extension(data_closed, access_closed)]  // v1.0 - conservative
+// #[extension(data_closed, access_open)]  // v2.0 - based on user needs
+// #[extension(data_open, access_open)]    // v3.0 - if needed
+
+// 2. Use comptime to avoid manual enumeration
+comptime {
+    for (combination in generate_valid_combinations()) {
+        if (passes_security_audit(combination)) {
+            extern template DataClass<{...combination}>;
+        }
+    }
+}
+
+// 3. Document extension points clearly
+/// Extension Policy:
+/// - [data_closed]: Library controls all data structures  
+/// - [access_open]: Users can add new operations via headers
+/// - Security: All admin operations require audit trail
+/// - Testing: Library tests provided combinations, users test custom ones
+
+// 4. Provide migration paths (can only become MORE open)
+// v1: [closed, closed] -> v2: [closed, open] ✓ Safe
+// v2: [closed, open] -> v1: [closed, closed] ❌ Breaking change
+```
+
+This composition control system ensures that the three-class system scales to library boundaries while maintaining security, testability, and clear architectural boundaries.
+
 The three-class system enforces good architectural patterns while maintaining the performance characteristics essential for systems programming. Channels exemplify this approach by cleanly separating data (communication state), operations (send/receive logic), and capabilities (access rights), resulting in a powerful yet safe concurrency primitive.

@@ -63,6 +63,15 @@ mod linux_specific {
 mod windows_specific {
     pub fn get_pid() -> u32 { ... }
 }
+
+// Extension control for library boundaries
+#[module(extension(data_closed, access_open))]
+mod database_monitoring {
+    // Users can add new monitoring operations but not modify connection data
+    pub interface MonitoringOps {
+        fn collect_metrics(&self) -> Metrics;
+    }
+}
 ```
 
 ## Module Equivalence with Functional Classes
@@ -520,5 +529,177 @@ mod network {
     }
 }
 ```
+
+## Library Distribution and Extensibility
+
+### Extension Control Matrix
+
+CPrime modules support fine-grained extension control through a 2×2 matrix that determines what users can extend:
+
+```cpp
+// Fully sealed - users can only use pre-compiled combinations
+#[module(extension(data_closed, access_closed))]
+mod secure_crypto {
+    interface CryptoOps {
+        fn encrypt(&self, data: &[u8], key: &Key) -> Vec<u8>;
+        fn decrypt(&self, data: &[u8], key: &Key) -> Result<Vec<u8>>;
+    }
+    
+    // Only these combinations exist
+    extern template SecureData<AESCrypto>;
+    extern template SecureData<RSACrypto>;
+    // No user extensions allowed
+}
+
+// Classic extensible interface - users implement on their types
+#[module(extension(data_open, access_closed))]
+mod serialization {
+    interface Serializable {
+        fn serialize(&self) -> Vec<u8>;
+        fn deserialize(data: &[u8]) -> Result<Self>;
+    }
+    
+    // Users can implement Serializable for their data classes
+    // But cannot add new methods to the interface
+}
+
+// Extensible operations - users add new operations to fixed data
+#[module(extension(data_closed, access_open))]
+mod monitoring {
+    class MetricsCollector {
+        counters: HashMap<String, u64>,
+        timers: HashMap<String, Duration>,
+        constructed_by: MetricsManager,
+    }
+    
+    interface MonitoringOps {
+        fn collect_metrics(&self, collector: &MetricsCollector) -> Metrics;
+    }
+    
+    // Users can add new functional classes that work with MetricsCollector
+    // But cannot modify MetricsCollector structure
+}
+
+// Full protocol - complete extensibility
+#[module(extension(data_open, access_open))]
+mod plugin_system {
+    interface PluginProtocol {
+        type Config;
+        type State;
+        
+        fn initialize(&self, config: Self::Config) -> Result<Self::State>;
+        fn process(&self, state: &mut Self::State, input: &[u8]) -> Result<Vec<u8>>;
+    }
+    
+    // Users can implement complete custom plugins
+}
+```
+
+### Distribution Strategies
+
+Extension modes determine what gets distributed with the module:
+
+| Extension Mode | Binary Distribution | Header Distribution | User Capability |
+|----------------|-------------------|-------------------|-----------------|
+| `[closed, closed]` | ✓ Pre-compiled library | Public API headers only | Use pre-compiled combinations |
+| `[data_open, closed]` | ✓ Pre-compiled library | API + data class headers | Implement interfaces |
+| `[closed, access_open]` | ✓ Pre-compiled library | API + operation headers | Add new operations |
+| `[open, open]` | ✓ Pre-compiled library | Full source headers | Complete extensibility |
+
+#### Example Distribution Layout
+
+```
+libmonitoring/
+  bin/
+    monitoring.so                    // Pre-compiled combinations
+  include/
+    monitoring.h                     // Always included - public API
+    metrics_collector.h              // Only if data_open
+    monitoring_ops_interface.h       // Only if access_open
+    // internal_metrics.h            // Never shipped if closed
+```
+
+### Comptime Combination Generation
+
+Avoid manual enumeration explosion with programmatic generation:
+
+```cpp
+#[module(extension(data_closed, access_closed))]
+mod database {
+    comptime {
+        // Define operation categories
+        const read_ops = [BasicRead, CachedRead, SecureRead];
+        const write_ops = [BasicWrite, BatchedWrite, TransactionalWrite];
+        const admin_ops = [UserAdmin, SystemAdmin, SuperAdmin];
+        
+        // Generate valid combinations
+        for (read in read_ops) {
+            extern template Connection<{read}>;
+            
+            for (write in write_ops) {
+                if (is_compatible(read, write)) {
+                    extern template Connection<{read}, {write}>;
+                    
+                    for (admin in admin_ops if security_allows(read, write, admin)) {
+                        extern template Connection<{read}, {write}, {admin}>;
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+### Library Control Philosophy
+
+**Libraries control combinatorial possibilities because they own the object definitions**
+
+```cpp
+// Library authors decide which combinations are:
+// 1. Safe (no security violations)  
+// 2. Tested (library only tests what it ships)
+// 3. Supported (clear API surface)
+// 4. Performant (pre-compiled combinations)
+
+#[module(extension(data_closed, access_closed))]
+mod payment_processor {
+    // Only allow secure, tested combinations
+    extern template Transaction<UserOps>;           // ✓ Safe for users
+    extern template Transaction<MerchantOps>;       // ✓ Safe for merchants  
+    extern template Transaction<AdminOps>;          // ✓ Safe for admin
+    // extern template Transaction<DebugOps>;       // ❌ Internal only
+    // extern template Transaction<UnsafeTestOps>;  // ❌ Testing only
+    
+    comptime {
+        // Prevent dangerous combinations
+        static_assert(!allows_combination<UserOps, AdminOps>(), 
+                     "Users cannot have admin privileges");
+    }
+}
+```
+
+### Evolution and Migration
+
+Extension modes can become more open over time (but never more closed without breaking changes):
+
+```cpp
+// v1.0 - Start closed for security
+#[module(extension(data_closed, access_closed))]
+mod crypto_v1 {
+    // Limited, well-tested combinations
+}
+
+// v2.0 - Open operations based on user feedback  
+#[module(extension(data_closed, access_open))]  // More permissive
+mod crypto_v2 {
+    // Users can now add custom crypto operations
+    // But cannot modify core crypto data structures
+}
+
+// v3.0 - Cannot close back down (breaking change)
+// #[module(extension(data_closed, access_closed))]  // ❌ Breaking change
+```
+
+For comprehensive documentation on library linking and extensibility, see [library-linking.md](library-linking.md).
 
 The module system provides clear organization, security boundaries, and code reuse mechanisms while maintaining the performance characteristics essential for systems programming.

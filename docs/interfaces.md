@@ -824,6 +824,211 @@ class UserData implements Cacheable {
 
 This dual capability makes CPrime interfaces uniquely powerful, supporting both traditional polymorphism and revolutionary N:M composition patterns.
 
+### Library Interface Extensibility
+
+Interfaces can be marked with extension modes to control how they can be extended across library boundaries:
+
+#### Extension Control Matrix for Interfaces
+
+```cpp
+// Fully sealed interface - no user extensions
+#[extension(data_closed, access_closed)]
+interface SecureProtocol {
+    fn authenticate(&self, credentials: &Credentials) -> AuthResult;
+    fn execute_secure_operation(&self, op: &Operation) -> Result<Response>;
+    
+    // Users can implement this interface but cannot:
+    // - Add new methods
+    // - Implement on new data types (library controls which types)
+}
+
+// Classic extensible interface - users implement on their types  
+#[extension(data_open, access_closed)]
+interface Serializable {
+    fn serialize(&self) -> Vec<u8>;
+    fn deserialize(data: &[u8]) -> Result<Self>;
+    
+    // Users can: implement on any data type
+    // Users cannot: add new methods to the interface
+}
+
+// Operations extensible - fixed data, new operations
+#[extension(data_closed, access_open)]
+interface DatabaseConnection {
+    memory_contract {
+        handle: semconst Handle,
+        status: mutable Status,
+    }
+    
+    fn execute_query(&self, sql: &str) -> Result<QueryResult>;
+    // Users can add methods but must work with fixed memory contract
+}
+
+// Fully extensible protocol
+#[extension(data_open, access_open)]
+interface PluginProtocol {
+    type Config;
+    type State;
+    
+    fn initialize(&mut self, config: Self::Config) -> Result<()>;
+    fn process(&mut self, input: &[u8]) -> Result<Vec<u8>>;
+    
+    // Users can: implement on any type AND add new methods
+}
+```
+
+#### Library Distribution Strategies
+
+| Extension Mode | Library Provides | Users Can |
+|----------------|------------------|-----------|
+| `[closed, closed]` | Pre-compiled implementations only | Use existing implementations |
+| `[data_open, closed]` | Interface definition + headers | Implement on custom types |
+| `[closed, access_open]` | Data types + interface headers | Add operations to library types |
+| `[open, open]` | Interface protocol + full headers | Complete custom implementations |
+
+#### Example: Database Library Evolution
+
+```cpp
+// v1.0 - Conservative start
+#[extension(data_closed, access_closed)]
+interface DatabaseOps {
+    fn connect(&self, config: &Config) -> Result<Connection>;
+    fn execute(&self, conn: &Connection, sql: &str) -> Result<QueryResult>;
+}
+
+module Database {
+    // Only these implementations exist
+    extern template Connection<MySQLOps>;
+    extern template Connection<PostgresOps>;
+    extern template Connection<SQLiteOps>;
+}
+
+// v2.0 - Open operations based on user feedback
+#[extension(data_closed, access_open)]  
+interface DatabaseOps {
+    // Same methods, but now users can add operations
+    fn connect(&self, config: &Config) -> Result<Connection>;
+    fn execute(&self, conn: &Connection, sql: &str) -> Result<QueryResult>;
+}
+
+// Users can now create:
+functional class CustomAnalyticsOps implements DatabaseOps {
+    fn connect(&self, config: &Config) -> Result<Connection> {
+        // Delegate to library implementation
+        StandardOps::connect(config)
+    }
+    
+    fn execute(&self, conn: &Connection, sql: &str) -> Result<QueryResult> {
+        // Add analytics tracking
+        let start_time = SystemTime::now();
+        let result = StandardOps::execute(conn, sql);
+        self.record_query_metrics(sql, start_time.elapsed());
+        result
+    }
+    
+    // New operations users can add
+    fn generate_query_report(&self, timeframe: Duration) -> AnalyticsReport {
+        // Custom functionality
+    }
+}
+
+// v3.0 - Full extensibility (if needed)
+#[extension(data_open, access_open)]
+interface DatabaseOps {
+    // Now users can implement complete custom database backends
+}
+```
+
+#### Interface Memory Contracts with Extensions
+
+Extension modes apply to memory contracts as well:
+
+```cpp
+#[extension(data_closed, access_open)]
+interface Cacheable {
+    memory_contract {
+        cache_key: semconst u64,     // Library controls structure
+        timestamp: mutable u64,      // Users can modify
+        metadata: [u8; 32],         // Fixed layout
+    }
+    
+    fn get_cache_key(&self) -> u64;
+}
+
+// Library provides the data structure
+class LibraryData {
+    id: u64,                        // Maps to cache_key
+    last_accessed: u64,             // Maps to timestamp  
+    extra_data: [u8; 32],          // Maps to metadata
+    private_fields: InternalState,  // Not exposed
+    
+    implements Cacheable {
+        cache_key <- id,
+        timestamp <- last_accessed,
+        metadata <- memory_region(&extra_data, 32),
+    }
+}
+
+// Users can add operations but not change memory layout
+functional class UserCacheOps<T: Cacheable> {
+    fn cache_with_ttl(item: &mut T, ttl: Duration) {
+        // Can update timestamp (mutable in contract)
+        item.timestamp = SystemTime::now().as_secs() + ttl.as_secs();
+        
+        // Cannot modify cache_key (semconst in contract)
+        // let new_key = generate_key();  
+        // item.cache_key = new_key;  // ❌ COMPILE ERROR
+    }
+    
+    fn custom_cache_operation(item: &T) -> CustomResult {
+        // New operations users can add
+        let key = item.get_cache_key();
+        // Custom logic
+    }
+}
+```
+
+#### Compilation Implications
+
+Extension modes affect how interfaces are compiled and distributed:
+
+```cpp
+// [closed, closed] - Binary only
+interface BinaryOnlyOps {
+    #[extension(data_closed, access_closed)]
+    fn process(&self, data: &[u8]) -> Vec<u8>;
+}
+// Distributed as: libfoo.so (no headers needed)
+
+// [data_open, access_closed] - Headers for implementation  
+interface ImplementableOps {
+    #[extension(data_open, access_closed)]
+    fn serialize(&self) -> Vec<u8>;
+}
+// Distributed as: libfoo.so + interface_headers.h
+
+// [closed, access_open] - Headers for extension
+interface ExtensibleOps {
+    #[extension(data_closed, access_open)]
+    memory_contract {
+        id: u64,
+        data: Vec<u8>,
+    }
+    fn process(&self, input: &str) -> String;
+}
+// Distributed as: libfoo.so + data_headers.h + interface_headers.h
+
+// [open, open] - Full headers
+interface FullProtocol {
+    #[extension(data_open, access_open)]
+    type Config;
+    fn configure(&mut self, config: Self::Config) -> Result<()>;
+}
+// Distributed as: libfoo.so + full_source_headers.h
+```
+
+For comprehensive documentation on library linking and extension strategies, see [library-linking.md](library-linking.md).
+
 ## Interface Design Evolution
 
 CPrime's interface system has evolved to support increasingly sophisticated composition patterns:

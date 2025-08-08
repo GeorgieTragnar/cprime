@@ -874,6 +874,282 @@ Output:
 # (Only 4 files need changes out of 1,247!)
 ```
 
+## Template Model Compatibility
+
+### CPrime's Template Approach Aligns with C++
+
+CPrime's library linking model builds directly on the proven C++ template approach, making compatibility natural and predictable:
+
+#### Symbol Deduplication (ODR Compliance)
+
+```cpp
+// C++ behavior that CPrime inherits
+// File: app.cpp
+template<typename T>
+void process(const std::vector<T>& data) { /* implementation */ }
+
+void use_case_1() {
+    std::vector<int> numbers = {1, 2, 3};
+    process(numbers);  // Generates process<int>
+}
+
+// File: plugin.cpp  
+void use_case_2() {
+    std::vector<int> other_numbers = {4, 5, 6};
+    process(other_numbers);  // Also generates process<int>
+}
+
+// Linker automatically deduplicates:
+// - Both compilation units generate process<int>
+// - ODR ensures they're identical
+// - Final binary contains only one process<int>
+```
+
+CPrime follows identical behavior:
+
+```cpp
+// CPrime library combination deduplication
+// app.cprime
+let conn1: Connection<ReadOps> = Database::connect(config1);
+
+// plugin.cprime
+let conn2: Connection<ReadOps> = Database::connect(config2);
+
+// Linker behavior:
+// - Both generate Connection<ReadOps> symbols
+// - ODR ensures identical implementation
+// - Final binary contains only one Connection<ReadOps>
+```
+
+#### Explicit Template Instantiation Compatibility
+
+```cpp
+// C++ explicit instantiation pattern
+// library.h
+template<typename T>
+class Vector {
+    T* data;
+    size_t size;
+    // ... implementation
+public:
+    void push_back(const T& item);
+    T& operator[](size_t index);
+};
+
+// library.cpp - explicit instantiations
+template class Vector<int>;
+template class Vector<double>;
+template class Vector<std::string>;
+
+// Users can create Vector<CustomType> but it compiles from header
+```
+
+CPrime mirrors this approach:
+
+```cpp
+// CPrime library explicit instantiation
+module Database {
+    class Connection { /* implementation */ }
+    functional class ReadOps { /* implementation */ }
+    functional class WriteOps { /* implementation */ }
+    
+    // Explicit instantiations (like C++ library.cpp)
+    extern template Connection<ReadOps>;
+    extern template Connection<WriteOps>;
+    extern template Connection<AdminOps>;
+}
+
+// Users can create Connection<CustomOps> from headers (like C++)
+```
+
+#### Header Distribution Strategy (C++ Compatible)
+
+| Scenario | C++ Approach | CPrime Approach | Result |
+|----------|--------------|-----------------|--------|
+| **Pre-compiled types** | Ship .so + headers | Ship .so + extern template | Fast linking |
+| **Custom types** | Compile from headers | Compile from headers | Same compilation model |
+| **Mixed usage** | Both in same program | Both in same program | Natural C++ behavior |
+
+#### Build System Integration
+
+```cpp
+// C++ CMake pattern
+add_library(mylib SHARED
+    src/library.cpp        # Contains explicit instantiations
+)
+target_include_directories(mylib PUBLIC include/)
+
+add_executable(myapp
+    src/app.cpp           # Uses both pre-compiled and custom types
+)
+target_link_libraries(myapp mylib)
+```
+
+CPrime follows identical patterns:
+
+```cpp
+// CPrime CMake pattern
+cprime_add_library(mylib SHARED
+    src/library.cprime    # Contains extern template declarations
+    EXPLICIT_COMBINATIONS
+        Connection<ReadOps>
+        Connection<WriteOps>
+)
+
+cprime_add_executable(myapp
+    src/app.cprime        # Uses both pre-compiled and custom combinations
+)
+target_link_libraries(myapp mylib)
+```
+
+### Name Mangling Compatibility
+
+CPrime uses C++-compatible name mangling for seamless interop:
+
+```cpp
+// C++ mangling
+Connection<ReadOps>::connect() 
+// → _ZN10Connection7ReadOps7connectEv
+
+// CPrime mangling (identical for same types)
+Connection<ReadOps>::connect()
+// → _ZN10Connection7ReadOps7connectEv  (same symbol!)
+
+// This enables:
+// - Direct linking between C++ and CPrime libraries
+// - Gradual migration (replace files one by one)
+// - Mixed-language programs
+```
+
+### Compilation Model Compatibility
+
+#### Separate Compilation Units
+
+```cpp
+// C++ compilation model CPrime inherits:
+
+// 1. Headers define templates
+// template.h:
+template<typename T> class Container { /* definition */ };
+
+// 2. Implementation files use templates
+// app.cpp:
+#include "template.h"
+Container<int> my_container;     // Instantiated in this unit
+
+// plugin.cpp:
+#include "template.h"  
+Container<int> other_container;  // Instantiated in this unit too
+
+// 3. Linker deduplicates (automatic)
+// Final binary: single Container<int> implementation
+```
+
+CPrime compilation works identically:
+
+```cpp
+// 1. Headers define data classes and functional classes
+// database.h:
+class Connection { /* definition */ }
+functional class ReadOps { /* definition */ }
+
+// 2. Implementation files use combinations  
+// app.cprime:
+#include "database.h"
+let conn1: Connection<ReadOps> = connect();  // Instantiated here
+
+// plugin.cprime:
+#include "database.h"
+let conn2: Connection<ReadOps> = connect();  // Instantiated here too
+
+// 3. Linker deduplicates (automatic)
+// Final binary: single Connection<ReadOps> implementation
+```
+
+### Performance Characteristics Match C++
+
+| Aspect | C++ Templates | CPrime Combinations |
+|--------|---------------|-------------------|
+| **Compilation time** | Slow for new instantiations | Slow for new combinations |
+| **Link time** | Fast (symbol lookup) | Fast (symbol lookup) |
+| **Runtime performance** | Zero overhead | Zero overhead |
+| **Binary size** | Code bloat potential | Code bloat potential |
+| **Optimization** | Per-instantiation | Per-combination |
+
+### Migration Strategy Leverages C++ Knowledge
+
+```cpp
+// Step 1: C++ developers understand this pattern
+template<typename OpsType>
+class Connection {
+    Handle handle;
+public:
+    void connect() { OpsType::do_connect(handle); }
+};
+
+// Explicit instantiations in library
+template class Connection<ReadOps>;
+template class Connection<WriteOps>;
+
+// Step 2: CPrime syntax is nearly identical
+class Connection<OpsType> {  // Same angle bracket syntax
+    handle: Handle,
+public:
+    fn connect() { OpsType::do_connect(handle) }  // Same concept
+}
+
+// Same explicit instantiation approach
+extern template Connection<ReadOps>;
+extern template Connection<WriteOps>;
+
+// Step 3: Build systems work the same way
+// Same CMake patterns, same linking model, same deployment
+```
+
+### Why This Compatibility Matters
+
+1. **Zero Learning Curve**: C++ developers already understand the template model
+2. **Familiar Tooling**: Same build systems, same linking, same debugging
+3. **Gradual Migration**: Can replace C++ files with CPrime files incrementally  
+4. **Performance Predictability**: Same trade-offs developers already understand
+5. **Ecosystem Compatibility**: Works with existing C++ libraries and tools
+
+### Common C++ Template Patterns Work in CPrime
+
+```cpp
+// C++ SFINAE pattern
+template<typename T>
+typename std::enable_if<std::is_integral<T>::value, void>::type
+process(T value) { /* integer implementation */ }
+
+// CPrime equivalent with constraints
+fn process<T>(value: T) where T: Integral {
+    // integer implementation  
+}
+
+// C++ template specialization
+template<> class Vector<bool> {
+    // specialized implementation
+};
+
+// CPrime equivalent  
+impl<> Vector<bool> {
+    // specialized implementation
+}
+
+// C++ template metaprogramming
+template<int N> struct Factorial {
+    static const int value = N * Factorial<N-1>::value;
+};
+
+// CPrime comptime equivalent
+comptime fn factorial(n: u32) -> u32 {
+    if (n <= 1) 1 else n * factorial(n-1)
+}
+```
+
+This compatibility ensures that CPrime feels like a natural evolution of C++ rather than a foreign language, making adoption seamless for existing C++ teams and codebases.
+
 ## Implementation Roadmap
 
 ### Phase 1: Basic Translation Engine (6 months)
