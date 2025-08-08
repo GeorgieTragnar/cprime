@@ -59,6 +59,23 @@ comptime static RUNTIME_FUNC: i32 = get_input();     // ✗ Runtime function
 - Configuration values known at compile-time
 - Precomputed data structures
 
+#### Optimization with Inline
+
+```cpp
+// Inline comptime static - maximum performance
+inline comptime static MATH_CONSTANTS: [f64; 4] = [
+    3.141592653589793,  // PI
+    2.718281828459045,  // E
+    1.414213562373095,  // SQRT_2
+    0.693147180559945,  // LN_2
+];
+
+// Fast inlined access to zero-cost constants
+inline constexpr fn get_pi() -> f64 {
+    return MATH_CONSTANTS[0];  // Inlined constant access
+}
+```
+
 ### Runtime Static Variables
 
 Explicit startup-cost static variables evaluated at runtime:
@@ -101,6 +118,29 @@ runtime static B: Client = Client::connect(&A); // Module 2 - ✗ Undefined orde
 - Runtime configuration loading
 - System state initialization
 - Logging and monitoring infrastructure
+
+#### Optimization with Inline and Volatile
+
+```cpp
+// Inline runtime static - startup cost but inlined access
+inline runtime static CONNECTION_POOL: DbPool = DbPool::new(10);
+
+// Volatile runtime static - prevents optimization for hardware/signals
+volatile runtime static mut HARDWARE_STATUS: *mut u32 = 0x4000_0000;
+volatile runtime static mut SIGNAL_COUNT: u32 = 0;
+
+// Combined usage
+inline fn get_connection() -> Connection {
+    return CONNECTION_POOL.acquire();  // Inlined access to runtime static
+}
+
+volatile fn interrupt_handler() {
+    unsafe {
+        *HARDWARE_STATUS = 0x1;  // Never optimized - hardware requirement
+    }
+    SIGNAL_COUNT += 1;  // Never optimized - signal handler variable
+}
+```
 
 ### Declaration vs Definition
 
@@ -260,6 +300,48 @@ comptime {
 }
 ```
 
+### Optimization Control with Constexpr
+
+Combining constexpr with inline and volatile provides comprehensive performance control:
+
+```cpp
+// Maximum performance - inline constexpr
+inline constexpr fn fast_hash(data: &[u8]) -> u32 {
+    let mut hash = 0u32;
+    for &byte in data {
+        hash = hash.wrapping_mul(31).wrapping_add(byte as u32);
+    }
+    hash
+}
+
+// Compile-time precomputed, inlined access
+inline comptime static PRECOMPUTED_HASHES: [u32; 256] = {
+    let mut hashes = [0u32; 256];
+    for i in 0..256 {
+        hashes[i] = fast_hash(&[i as u8]);
+    }
+    hashes
+};
+
+// Hardware interaction - constexpr but never optimized
+volatile constexpr fn read_timestamp_counter() -> u64 {
+    // Can be compile-time evaluated for constants, but
+    // volatile prevents optimization when used at runtime
+    return unsafe { core::arch::x86_64::_rdtsc() };
+}
+
+// Performance-critical mathematical operations
+functional class OptimizedMath {
+    inline constexpr fn lerp(a: f32, b: f32, t: f32) -> f32 {
+        return a + t * (b - a);  // Always inlined, compile-time when possible
+    }
+    
+    inline constexpr fn clamp(value: f32, min: f32, max: f32) -> f32 {
+        if value < min { min } else if value > max { max } else { value }
+    }
+}
+```
+
 ## III. Unified Static/Constexpr Rules
 
 ### Static Initialization with Constexpr
@@ -278,13 +360,21 @@ Decision matrix for combining static types with initializers:
 | `static` (alone)  | any           | Error          | ✗      | **Must specify `comptime` or `runtime`** |
 
 ```cpp
-// Valid combinations
-comptime static SIZE: usize = constexpr_compute();     // Compile-time evaluation
-runtime static VALUE: i32 = constexpr_compute();       // Runtime evaluation of constexpr
-runtime static DATA: Database = Database::connect();   // Runtime-only function
+// Valid combinations with optimization control
+comptime static SIZE: usize = constexpr_compute();           // Compile-time evaluation
+runtime static VALUE: i32 = constexpr_compute();             // Runtime evaluation of constexpr
+runtime static DATA: Database = Database::connect();         // Runtime-only function
+
+// With optimization keywords
+inline comptime static FAST_SIZE: usize = constexpr_compute();     // Inlined compile-time
+volatile runtime static mut HARDWARE: *mut u32 = 0x1000;           // Runtime + no optimization
+inline runtime static CACHE: LruCache = LruCache::new();           // Runtime + inlined access
 
 // Invalid - must specify cost model
-static AMBIGUOUS: i32 = 42;                           // ✗ Error: specify comptime or runtime
+static AMBIGUOUS: i32 = 42;                                  // ✗ Error: specify comptime or runtime
+
+// Contradictory optimization
+comptime volatile static DATA: i32 = 42;                     // ✗ Error: comptime can't be volatile
 ```
 
 ## IV. Pluggable Interop Design

@@ -70,9 +70,9 @@ impl Queryable for Connection<AdminOps> {
 ### Basic Interface Syntax
 
 ```cpp
-// Simple interface
+// Simple interface with optimization hints
 interface Display {
-    fn fmt(&self) -> String;
+    inline fn fmt(&self) -> String;  // Performance-critical formatting
 }
 
 // Interface with associated types
@@ -101,12 +101,19 @@ interface Readable {
     }
 }
 
-// Interface with constants
+// Interface with constants and optimization control
 interface MathConstants {
     const PI: f64 = 3.141592653589793;
     const E: f64 = 2.718281828459045;
     
-    fn calculate_area(&self) -> f64;
+    inline fn calculate_area(&self) -> f64;  // Always inlined for performance
+}
+
+// Hardware interface - never optimized
+interface HardwareDevice {
+    volatile fn read_register(&self, addr: u32) -> u32;   // Never cached/optimized
+    volatile fn write_register(&mut self, addr: u32, value: u32);  // Always executed
+    inline fn device_id(&self) -> u32;  // ID can be inlined, but register access cannot
 }
 ```
 

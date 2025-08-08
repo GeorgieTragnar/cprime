@@ -161,7 +161,133 @@ runtime thread_local ALLOCATOR: ThreadAllocator = ThreadAllocator::init();
 
 **Semantics**: Per-thread initialization cost, runtime setup overhead
 
-## III. Context Disambiguation
+## III. Optimization Control Keywords
+
+### Inline Keyword
+
+**`inline`** is a compiler directive for optimization, directly equivalent to C++ `inline`:
+
+- **Forces inlining** when possible for performance
+- **Direct C++ counterpart** - same semantics and behavior
+- **Optimization hint** - compiler will attempt to inline the code
+- **Can be combined** with `comptime` and `runtime` constructs
+
+#### Inline Functions
+```cpp
+inline constexpr fn fast_multiply(a: i32, b: i32) -> i32 {
+    return a * b;  // Always inlined, compile-time when possible
+}
+
+inline fn hot_path_function() -> i32 {
+    return expensive_calculation();  // Inlined for performance
+}
+
+functional class MathOps {
+    inline fn add(a: i32, b: i32) -> i32 { a + b }  // Always inlined
+    inline fn multiply(a: i32, b: i32) -> i32 { a * b }  // Always inlined
+}
+```
+
+#### Inline Static Variables
+```cpp
+inline comptime static FAST_LOOKUP: [i32; 256] = generate_table();
+inline runtime static CONNECTION_POOL: Pool = Pool::new();
+```
+
+**Semantics**: Inline static variables are inlined at their usage sites when possible
+
+### Volatile Keyword
+
+**`volatile`** prevents compiler optimization, directly equivalent to C++ `volatile`:
+
+- **Prevents optimization** - compiler cannot optimize access
+- **Direct C++ counterpart** - same semantics for hardware interaction
+- **Memory-mapped I/O** - essential for hardware registers
+- **Signal handlers** - prevents optimization of shared variables
+
+#### Volatile Variables
+```cpp
+volatile runtime static mut HARDWARE_REG: *mut u32 = 0x1000_0000;
+volatile static mut SIGNAL_FLAG: bool = false;
+
+fn hardware_interaction() {
+    volatile let mut control_reg: *mut u32 = 0x2000_0000;
+    unsafe {
+        *control_reg = 0xFF;  // Never optimized away
+    }
+}
+```
+
+#### Volatile Function Parameters
+```cpp
+fn read_hardware_register(volatile reg: *const u32) -> u32 {
+    unsafe { *reg }  // Compiler cannot cache or optimize this read
+}
+
+volatile fn signal_handler() {
+    // This function cannot be optimized - critical for signal safety
+    SIGNAL_FLAG = true;
+}
+```
+
+#### Volatile with Runtime/Comptime
+```cpp
+// Compile-time volatile - contradiction caught at compile-time
+comptime volatile static DATA: i32 = 42;  // ✗ Error: comptime values are const
+
+// Runtime volatile - prevents runtime optimization
+volatile runtime static mut SHARED_COUNTER: i32 = 0;  // ✓ Valid
+```
+
+### Combined Usage Patterns
+
+#### Performance-Critical Code with Explicit Costs
+```cpp
+// Fast inlined zero-cost operations
+inline comptime static CONSTANTS: [f64; 16] = precompute_trig();
+
+// Fast inlined runtime operations  
+inline runtime static mut CACHE: LruCache = LruCache::new();
+
+// Hardware interface - never optimized
+volatile runtime static mut DEVICE_STATUS: *mut u32 = 0x3000_0000;
+
+// Hot path function
+inline fn calculate_physics(dt: f32) -> Vector3 {
+    return apply_forces(dt) + apply_constraints(dt);
+}
+```
+
+#### Interface Methods with Optimization Control
+```cpp
+interface FastMath {
+    inline fn multiply(&self, a: f64, b: f64) -> f64;      // Always inlined
+    volatile fn read_sensor(&self) -> f64;                 // Never optimized
+}
+
+runtime interface FlexibleMath {
+    inline fn common_operation(&self) -> f64;              // Inline + accessor overhead
+    volatile fn hardware_operation(&self) -> f64;          // No optimization + accessor overhead
+}
+```
+
+### C++ Compatibility
+
+Both keywords maintain exact C++ semantics:
+
+```cpp
+// C++ code
+inline int fast_add(int a, int b) { return a + b; }
+volatile int* hardware_reg = (int*)0x1000;
+
+// CPrime equivalent - identical semantics
+inline fn fast_add(a: i32, b: i32) -> i32 { return a + b; }
+volatile let hardware_reg: *mut i32 = 0x1000;
+```
+
+This ensures seamless interop with C++ codebases and familiar behavior for systems programmers.
+
+## IV. Context Disambiguation
 
 ### Language Keywords vs Execution Environment
 
@@ -242,7 +368,60 @@ cprime analyze --comptime-optimizations
   Comptime functional classes: 45 (static dispatch, inlined)
 ```
 
-## V. Usage Guidelines
+## V. Performance Implications
+
+### Cost Analysis by Keyword
+
+#### Comptime Constructs - Zero Runtime Cost
+```cpp
+comptime static TABLE: [i32; 1000] = precompute();    // 0ms at startup
+interface Cacheable { /* memory contract */ }         // 0 bytes overhead  
+union Message { Text, Data }                          // 0 polymorphic cost
+functional class Math { fn add(...) }                 // 0 dispatch cost
+```
+
+#### Runtime Constructs - Explicit Runtime Cost
+```cpp
+runtime static DB: Database = connect();              // ~100ms at startup
+runtime interface Flexible { /* accessors */ }       // +8 bytes vtable
+union runtime Dynamic { Text, Data }                  // +4 bytes type tag
+runtime functional class Service { /* vtable */ }     // +8 bytes vtable
+```
+
+#### Optimization Control - Performance Trade-offs
+```cpp
+inline comptime static FAST_CONST: i32 = 42;         // 0ms + inlined access
+volatile runtime static mut HARDWARE: *mut u32;      // Startup cost + no optimization
+inline fn hot_path() -> i32 { fast_calc() }          // Inlined function call
+volatile fn signal_handler() { /* never optimized */ } // No optimization allowed
+```
+
+### Measurement and Profiling
+
+```bash
+# Find all runtime costs
+cprime analyze --runtime-costs
+  Runtime statics: 3 found (250ms total startup)
+  Runtime interfaces: 12 implementations (96 bytes vtable overhead)
+  Runtime unions: 8 types (32 bytes tagging overhead)
+  Runtime functional classes: 6 classes (48 bytes vtable overhead)
+
+# Find all comptime optimizations
+cprime analyze --comptime-optimizations  
+  Comptime statics: 15 (embedded in binary, 0ms startup)
+  Comptime interfaces: 23 (zero-cost memory contracts)
+  Comptime unions: 11 (compile-time layout, no tagging)
+  Comptime functional classes: 45 (static dispatch, inlined)
+
+# Find optimization directives
+cprime analyze --optimization-hints
+  Inline functions: 23 (forced inlining for performance)
+  Volatile variables: 5 (optimization prevention for correctness)
+  Combined inline+comptime: 12 (maximum performance)
+  Combined volatile+runtime: 8 (explicit cost + no optimization)
+```
+
+## VI. Usage Guidelines
 
 ### When to Use Runtime
 
@@ -340,7 +519,72 @@ union runtime ExtensibleMessage {
 }
 ```
 
-## VI. Integration with Language Features
+### When to Use Inline
+
+Use `inline` when you need:
+
+**Performance-Critical Functions**:
+```cpp
+inline fn vector_dot_product(a: &[f32], b: &[f32]) -> f32 {
+    let mut sum = 0.0;
+    for i in 0..a.len() {
+        sum += a[i] * b[i];
+    }
+    sum
+}
+```
+
+**Small Utility Functions**:
+```cpp
+functional class StringOps {
+    inline fn is_empty(s: &str) -> bool { s.len() == 0 }
+    inline fn char_at(s: &str, idx: usize) -> char { s.chars().nth(idx).unwrap() }
+}
+```
+
+**Header-Only Utilities**:
+```cpp
+inline constexpr fn max(a: i32, b: i32) -> i32 {
+    return if a > b { a } else { b };
+}
+```
+
+### When to Use Volatile
+
+Use `volatile` when you need:
+
+**Hardware Interaction**:
+```cpp
+volatile runtime static mut GPIO_CONTROL: *mut u32 = 0x4000_0000;
+volatile runtime static mut UART_DATA: *mut u8 = 0x4000_1000;
+
+fn read_sensor() -> u16 {
+    volatile let sensor_reg: *const u16 = 0x5000_0000;
+    unsafe { *sensor_reg }  // Never cached or optimized
+}
+```
+
+**Signal Handler Variables**:
+```cpp
+volatile static mut INTERRUPT_COUNT: u32 = 0;
+
+volatile fn interrupt_handler() {
+    INTERRUPT_COUNT += 1;  // Never optimized away
+}
+```
+
+**Multi-threaded Shared Data** (with proper synchronization):
+```cpp
+volatile runtime static mut SHUTDOWN_FLAG: bool = false;
+
+fn worker_thread() {
+    while !SHUTDOWN_FLAG {  // Always reads from memory
+        do_work();
+    }
+}
+```
+
+## VII. Integration with Language Features
 
 ### Interaction with Other Keywords
 
@@ -386,7 +630,7 @@ runtime interface TooFast {
 //        Suggestion: Remove 'runtime' or use 'data_contract'
 ```
 
-## VII. Advanced Patterns
+## VIII. Advanced Patterns
 
 ### Conditional Compilation with Cost Models
 
@@ -447,18 +691,20 @@ impl<T> Storage<T> for VecStorage<T> {
 }
 ```
 
-## VIII. Cross-Reference Guide
+## IX. Cross-Reference Guide
 
 ### Where Each Keyword Appears
 
-| Language Feature | Comptime Variant | Runtime Variant | Default |
-|------------------|------------------|-----------------|---------|
-| Static Variables | `comptime static` | `runtime static` | **Must specify** |
-| Interfaces | `interface` (implicit) | `runtime interface` | **Comptime** |
-| Unions | `union` (implicit) | `union runtime` | **Comptime** |
-| Functional Classes | `functional class` | `runtime functional class` | **Comptime** |
-| Thread-Local | `comptime thread_local` | `runtime thread_local` | **Must specify** |
-| Blocks | `comptime { }` | N/A | **Comptime only** |
+| Language Feature | Comptime Variant | Runtime Variant | Optimization Control | Default |
+|------------------|------------------|-----------------|----------------------|---------|
+| Static Variables | `comptime static` | `runtime static` | `inline`, `volatile` | **Must specify** |
+| Interfaces | `interface` (implicit) | `runtime interface` | `inline` methods | **Comptime** |
+| Unions | `union` (implicit) | `union runtime` | N/A | **Comptime** |
+| Functional Classes | `functional class` | `runtime functional class` | `inline` methods | **Comptime** |
+| Thread-Local | `comptime thread_local` | `runtime thread_local` | `inline`, `volatile` | **Must specify** |
+| Blocks | `comptime { }` | N/A | N/A | **Comptime only** |
+| Functions | `constexpr fn` | `fn` | `inline fn`, `volatile fn` | **Runtime** |
+| Variables | N/A | Local variables | `volatile let` | **Runtime** |
 
 ### Related Documentation
 
@@ -470,9 +716,21 @@ impl<T> Storage<T> for VecStorage<T> {
 
 ## Summary
 
-The `runtime` and `comptime` keywords provide CPrime's fundamental cost-signaling mechanism:
+CPrime provides a comprehensive set of performance control keywords:
 
+### Cost-Signaling Keywords
 - **`runtime`**: Explicit performance cost, measurable overhead, runtime flexibility
 - **`comptime`**: Zero runtime cost, compile-time evaluation, maximum performance
 
-By making performance characteristics explicit through keywords, CPrime enables developers to make informed decisions about trade-offs between convenience and performance, while maintaining clear separation between language constructs and execution environments.
+### Optimization Control Keywords  
+- **`inline`**: Forces inlining when possible, direct C++ counterpart for performance
+- **`volatile`**: Prevents compiler optimization, direct C++ counterpart for correctness
+
+### Complete Performance Vocabulary
+By combining cost-signaling with optimization control, CPrime provides explicit performance semantics:
+- `inline comptime static` - Maximum performance (zero cost + inlined)
+- `volatile runtime static mut` - Explicit cost + no optimization  
+- `inline constexpr fn` - Fast compile-time/runtime dual-mode functions
+- `volatile fn` - Functions that must never be optimized
+
+This enables developers to make informed decisions about performance trade-offs while maintaining clear separation between language constructs and execution environments, with familiar C++ optimization semantics.

@@ -110,6 +110,10 @@ This cost-signaling extends throughout the language:
 - `runtime interface` - accessor method overhead
 - `runtime union` - polymorphic tagging overhead
 
+**Optimization Control**: CPrime provides familiar C++ optimization keywords:
+- `inline` - forces inlining when possible (performance)
+- `volatile` - prevents compiler optimization (correctness)
+
 ### Language Synthesis
 
 CPrime combines:

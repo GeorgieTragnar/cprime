@@ -1193,13 +1193,13 @@ Instead of creating separate functional classes for each data type, interfaces e
 ```cpp
 // Traditional approach: Separate functional classes for each type
 functional class UserCacheOps {
-    fn store(user: &UserData) -> Result<()> { ... }
-    fn retrieve(user_id: u64) -> Option<UserData> { ... }
+    inline fn store(user: &UserData) -> Result<()> { ... }  // Inlined for performance
+    inline fn retrieve(user_id: u64) -> Option<UserData> { ... }  // Hot path optimization
 }
 
 functional class ProductCacheOps {
-    fn store(product: &ProductData) -> Result<()> { ... }
-    fn retrieve(product_id: u64) -> Option<ProductData> { ... }
+    inline fn store(product: &ProductData) -> Result<()> { ... }  // Inlined for performance
+    inline fn retrieve(product_id: u64) -> Option<ProductData> { ... }  // Hot path optimization
 }
 
 // Interface-enabled approach: Single generic functional class
@@ -1215,7 +1215,7 @@ interface Cacheable {
 
 // Generic functional class works with ANY Cacheable implementation
 functional class CacheOps<T: Cacheable> {
-    fn store(data: &T) -> Result<()> {
+    inline fn store(data: &T) -> Result<()> {  // Inlined generic operation
         let key = data.id;  // Direct access through interface contract
         let entry = CacheEntry {
             key,
@@ -1226,7 +1226,7 @@ functional class CacheOps<T: Cacheable> {
         CACHE_STORE.insert(entry)
     }
     
-    fn retrieve_by_key(key: u64) -> Option<T> {
+    inline fn retrieve_by_key(key: u64) -> Option<T> {  // Hot path - always inlined
         CACHE_STORE.get(&key)
             .and_then(|entry| deserialize_cacheable::<T>(&entry.data))
     }
