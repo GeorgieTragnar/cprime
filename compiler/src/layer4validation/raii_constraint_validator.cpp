@@ -4,6 +4,119 @@
 namespace cprime::layer4validation {
 
 // ============================================================================
+// DeferStatementAnalyzer Implementation - DEFER FUNCTIONALITY CORE  
+// ============================================================================
+
+DeferStatementAnalyzer::DeferStatementAnalyzer(const SymbolTable& symbol_table)
+    : symbol_table_(symbol_table) {
+}
+
+validation::ValidationResult DeferStatementAnalyzer::analyze_defer_statements(std::shared_ptr<ast::CompilationUnit> ast) {
+    validation::ValidationResult result;
+    
+    if (!ast) {
+        result.add_error(
+            "Cannot analyze defer statements: AST is null",
+            validation::SourceLocation(),
+            "Ensure AST is properly constructed before defer analysis"
+        );
+        return result;
+    }
+    
+    // Analyze defer statements in all functions
+    for (const auto& decl : ast->get_declarations()) {
+        if (auto func_decl = std::dynamic_pointer_cast<ast::FunctionDecl>(decl)) {
+            auto scope_analysis = analyze_function_scope(*func_decl);
+            result.merge(validate_defer_patterns(scope_analysis));
+        }
+    }
+    
+    return result;
+}
+
+DeferStatementAnalyzer::ScopeAnalysis DeferStatementAnalyzer::analyze_function_scope(const ast::FunctionDecl& /* func_decl */) {
+    ScopeAnalysis analysis;
+    
+    // TODO: Traverse function body AST to find:
+    // 1. All defer statements
+    // 2. All variable declarations  
+    // 3. Control flow patterns (conditionals, loops)
+    
+    // For now, create a placeholder analysis
+    // This will be expanded when AST visitor pattern is implemented
+    
+    return analysis;
+}
+
+validation::ValidationResult DeferStatementAnalyzer::validate_defer_patterns(const ScopeAnalysis& analysis) {
+    validation::ValidationResult result;
+    
+    // Check each defer statement for unsupported patterns
+    for (const auto& defer_info : analysis.defer_statements) {
+        // Check for heap allocation defer (not supported yet)
+        result.merge(check_heap_allocation_defer(defer_info));
+    }
+    
+    // Check for complex conditional defer patterns  
+    result.merge(check_complex_conditional_defer(analysis));
+    
+    return result;
+}
+
+validation::ValidationResult DeferStatementAnalyzer::check_heap_allocation_defer(const DeferInfo& defer_info) {
+    validation::ValidationResult result;
+    
+    // Check if the deferred variable is heap-allocated
+    if (is_heap_allocated_variable(defer_info.variable_name)) {
+        result.add_error(
+            "TODO: Heap object defer not implemented - heap allocation system needed first",
+            ast_to_validation_location(defer_info.defer_location),
+            "Use stack-allocated objects with defer for now, or implement heap allocation system"
+        );
+    }
+    
+    return result;
+}
+
+validation::ValidationResult DeferStatementAnalyzer::check_complex_conditional_defer(const ScopeAnalysis& analysis) {
+    validation::ValidationResult result;
+    
+    // Check for complex conditional defer patterns
+    if (has_complex_conditional_defer(analysis)) {
+        result.add_error(
+            "TODO: Conditional defer without assured return not implemented - will work under warning in future",
+            validation::SourceLocation(),
+            "Use defer in simple conditional blocks with assured returns, or at function scope"
+        );
+    }
+    
+    return result;
+}
+
+bool DeferStatementAnalyzer::is_heap_allocated_variable(const std::string& var_name) {
+    // TODO: Check symbol table or AST to determine if variable is heap-allocated
+    // For now, assume variables containing "Box", "Rc", "Arc" are heap-allocated
+    return var_name.find("Box") != std::string::npos ||
+           var_name.find("Rc") != std::string::npos ||
+           var_name.find("Arc") != std::string::npos;
+}
+
+bool DeferStatementAnalyzer::has_complex_conditional_defer(const ScopeAnalysis& analysis) {
+    // Check for defer statements in conditional scopes without assured returns
+    for (const auto& defer_info : analysis.defer_statements) {
+        if (defer_info.is_in_conditional_scope && !defer_info.conditional_has_assured_return) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+validation::SourceLocation DeferStatementAnalyzer::ast_to_validation_location(const ast::SourceLocation& loc) const {
+    return validation::SourceLocation(loc.line, loc.column, loc.start_pos, loc.end_pos);
+}
+
+// ============================================================================
 // RAIIConstraintValidator Implementation
 // ============================================================================
 
@@ -26,12 +139,39 @@ validation::ValidationResult RAIIConstraintValidator::validate() {
     // Run core RAII constraint validation
     result.merge(validate_constructor_destructor_pairing());
     
+    // Run defer statement validation
+    result.merge(validate_defer_statements());
+    
     return result;
 }
 
 validation::ValidationResult RAIIConstraintValidator::validate_constructor_destructor_pairing() {
     ConstructorDestructorChecker checker(symbol_table_);
     return checker.validate_pairing(ast_);
+}
+
+validation::ValidationResult RAIIConstraintValidator::validate_defer_statements() {
+    // Create analyzer instance and run defer statement analysis
+    DeferStatementAnalyzer analyzer(symbol_table_);
+    return analyzer.analyze_defer_statements(ast_);
+}
+
+validation::ValidationResult RAIIConstraintValidator::validate_stack_object_defer_reordering() {
+    validation::ValidationResult result;
+    
+    // This will be called by DeferStatementAnalyzer for specific stack object defer validation
+    // For now, return success as detailed logic is in DeferStatementAnalyzer
+    
+    return result;
+}
+
+validation::ValidationResult RAIIConstraintValidator::detect_unsupported_defer_patterns() {
+    validation::ValidationResult result;
+    
+    // This will be called by DeferStatementAnalyzer to detect unsupported patterns
+    // For now, return success as detailed logic is in DeferStatementAnalyzer
+    
+    return result;
 }
 
 // ============================================================================
