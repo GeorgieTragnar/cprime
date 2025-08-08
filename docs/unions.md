@@ -39,9 +39,11 @@ union ConnectionSpace {
 
 ### Memory Layout Strategy: Two Union Variants
 
-Union constructs manage memory through two distinct approaches:
+Union constructs manage memory through two distinct approaches based on CPrime's cost-signaling keywords:
 
-**Compile-Time Unions (Fixed Size, Locked Memory Contracts):**
+> **Cost Signaling**: The `runtime` keyword explicitly signals polymorphic tagging overhead. See [Runtime/Comptime Keywords](runtime-comptime-keywords.md) for complete cost-signaling reference.
+
+**Compile-Time Unions (Default - Fixed Size, Locked Memory Contracts):**
 ```cpp
 union CompileTimeMessage {
     Connect { addr: String, port: u16 },
@@ -52,7 +54,7 @@ union CompileTimeMessage {
 // No resize overhead - size determined at compile time
 ```
 
-**Runtime Unions (Growable Size, Runtime Elevators with Polymorphic Tagging):**
+**Runtime Unions (`union runtime` - Growable Size, Runtime Elevators with Polymorphic Tagging):**
 ```cpp
 union runtime RuntimeSpace {
     UserConn(runtime Connection<UserOps>),

@@ -1,10 +1,12 @@
-# CPrime Runtime System
+# CPrime Execution Runtime System
 
 ## Overview
 
-CPrime's runtime system provides the execution context for programs, determining how signals are handled, how concurrency is managed, and how system resources are utilized. The language separates **signal handling primitives** (syntax and semantics) from **runtime behavior** (execution policies), allowing the same code to run with different performance and safety characteristics.
+CPrime's **execution runtime system** provides the execution context for programs, determining how signals are handled, how concurrency is managed, and how system resources are utilized. The language separates **signal handling primitives** (syntax and semantics) from **execution runtime behavior** (execution policies), allowing the same code to run with different performance and safety characteristics.
 
-The runtime is selected at program entry using the `fn main() = RuntimeChoice` syntax, and each runtime implements a common interface while providing different capabilities and trade-offs.
+> **Important**: This document discusses the **execution runtime system** (program execution environment), not the **`runtime` keyword** which signals performance costs in language constructs. For the `runtime` keyword, see [Runtime/Comptime Keywords](runtime-comptime-keywords.md).
+
+The execution runtime is selected at program entry using the `fn main() = RuntimeChoice` syntax, and each runtime implements a common interface while providing different capabilities and trade-offs.
 
 For signal handling language primitives and syntax, see [Signal Handling](signal-handling.md).
 

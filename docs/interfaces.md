@@ -6,10 +6,12 @@ CPrime interfaces are **polymorphic constructs** (not classes) that act as glue 
 
 **Important**: Interfaces are not objects or classes themselves - they are language constructs that enable polymorphism.
 
-They offer two distinct variants:
+They offer two distinct variants based on CPrime's cost-signaling keywords:
 
-1. **Compile-time Interfaces**: Memory contracts with zero overhead - direct memory access
-2. **Runtime Interfaces**: Accessor-based with method call overhead - flexible layouts
+1. **Compile-time Interfaces** (default): Memory contracts with zero overhead - direct memory access
+2. **Runtime Interfaces** (`runtime interface`): Accessor-based with method call overhead - flexible layouts
+
+> **Cost Signaling**: The `runtime` keyword explicitly signals performance overhead. See [Runtime/Comptime Keywords](runtime-comptime-keywords.md) for complete cost-signaling reference.
 
 While functional classes provide inheritance-like polymorphism (gaining access rights to data classes with explicit memory costs), interfaces serve as constructs in CPrime's polymorphism system: functional classes (inheritance-like), traditional interfaces (shared operations via constructs), interface memory contracts (N:M composition via constructs), and unions (pattern matching via constructs).
 

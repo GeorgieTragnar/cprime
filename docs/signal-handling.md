@@ -9,7 +9,7 @@ The system is built on three core principles:
 2. **Trust the programmer** - Allow potentially unsafe operations with warnings
 3. **Progressive safety** - Configurable safety levels from C-style to Rust-level
 
-For runtime-specific signal behavior and execution models, see [Runtime System](runtime-system.md).
+For execution runtime-specific signal behavior and execution models, see [Execution Runtime System](runtime-system.md).
 
 ## Core Language Primitives
 
@@ -668,8 +668,8 @@ fn monitored_operation() except(RARE_ERROR) {
 
 ## Cross-References
 
-- **Runtime Behavior**: See [Runtime System](runtime-system.md) for how different runtimes implement signal handling
-- **Coroutine Integration**: See [Coroutines](coroutines.md) for signal-to-coroutine conversion in scheduler runtime
+- **Execution Runtime Behavior**: See [Execution Runtime System](runtime-system.md) for how different execution runtimes implement signal handling
+- **Coroutine Integration**: See [Coroutines](coroutines.md) for signal-to-coroutine conversion in scheduler execution runtime
 - **Language Overview**: See [Language Summary](language-summary.md) for high-level signal handling overview
 - **Memory Safety**: See [Memory Management](memory-management.md) for signal handling with RAII
 - **Type System**: See [Type System](type-system.md) for signal type checking and inference

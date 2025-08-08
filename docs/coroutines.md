@@ -162,6 +162,7 @@ async fn complex_parser(input: &str) -> ParseResult {
 Coroutines use CPrime's union system for efficient heterogeneous storage:
 
 ```cpp
+// Runtime union - polymorphic tagging overhead for dynamic type identification
 union runtime CoroStorage {
     Micro(MicroCoro<256>),      // Pool-allocated
     Small(SmallCoro<2048>),     // Pool-allocated
@@ -502,7 +503,7 @@ fn process_coroutines(coros: &mut [&mut dyn CoroLifecycle]) {
 ### Union-Based Heterogeneous Collections
 
 ```cpp
-// Mixed coroutine types in single container
+// Mixed coroutine types in single container - runtime keyword signals tagging overhead
 union runtime AnyCoroutine {
     Micro(MicroCoro<256>),
     Small(SmallCoro<2048>),

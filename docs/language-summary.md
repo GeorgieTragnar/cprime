@@ -97,18 +97,39 @@ Each tier serves specific use cases while maintaining type safety and performanc
 
 ## Design Philosophy
 
+### Cost-Signaling Through Keywords
+
+CPrime's fundamental principle: **performance costs must be explicit**. The language uses `runtime` and `comptime` keywords to signal performance characteristics:
+
+- **`runtime`** = explicit performance cost or overhead
+- **`comptime`** = zero runtime cost, compile-time evaluation
+
+This cost-signaling extends throughout the language:
+- `runtime static` - explicit startup cost
+- `comptime static` - zero runtime cost  
+- `runtime interface` - accessor method overhead
+- `runtime union` - polymorphic tagging overhead
+
+### Language Synthesis
+
 CPrime combines:
 - **C++'s control** without complexity
 - **Rust's safety** without fighting the borrow checker  
 - **Go's simplicity** without sacrificing performance
 - **Revolutionary innovations** in coroutines and composition
+- **Explicit cost model** through keyword-based signaling
 
 The result is a systems programming language that makes the right thing easy and the wrong thing impossible, while providing unprecedented performance in coroutine-based concurrent systems with flexible signal handling that adapts to different execution models.
 
 ## Additional Documentation
 
+### Foundational Concepts
+- **[Runtime/Comptime Keywords](runtime-comptime-keywords.md)**: Complete reference for cost-signaling keywords
+- **[Statics and Constexpr](statics-and-constexpr.md)**: Static variables, constexpr functions, and pluggable interop
+
+### Core Systems
 - **[Signal Handling](signal-handling.md)**: Language primitives, syntax, and safety levels
-- **[Runtime System](runtime-system.md)**: Execution models and runtime-specific behavior
+- **[Execution Runtime System](runtime-system.md)**: Execution models and runtime environment behavior
 - **[Coroutines](coroutines.md)**: Revolutionary coroutine architecture with signal integration
 - **[Channels](channels.md)**: Three-layer channel architecture for concurrent communication
 - **[Interfaces](interfaces.md)**: Polymorphic glue and N:M composition patterns
