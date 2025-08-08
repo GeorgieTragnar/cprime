@@ -686,6 +686,103 @@ This prevents function explosion and maintains uniform access patterns within ea
 4. **Type Safety**: Compiler verifies interface implementations
 5. **Performance Control**: Explicit choice between speed and flexibility
 
+### Interface Exposure with `semconst` Fields
+
+CPrime's two-dimensional access control shines when combining `semconst` fields with interface exposure:
+
+```cpp
+class SecureConfig {
+    semconst api_key: String,        // Class can only replace atomically
+    semconst database_url: String,   // Class can only replace atomically
+    mutable cache: HashMap,           // Class can modify freely
+    
+    // Expose semconst fields with different permissions
+    exposes AdminInterface {
+        api_key as mutable,      // Admin can modify semconst field!
+        database_url as mutable, // Admin can modify semconst field!
+        cache as mutable,        // Admin has full access
+    }
+    
+    exposes UserInterface {
+        api_key as const,        // User can only read
+        database_url as const,   // User can only read
+        // cache not exposed     // User cannot access cache
+    }
+}
+
+// Interface implementations respect field exposure
+interface Configurable {
+    fn get_connection_string(&self) -> &String;
+    fn update_connection(&mut self, url: String);
+}
+
+impl Configurable for SecureConfig<AdminInterface> {
+    fn get_connection_string(&self) -> &String {
+        &self.database_url  // Read access
+    }
+    
+    fn update_connection(&mut self, url: String) {
+        // Admin can modify semconst through interface!
+        self.database_url = url;  // ✓ Allowed via AdminInterface
+    }
+}
+
+impl Configurable for SecureConfig<UserInterface> {
+    fn get_connection_string(&self) -> &String {
+        &self.database_url  // Read access only
+    }
+    
+    fn update_connection(&mut self, url: String) {
+        // Compile error - UserInterface has const access only
+        // self.database_url = url;  // ❌ COMPILE ERROR
+        panic!("Users cannot update configuration");
+    }
+}
+```
+
+#### Memory Contracts with Field Modifiers
+
+Interface memory contracts can specify field modifiers for precise control:
+
+```cpp
+interface Versioned {
+    memory_contract {
+        id: semconst u64,       // ID is semantically preserved
+        version: mutable u32,    // Version can be incremented
+        timestamp: u64,          // Default modifier
+    }
+    
+    fn increment_version(&mut self);
+}
+
+class Document {
+    semconst document_id: u64,    // Maps to semconst id
+    mutable revision: u32,         // Maps to mutable version
+    last_modified: u64,            // Maps to timestamp
+    content: String,               // Not in interface
+    
+    implements Versioned {
+        id <- document_id,
+        version <- revision,
+        timestamp <- last_modified,
+    }
+}
+
+// Generic operations respect field modifiers
+functional class VersionOps<T: Versioned> {
+    fn increment_version(item: &mut T) {
+        item.version += 1;  // ✓ Can modify mutable field
+        // item.id = 0;     // ❌ Cannot modify semconst field
+    }
+    
+    fn replace_id(item: &mut T, new_id: u64) {
+        // Must use 1:1 move pattern for semconst
+        let old_id = move(item.id);
+        item.id = move(new_id);
+    }
+}
+```
+
 ### Integration with Traditional Interfaces
 
 Memory contracts and traditional interfaces can coexist:

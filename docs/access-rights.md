@@ -165,6 +165,116 @@ if conn.has_capability::<AdminOps>() {
 }
 ```
 
+### Access Rights and Field Modifiers
+
+Access rights provide a second dimension of control that interacts powerfully with field modifiers like `semconst`:
+
+#### Two-Dimensional Access Control
+
+```cpp
+class DatabaseConfig {
+    semconst connection_string: String,  // Class can only replace atomically
+    semconst max_connections: u32,       // Class can only replace atomically  
+    mutable current_connections: u32,    // Class can modify freely
+    debug_mode: bool,                    // Default: can modify
+    
+    // Different access rights see different permissions
+    exposes AdminOps {
+        connection_string as mutable,    // Admin can modify semconst!
+        max_connections as mutable,      // Admin can modify semconst!
+        current_connections as mutable,  // Admin can modify mutable
+        debug_mode as mutable,          // Admin can modify default
+    }
+    
+    exposes UserOps {
+        connection_string as const,     // User can only read
+        max_connections as const,       // User can only read
+        current_connections as const,   // User can only read
+        // debug_mode not exposed       // User cannot access
+    }
+    
+    exposes MonitorOps {
+        connection_string as const,     // Monitor can only read
+        max_connections as const,       // Monitor can only read
+        current_connections as mutable, // Monitor can update counters
+        // debug_mode not exposed       // Monitor cannot access
+    }
+}
+```
+
+#### Permission Matrix for Field Access
+
+| Field Modifier | Class Internal | `as const` | `as mutable` |
+|----------------|----------------|------------|-------------|
+| `semconst` | Atomic replacement only | Read-only | Full modification |
+| `mutable` | Full modification | Read-only | Full modification |
+| Default | Full modification | Read-only | Full modification |
+
+#### Implementation Examples
+
+```cpp
+functional class AdminOps {
+    fn update_connection_string(db: &mut DatabaseConfig<AdminOps>, new_conn: String) {
+        // Admin can modify semconst field through access right!
+        db.connection_string = new_conn;  // ✓ Allowed via `as mutable`
+    }
+    
+    fn reconfigure(db: &mut DatabaseConfig<AdminOps>, max_conn: u32) {
+        // Can modify semconst through access right
+        db.max_connections = max_conn;    // ✓ Allowed via `as mutable`
+        
+        // Can modify mutable as expected
+        db.current_connections = 0;       // ✓ Normal mutable access
+    }
+}
+
+functional class UserOps {
+    fn get_connection_info(db: &DatabaseConfig<UserOps>) -> (String, u32) {
+        // User can read semconst fields
+        (db.connection_string.clone(), db.max_connections)  // ✓ Read access
+    }
+    
+    fn attempt_modify(db: &mut DatabaseConfig<UserOps>) {
+        // All these would be compile errors:
+        // db.connection_string = "new".to_string();  // ❌ No write access
+        // db.max_connections = 100;                  // ❌ No write access  
+        // db.current_connections = 0;                // ❌ No write access
+    }
+}
+
+functional class MonitorOps {
+    fn update_connection_count(db: &mut DatabaseConfig<MonitorOps>, count: u32) {
+        // Monitor can update connection count but not config
+        db.current_connections = count;             // ✓ Allowed via `as mutable`
+        // db.max_connections = 100;                // ❌ Only const access
+        // db.connection_string = "new".to_string(); // ❌ Only const access
+    }
+}
+```
+
+#### Field Modifier Enforcement
+
+The class internal behavior is still governed by field modifiers:
+
+```cpp
+impl DatabaseConfig {
+    // Internal methods respect field modifiers regardless of access rights
+    fn internal_update(&mut self, new_max: u32) {
+        // Must use 1:1 move pattern for semconst even internally
+        let old = move(self.max_connections);
+        self.max_connections = move(new_max);
+        
+        // But mutable fields can be modified directly
+        self.current_connections = 0;  // ✓ Direct modification
+    }
+    
+    fn invalid_internal_update(&mut self) {
+        // This would be a compile error even for the owning class:
+        // self.max_connections += 1;  // ❌ Cannot mutate semconst directly
+    }
+}
+```
+
 ### Memory and Performance Impact
 
 | Feature | Compile-Time | Runtime |

@@ -177,6 +177,143 @@ class IndirectContainer {
 }
 ```
 
+## Semantic Preservation with `semconst`
+
+### Memory Location Independence
+
+CPrime introduces `semconst` (semantic const) - a revolutionary field modifier that separates semantic immutability from memory immutability:
+
+```cpp
+class DataHolder {
+    semconst config: Configuration,  // Semantic value preserved
+    mutable cache: HashMap,          // Can modify freely
+    
+    // semconst allows memory reorganization while preserving value
+    fn update(&mut self, new_config: Configuration) {
+        // 1:1 move pattern enforced by compiler
+        let old = move(self.config);     // Move out old value
+        self.config = move(new_config);  // Move in new value
+        
+        // Compiler can optimize memory layout:
+        // - Relocate config for cache alignment
+        // - Move to different NUMA node
+        // - Compact during garbage collection
+        // All while preserving the semantic value
+    }
+}
+```
+
+### How `semconst` Enables Compiler Optimizations
+
+#### 1. Cache Line Optimization
+
+```cpp
+class MatrixData {
+    semconst matrix_a: [[f64; 100]; 100],
+    semconst matrix_b: [[f64; 100]; 100],
+    mutable result: [[f64; 100]; 100],
+}
+
+// Compiler can:
+// - Align matrices to cache line boundaries
+// - Transpose matrix_b for better locality
+// - Split across multiple cache levels
+// Without changing semantic values
+```
+
+#### 2. NUMA-Aware Memory Placement
+
+```cpp
+fn process_parallel(semconst data: LargeDataSet) {
+    // Compiler decides optimal memory placement:
+    // - Duplicate read-only portions across NUMA nodes
+    // - Place near processing cores
+    // - Move between nodes as needed
+    // All transparent to the programmer
+}
+```
+
+#### 3. Zero-Copy Optimizations
+
+```cpp
+class SharedBuffer {
+    semconst data: Vec<u8>,
+    
+    fn share_with_thread(&self) -> SharedView {
+        // Compiler can share memory directly
+        // No copying needed - semconst guarantees no mutation
+        SharedView { data: &self.data }
+    }
+}
+```
+
+### Relationship with Memory Operations
+
+`semconst` fields interact with standard memory operations in specific ways:
+
+```cpp
+class Example {
+    semconst immutable_data: Data,
+    mutable working_data: Data,
+    
+    // Move - always allowed (bit relocation)
+    fn relocate(self) -> Self {
+        move(self)  // ✓ Works for all fields
+    }
+    
+    // Copy - follows standard rules
+    private fn copy(&self) -> Self {
+        Example {
+            immutable_data: self.immutable_data.copy(),  // ✓ Copy semconst
+            working_data: self.working_data.copy(),      // ✓ Copy mutable
+        }
+    }
+    
+    // Modification - restricted for semconst
+    fn modify(&mut self) {
+        // self.immutable_data.mutate();  // ❌ Cannot mutate semconst
+        self.working_data.mutate();       // ✓ Can mutate mutable
+        
+        // Must use 1:1 move for semconst
+        let old = move(self.immutable_data);
+        self.immutable_data = move(process(old));  // ✓ Atomic replacement
+    }
+}
+```
+
+### Memory Safety with `semconst`
+
+The `semconst` modifier provides additional memory safety guarantees:
+
+1. **No Partial States**: Atomic replacement prevents inconsistent states
+2. **Thread Safety**: Other threads see either old or new value, never partial
+3. **Coroutine Safety**: Suspension points don't break atomicity
+
+```cpp
+suspend fn async_update(holder: &mut DataHolder) {
+    // Build new state (can suspend)
+    let new_data = co_await fetch_data();
+    let processed = co_await process_data(new_data);
+    
+    // Atomic replacement (cannot suspend)
+    let old = move(holder.data);
+    holder.data = move(processed);
+    // Other coroutines see complete transition
+}
+```
+
+### Performance Characteristics
+
+| Aspect | Traditional Const | `semconst` | Mutable |
+|--------|------------------|-----------|---------|
+| **Memory Layout** | Fixed | Flexible | Flexible |
+| **Compiler Optimization** | Limited | Maximum | Moderate |
+| **Modification** | None | Atomic only | Any |
+| **Thread Safety** | Implicit | Atomic transitions | Requires sync |
+| **Cache Optimization** | Manual | Automatic | Manual |
+
+For comprehensive documentation on `semconst`, see [semconst.md](semconst.md).
+
 ## RAII and Resource Management
 
 ### Automatic Resource Management

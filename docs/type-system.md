@@ -148,6 +148,126 @@ let person = Person {
     email: Some("john@example.com".to_string()),
     addresses: Vec::new(),
 };
+```
+
+## Field Modifiers
+
+CPrime provides a sophisticated three-tier field modifier system that controls mutability at the field level:
+
+### 1. `semconst` - Semantic Preservation
+
+The `semconst` modifier preserves semantic values while allowing memory flexibility:
+
+```cpp
+class Configuration {
+    semconst api_endpoint: String,      // Can only be replaced atomically
+    semconst timeout_seconds: u32,      // No partial modification allowed
+    mutable connection_pool: Pool,      // Can be modified incrementally
+    
+    // Type system enforces 1:1 move pattern for semconst
+    fn update_endpoint(&mut self, new_endpoint: String) -> String {
+        let old = move(self.api_endpoint);        // Must move out
+        self.api_endpoint = move(new_endpoint);   // Move in new value
+        old                                       // Return old value
+    }
+}
+```
+
+**Type implications of `semconst`:**
+- **Cannot call mutating methods**: `self.api_endpoint.push_str("x")` is forbidden
+- **Cannot assign to subfields**: `self.api_endpoint.field = value` is forbidden
+- **Can only replace entirely**: Must use 1:1 move pattern
+- **Swap operations allowed**: Compiler recognizes swaps as permutations
+
+### 2. `mutable` - Explicit Mutability
+
+The `mutable` modifier provides explicit, unrestricted mutability:
+
+```cpp
+class Cache {
+    mutable entries: HashMap<String, Value>,    // Full mutability
+    mutable hit_count: u64,                    // Can increment/modify
+    capacity: usize,                           // Default behavior
+    
+    fn increment_hits(&mut self) {
+        self.hit_count += 1;                   // ✓ Direct modification
+        self.entries.insert("recent".into(), value); // ✓ Method calls
+    }
+}
+```
+
+### 3. Default Fields
+
+Fields without explicit modifiers have controlled mutability:
+
+```cpp
+class User {
+    id: u64,                    // Default: privately mutable
+    name: String,               // Default: privately mutable
+    semconst created_at: u64,   // Explicitly semantic preservation
+    mutable login_count: u64,   // Explicitly mutable
+    
+    // Can modify default fields internally
+    fn rename(&mut self, new_name: String) {
+        self.id = generate_new_id();    // ✓ Internal modification
+        self.name = new_name;           // ✓ Internal modification
+    }
+}
+```
+
+### Field Modifiers in Generic Types
+
+Field modifiers work with generic types and constraints:
+
+```cpp
+class Container<T> {
+    semconst data: Vec<T>,              // Generic semconst field
+    mutable metadata: ContainerMeta,    // Explicit mutable
+    
+    // Generic methods respect field modifiers
+    fn replace_data(&mut self, new_data: Vec<T>) -> Vec<T> {
+        let old = move(self.data);      // Must use move pattern
+        self.data = move(new_data);     // for semconst fields
+        old
+    }
+    
+    fn update_metadata(&mut self, meta: ContainerMeta) {
+        self.metadata = meta;           // Direct assignment for mutable
+    }
+}
+
+// Specialized behavior for specific types
+impl Container<String> {
+    fn specialized_operation(&mut self) {
+        // Still must follow semconst rules for self.data
+        let temp = move(self.data);
+        let processed = process_strings(temp);
+        self.data = move(processed);
+    }
+}
+```
+
+### Field Modifiers with Type Bounds
+
+```cpp
+// Require types to have compatible field modifiers
+interface ModifiableContent {
+    semconst id: u64;           // Must be semconst
+    mutable content: String;    // Must be mutable
+}
+
+class Document implements ModifiableContent {
+    semconst doc_id: u64,       // Maps to semconst id
+    mutable text_content: String, // Maps to mutable content
+    revision: u32,              // Additional field
+    
+    // Implementation must respect field modifiers
+    fn update_content(&mut self, new_content: String) {
+        self.text_content = new_content;  // ✓ Direct modification (mutable)
+        self.revision += 1;               // ✓ Default field modification
+        // Cannot do: self.doc_id += 1;   // ❌ semconst requires move pattern
+    }
+}
 
 // Field access
 let x_coord = origin.x;

@@ -56,6 +56,130 @@ class StreamData {
 6. **Stack containment privilege**: Types that contain this data class on the stack get access to private memory operations
 7. **Unions are data classes**: Unions follow all data class rules with special variant handling
 
+#### Field Modifiers in Data Classes
+
+Data classes support a three-tier field modifier system that provides fine-grained control over mutability and access:
+
+##### 1. `semconst` Fields - Semantic Preservation
+
+`semconst` (semantic const) fields preserve semantic value while allowing memory flexibility:
+
+```cpp
+class Configuration {
+    semconst database_url: String,  // Atomic replacement only
+    semconst port: u16,            // No partial modification
+    mutable cache: HashMap,         // Can modify incrementally
+    
+    // semconst fields enforce 1:1 move pattern
+    fn update_config(&mut self, new_url: String, new_port: u16) {
+        // Must move out old values
+        let old_url = move(self.database_url);
+        let old_port = move(self.port);
+        
+        // Move in new values
+        self.database_url = move(new_url);
+        self.port = move(new_port);
+        
+        // Cache can be modified normally
+        self.cache.clear();
+    }
+}
+```
+
+**Key characteristics of `semconst`:**
+- **Atomic replacement**: Can only be replaced entirely, never partially modified
+- **1:1 move pattern**: Must move old value out before moving new value in
+- **Memory flexibility**: Compiler can relocate/reorganize for optimization
+- **No method calls**: Cannot call mutating methods on `semconst` fields
+- **Swap recognition**: Compiler recognizes swaps as permutations, not mutations
+
+For comprehensive documentation on `semconst`, see [semconst.md](semconst.md).
+
+##### 2. `mutable` Fields - Full Mutability
+
+`mutable` fields can be modified freely by the owning class:
+
+```cpp
+class StreamBuffer {
+    mutable buffer: Vec<u8>,        // Can modify incrementally
+    mutable position: usize,        // Can update directly
+    semconst capacity: usize,       // Can only replace atomically
+    
+    fn write(&mut self, data: &[u8]) {
+        self.buffer.extend_from_slice(data);  // ✓ Modify mutable field
+        self.position += data.len();          // ✓ Update mutable field
+        // self.capacity += 100;               // ❌ Cannot modify semconst
+    }
+}
+```
+
+##### 3. Default (Unspecified) Fields
+
+Fields without explicit modifiers default to private mutability with controlled exposure:
+
+```cpp
+class UserData {
+    id: u64,                    // Default: private mutable
+    name: String,               // Default: private mutable
+    semconst created_at: u64,  // Explicitly semconst
+    mutable cache: Cache,       // Explicitly mutable
+    
+    // Default fields can be modified internally
+    fn rename(&mut self, new_name: String) {
+        self.name = new_name;  // ✓ Can modify
+    }
+}
+```
+
+##### Field Modifiers and Access Rights
+
+Field modifiers interact with access rights to provide two-dimensional access control:
+
+```cpp
+class Database {
+    semconst connection_string: String,  // Class can only replace atomically
+    mutable connection_pool: Pool,       // Class can modify freely
+    cache: HashMap<String, Result>,      // Default: private mutable
+    
+    // Expose fields with different permissions
+    exposes AdminOps {
+        connection_string as mutable,  // Admin can modify semconst field!
+        connection_pool as mutable,    // Admin can modify pool
+        cache as const,               // Admin can only read cache
+    }
+    
+    exposes UserOps {
+        connection_string as const,   // User can only read
+        // connection_pool not exposed // User cannot access pool
+        cache as const,               // User can only read cache
+    }
+}
+
+// Two-dimensional control in action:
+functional class AdminOps {
+    fn update_connection(db: &mut Database<AdminOps>, new_conn: String) {
+        // Admin can modify even semconst fields through access rights
+        db.connection_string = new_conn;  // ✓ Allowed via access right
+    }
+}
+
+functional class UserOps {
+    fn get_connection(db: &Database<UserOps>) -> &String {
+        &db.connection_string  // ✓ Read-only access
+    }
+    
+    // fn modify_connection(db: &mut Database<UserOps>, new: String) {
+    //     db.connection_string = new;  // ❌ COMPILE ERROR - no write access
+    // }
+}
+```
+
+This three-tier field system complements CPrime's class architecture by:
+1. **Enforcing discipline**: `semconst` prevents accidental partial mutations
+2. **Enabling optimization**: Compiler has freedom with `semconst` fields
+3. **Providing flexibility**: Different access levels through access rights
+4. **Maintaining safety**: Clear semantics for each field modifier
+
 #### Memory Operation Semantics
 
 - **Move**: Always public, performs bit-wise relocation

@@ -944,6 +944,29 @@ class HttpHandlerCoro {
     constructed_by: HttpCoroManager,
 }
 
+// Coroutines with semconst fields for atomic state transitions
+class StatefulCoro {
+    stack_memory: *mut u8,
+    stack_size: usize,
+    semconst state_snapshot: CoroutineState,  // Atomic state replacement
+    mutable working_buffer: Vec<u8>,           // Incremental updates
+    
+    constructed_by: StatefulCoroManager,
+}
+
+functional class StatefulCoroManager {
+    suspend fn update_state_atomically(coro: &mut StatefulCoro, new_state: CoroutineState) {
+        // Can suspend while building new state
+        let processed_state = co_await process_state_change(new_state);
+        
+        // Atomic replacement - other coroutines see complete transition
+        let old_state = move(coro.state_snapshot);
+        coro.state_snapshot = move(processed_state);
+        
+        // semconst ensures no partial states visible across suspension points
+    }
+}
+
 // Database coroutine implementing same interface
 class DatabaseCoro {
     db_task_id: u64,        // Maps to coro_id

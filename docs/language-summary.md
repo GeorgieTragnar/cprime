@@ -8,6 +8,7 @@
 - Pure state with memory operations only
 - Constructor access control via `constructed_by`
 - Foundation for all other systems
+- **`semconst` fields**: Enforce 1:1 move-in/move-out policy within local scope for atomic value replacement
 
 **Access Rights (Functional Classes)**: RAII state modifiers
 - Stateless operations that modify data class state
