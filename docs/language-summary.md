@@ -45,6 +45,13 @@
 - Runtime interfaces: Flexible accessor-based access
 - Data class controlled layout with explicit field linking (`<-` operator)
 
+### Signal Handling and Runtime Selection
+- **Unified signal model**: OS signals and exceptions use same syntax (`catch`/`recover`)
+- **Runtime-agnostic primitives**: Signal handling works across all execution models
+- **Flexible runtime selection**: `fn main() = RuntimeChoice` determines execution behavior
+- **Progressive safety levels**: Configurable from C-level permissiveness to Rust-level guarantees
+- **Signal-to-coroutine conversion**: Scheduler runtime transforms signals into async operations
+
 ## Key Principles
 
 ### Zero-Cost Abstractions
@@ -87,4 +94,12 @@ CPrime combines:
 - **Go's simplicity** without sacrificing performance
 - **Revolutionary innovations** in coroutines and composition
 
-The result is a systems programming language that makes the right thing easy and the wrong thing impossible, while providing unprecedented performance in coroutine-based concurrent systems.
+The result is a systems programming language that makes the right thing easy and the wrong thing impossible, while providing unprecedented performance in coroutine-based concurrent systems with flexible signal handling that adapts to different execution models.
+
+## Additional Documentation
+
+- **[Signal Handling](signal-handling.md)**: Language primitives, syntax, and safety levels
+- **[Runtime System](runtime-system.md)**: Execution models and runtime-specific behavior
+- **[Coroutines](coroutines.md)**: Revolutionary coroutine architecture with signal integration
+- **[Channels](channels.md)**: Three-layer channel architecture for concurrent communication
+- **[Interfaces](interfaces.md)**: Polymorphic glue and N:M composition patterns

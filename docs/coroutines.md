@@ -1335,4 +1335,402 @@ fn spawn_channel_workers(bus: &MessageBus) {
 }
 ```
 
-CPrime coroutines represent a significant advance in cooperative multitasking, combining the best aspects of existing approaches while introducing revolutionary optimizations like stack-allocated micro pools and compiler-guided allocation strategies. The seamless integration with channels provides a powerful foundation for concurrent programming with memory safety guaranteed through scheduler-managed reference counting.
+## Signal Integration with Coroutine Scheduler
+
+### Dedicated Signal Thread Architecture
+
+The coroutine scheduler runtime features a revolutionary signal handling architecture that converts OS signals into scheduled coroutines, enabling fully asynchronous signal processing without blocking worker threads.
+
+#### Signal Thread Design
+
+```cpp
+// Signal thread implementation within scheduler
+class CoroutineScheduler {
+    signal_thread: Option<ThreadHandle>,
+    signal_handlers: HashMap<Signal, AsyncSignalHandler>,
+    signal_coroutine_pool: MicroCoroPool,
+    
+    constructed_by: SchedulerOps,
+}
+
+functional class SchedulerOps {
+    fn spawn_signal_thread(scheduler: &mut CoroutineScheduler) {
+        // Block all signals in worker threads
+        block_all_signals_in_workers();
+        
+        // Spawn dedicated signal handling thread
+        scheduler.signal_thread = Some(thread::spawn(|| {
+            signal_handler_thread_main(scheduler.get_shared_ref())
+        }));
+    }
+}
+
+// The signal thread - core of the architecture
+fn signal_handler_thread_main(scheduler: SharedPtr<CoroutineScheduler>) {
+    // Only this thread receives OS signals
+    unblock_all_signals();
+    
+    loop {
+        // Synchronous signal waiting - no race conditions
+        let signal = sigwait(&all_signals_mask);
+        
+        // Convert signal to coroutine
+        if let Some(handler) = scheduler.get_signal_handler(signal) {
+            // CREATE NEW COROUTINE for async signal handling
+            let signal_coro = create_signal_coroutine(signal, handler);
+            
+            // SCHEDULE coroutine in normal work queue
+            scheduler.work_queue.push_high_priority(signal_coro);
+            
+            // Signal handling is now async!
+        } else {
+            // Handle unregistered signals
+            handle_default_signal(signal);
+        }
+    }
+}
+```
+
+#### Signal-to-Coroutine Conversion Process
+
+The scheduler transforms OS signals into coroutines through a structured process:
+
+```cpp
+// Signal coroutine structure
+class SignalCoroutine {
+    // Standard coroutine stack management
+    stack_memory: *mut u8,
+    stack_size: usize,
+    register_context: RegisterContext,
+    
+    // Signal-specific data
+    signal_type: Signal,
+    signal_data: SignalData,
+    handler_function: AsyncSignalHandler,
+    created_at: SystemTime,
+    priority: u8,  // Signals get high priority
+    
+    constructed_by: SignalCoroOps,
+}
+
+functional class SignalCoroOps {
+    fn create_signal_coroutine(
+        signal: Signal,
+        handler: AsyncSignalHandler
+    ) -> SignalCoroutine {
+        // Allocate from signal-specific pool (micro size)
+        let stack = allocate_signal_stack(SIGNAL_STACK_SIZE);
+        
+        SignalCoroutine {
+            stack_memory: stack.ptr,
+            stack_size: SIGNAL_STACK_SIZE,
+            register_context: RegisterContext::new(),
+            signal_type: signal,
+            signal_data: SignalData::from(signal),
+            handler_function: handler,
+            created_at: SystemTime::now(),
+            priority: SIGNAL_PRIORITY,  // High priority
+        }
+    }
+    
+    async fn execute(coro: &mut SignalCoroutine) -> SignalResult {
+        // Execute the async signal handler
+        (coro.handler_function)(coro.signal_data).await
+    }
+}
+```
+
+#### Signal Handler Registration
+
+Applications register async signal handlers with the scheduler:
+
+```cpp
+// Example signal handler registration
+fn main() = std::CoroutineScheduler {
+    let scheduler = CoroutineScheduler::new()
+        .handle(SIGINT, |signal_data| async {
+            println!("Graceful shutdown initiated by signal");
+            
+            // Can perform full async operations
+            drain_work_queues().await;
+            close_network_connections().await;
+            flush_databases().await;
+            save_application_state().await;
+            
+            println!("Shutdown complete");
+            std::process::exit(0);
+        })
+        .handle(SIGUSR1, |signal_data| async {
+            // Async debug operations
+            let stats = collect_runtime_statistics().await;
+            let report = generate_performance_report(stats).await;
+            
+            // Can interact with channels
+            debug_channel.send(report).await;
+        })
+        .handle(OOM, |oom_data| async {
+            // Handle out-of-memory as async operation
+            println!("OOM detected: requested {}, available {}", 
+                    oom_data.requested_size, oom_data.available_memory);
+            
+            // Async memory recovery
+            free_application_caches().await;
+            garbage_collect_unused_coroutines().await;
+            
+            if try_emergency_allocation(oom_data.requested_size) {
+                println!("OOM recovery successful");
+            } else {
+                initiate_emergency_shutdown().await;
+            }
+        });
+    
+    // Start application with signal handling
+    run_application(scheduler).await;
+}
+```
+
+### Worker Thread Signal Conversion
+
+When worker threads receive unhandled signals (which should be rare due to signal masking), they convert the signal to a coroutine before terminating:
+
+```cpp
+// Worker thread signal handling
+fn worker_thread_signal_conversion(
+    thread_id: ThreadId,
+    signal: Signal,
+    scheduler: &CoroutineScheduler
+) {
+    println!("Worker thread {} received unexpected signal: {}", thread_id, signal);
+    
+    // 1. Thread performs complete unwinding
+    unwind_thread_stack();
+    run_all_thread_defers();
+    
+    // 2. Check if scheduler can handle this signal
+    if let Some(handler) = scheduler.get_signal_handler(signal) {
+        // 3. DYING THREAD creates signal coroutine
+        let signal_coro = SignalCoroOps::create_signal_coroutine(signal, handler);
+        
+        // 4. DYING THREAD pushes to scheduler work queue
+        if let Ok(_) = scheduler.work_queue.try_push_priority(signal_coro) {
+            println!("Thread {} converted signal to coroutine, exiting cleanly", thread_id);
+        } else {
+            eprintln!("Thread {} failed to queue signal coroutine", thread_id);
+        }
+        
+        // 5. Thread exits cleanly
+        thread::exit(0);
+    } else {
+        // No handler available - terminate program
+        eprintln!("Unhandled signal {} in worker thread {}", signal, thread_id);
+        std::process::terminate();
+    }
+}
+```
+
+### Integration with Channel System
+
+The scheduler's signal handling integrates seamlessly with the existing channel safety system:
+
+```cpp
+// Signal handlers can safely use channels
+scheduler.handle(NETWORK_RECONNECT, |reconnect_data| async {
+    // Signal handler can send to channels
+    network_event_channel.send(NetworkEvent::ReconnectRequested {
+        endpoint: reconnect_data.failed_endpoint,
+        timestamp: SystemTime::now(),
+    }).await;
+    
+    // Can receive from channels
+    match control_channel.recv_timeout(Duration::from_secs(5)).await {
+        Some(ControlMessage::ApproveReconnect) => {
+            attempt_reconnection(reconnect_data.failed_endpoint).await;
+        },
+        Some(ControlMessage::DenyReconnect) => {
+            mark_endpoint_failed(reconnect_data.failed_endpoint).await;
+        },
+        None => {
+            // Timeout - use default policy
+            attempt_reconnection_with_backoff(reconnect_data.failed_endpoint).await;
+        }
+    }
+});
+
+// Scheduler maintains channel references for signal coroutines
+functional class SignalChannelManager {
+    fn register_signal_channel_usage(
+        scheduler: &mut CoroutineScheduler,
+        signal_coro_id: CoroId,
+        channels: Vec<ChannelId>
+    ) {
+        // Hold references to prevent channel deallocation
+        for channel_id in channels {
+            scheduler.signal_channel_refs.insert(
+                (signal_coro_id, channel_id),
+                scheduler.get_channel_ref(channel_id)
+            );
+        }
+    }
+    
+    fn cleanup_signal_channel_refs(
+        scheduler: &mut CoroutineScheduler,
+        completed_signal_coro: CoroId
+    ) {
+        // Release channel references when signal handling completes
+        scheduler.signal_channel_refs.retain(|(coro_id, _), _| {
+            *coro_id != completed_signal_coro
+        });
+    }
+}
+```
+
+### Signal Coroutine Pool Management
+
+Signal coroutines use specialized pool management for optimal performance:
+
+```cpp
+// Signal-specific coroutine pools
+class SignalCoroPool {
+    // Most signals are simple - use micro pool
+    micro_signal_pool: MicroCoroPool,      // 256B stacks
+    
+    // Complex signal handlers - use small pool
+    complex_signal_pool: SmallCoroPool,    // 2KB stacks
+    
+    // Emergency pool for critical signals
+    emergency_pool: SmallCoroPool,         // Always reserved
+    
+    constructed_by: SignalPoolOps,
+}
+
+functional class SignalPoolOps {
+    fn allocate_signal_stack(
+        pool: &mut SignalCoroPool,
+        signal_type: Signal,
+        handler_complexity: HandlerComplexity
+    ) -> StackAllocation {
+        match (signal_type, handler_complexity) {
+            // Critical signals get emergency pool
+            (SIGSEGV | SIGABRT | OOM, _) => {
+                pool.emergency_pool.allocate()
+            },
+            
+            // Simple handlers use micro pool
+            (_, HandlerComplexity::Simple) => {
+                pool.micro_signal_pool.allocate()
+            },
+            
+            // Complex handlers use small pool
+            (_, HandlerComplexity::Complex) => {
+                pool.complex_signal_pool.allocate()
+            }
+        }
+    }
+}
+
+// Compiler analysis determines handler complexity
+#[signal_handler_complexity(Simple)]
+async fn simple_debug_handler(signal_data: SignalData) {
+    // Simple handlers - fit in 256B
+    println!("Debug signal received at {}", SystemTime::now());
+    dump_basic_stats();
+}
+
+#[signal_handler_complexity(Complex)]
+async fn complex_recovery_handler(oom_data: OOMData) {
+    // Complex handlers need more stack space
+    let memory_stats = analyze_memory_usage().await;
+    let recovery_plan = create_recovery_strategy(memory_stats).await;
+    execute_memory_recovery(recovery_plan).await;
+}
+```
+
+### Performance Characteristics of Signal Handling
+
+The scheduler's signal architecture has specific performance implications:
+
+```cpp
+// Performance comparison
+// Direct signal handler (default runtime): ~100 cycles
+// Signal-to-coroutine (scheduler runtime): ~1000 cycles
+// But enables full async operations in handlers!
+
+// Micro benchmark example
+async fn signal_performance_test() {
+    let start = SystemTime::now();
+    
+    // This creates a coroutine, schedules it, and executes it
+    raise(TEST_SIGNAL);
+    
+    let end = SystemTime::now();
+    println!("Signal-to-coroutine conversion: {:?}", end.duration_since(start));
+}
+
+// Benefits of coroutine-based signal handling:
+// 1. Can perform I/O operations
+// 2. Can wait on channels and futures
+// 3. Can interact with other coroutines
+// 4. Full error handling with catch/recover
+// 5. Integrates with scheduler's work stealing
+```
+
+### Signal Handling Best Practices in Scheduler Runtime
+
+```cpp
+// Good: Async signal handler using scheduler capabilities
+scheduler.handle(BACKUP_SIGNAL, |backup_data| async {
+    // Leverage async I/O
+    let backup_status = check_backup_system_status().await;
+    
+    if backup_status.is_healthy() {
+        // Can perform complex async operations
+        let data_snapshot = create_application_snapshot().await;
+        write_backup_data(data_snapshot).await;
+        
+        // Notify through channels
+        status_channel.send(BackupStatus::Complete).await;
+    } else {
+        // Error handling with full async context
+        let alternative = find_alternative_backup().await;
+        retry_backup_with_alternative(alternative).await;
+    }
+});
+
+// Bad: Trying to use blocking operations
+scheduler.handle(BAD_SIGNAL, |_| async {
+    // DON'T DO THIS - blocks the coroutine
+    std::thread::sleep(Duration::from_secs(5));  // Bad!
+    
+    // DO THIS instead - async sleep
+    tokio::time::sleep(Duration::from_secs(5)).await;  // Good!
+});
+
+// Good: Signal handlers that coordinate with application
+scheduler.handle(COORDINATION_SIGNAL, |coord_data| async {
+    // Can coordinate with other parts of application
+    let coordination_response = coordination_channel
+        .send_and_wait_response(coord_data)
+        .await;
+    
+    match coordination_response {
+        CoordinationResult::Success => {
+            log_coordination_success().await;
+        },
+        CoordinationResult::Retry => {
+            // Schedule retry as new coroutine
+            spawn_delayed(Duration::from_secs(30), async {
+                retry_coordination().await;
+            });
+        },
+        CoordinationResult::Abort => {
+            initiate_graceful_shutdown().await;
+        }
+    }
+});
+```
+
+For signal handling language primitives and syntax, see [Signal Handling](signal-handling.md). For runtime selection and policies, see [Runtime System](runtime-system.md).
+
+---
+
+CPrime coroutines represent a significant advance in cooperative multitasking, combining the best aspects of existing approaches while introducing revolutionary optimizations like stack-allocated micro pools and compiler-guided allocation strategies. The seamless integration with channels and the innovative signal-to-coroutine conversion system provides a powerful foundation for concurrent programming with memory safety guaranteed through scheduler-managed reference counting.
