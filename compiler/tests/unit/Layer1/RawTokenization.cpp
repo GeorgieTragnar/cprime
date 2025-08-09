@@ -9,14 +9,8 @@ using namespace cprime;
 // Raw Tokenization Tests - Layer 1
 // ============================================================================
 
-class RawTokenizationTest : public Layer1Test {
+class RawTokenizationTest : public BufferedLayer1Test {
 protected:
-    // Helper to tokenize and return tokens
-    std::vector<RawToken> tokenize(const std::string& code) {
-        RawTokenizer tokenizer(code);
-        return tokenizer.tokenize();
-    }
-    
     // Helper to get token strings for easier comparison
     std::vector<std::string> getTokenStrings(const std::vector<RawToken>& tokens) {
         std::vector<std::string> result;
@@ -26,36 +20,69 @@ protected:
         }
         return result;
     }
+    
+    // Helper to get token values only (without type info)
+    std::vector<std::string> getTokenValues(const std::vector<RawToken>& tokens) {
+        std::vector<std::string> result;
+        result.reserve(tokens.size());
+        for (const auto& token : tokens) {
+            result.push_back(token.value);
+        }
+        return result;
+    }
+    
+    // Helper to validate token types
+    void validateTokenTypes(const std::vector<RawToken>& tokens,
+                           const std::vector<RawTokenType>& expected_types,
+                           const std::string& context) {
+        test_logger_->debug("Validating token types for {}", context);
+        
+        ASSERT_EQ(tokens.size(), expected_types.size())
+            << "Token type count mismatch in " << context;
+        
+        for (size_t i = 0; i < expected_types.size(); ++i) {
+            test_logger_->debug("Checking token[{}] type: expected {}, got {}", 
+                               i, static_cast<int>(expected_types[i]), static_cast<int>(tokens[i].type));
+            
+            EXPECT_EQ(tokens[i].type, expected_types[i])
+                << "Token type mismatch at position " << i << " in " << context
+                << " (expected: " << static_cast<int>(expected_types[i]) 
+                << ", got: " << static_cast<int>(tokens[i].type) << ")";
+        }
+    }
 };
 
+// ============================================================================
+// Basic Tokenization Tests
+// ============================================================================
+
 TEST_F(RawTokenizationTest, EmptyInput) {
-    auto tokens = tokenize("");
+    auto tokens = tokenizeWithLogging("", "EmptyInput");
     EXPECT_TRUE(tokens.empty()) << "Empty input should produce no tokens";
 }
 
 TEST_F(RawTokenizationTest, SingleIdentifier) {
-    auto tokens = tokenize("identifier");
+    auto tokens = tokenizeWithLogging("identifier", "SingleIdentifier");
     
     ASSERT_EQ(tokens.size(), 1) << "Single identifier should produce exactly one token";
-    EXPECT_EQ(tokens[0].to_string(), "identifier");
+    EXPECT_EQ(tokens[0].value, "identifier");
+    EXPECT_EQ(tokens[0].type, RawTokenType::IDENTIFIER);
 }
 
 TEST_F(RawTokenizationTest, BasicClassDefinition) {
     std::string test_code = "class Connection {}";
-    auto tokens = tokenize(test_code);
+    auto tokens = tokenizeWithLogging(test_code, "BasicClassDefinition");
     
-    ASSERT_GE(tokens.size(), 3) << "Class definition should have at least 3 tokens";
+    std::vector<std::string> expected_values = {"class", "Connection", "{", "}"};
+    std::vector<RawTokenType> expected_types = {
+        RawTokenType::KEYWORD, 
+        RawTokenType::IDENTIFIER, 
+        RawTokenType::PUNCTUATION, 
+        RawTokenType::PUNCTUATION
+    };
     
-    auto token_strings = getTokenStrings(tokens);
-    std::vector<std::string> expected = {"class", "Connection", "{", "}"};
-    
-    ASSERT_EQ(token_strings.size(), expected.size()) 
-        << "Token count mismatch for class definition";
-    
-    for (size_t i = 0; i < expected.size(); ++i) {
-        EXPECT_EQ(token_strings[i], expected[i]) 
-            << "Token mismatch at position " << i;
-    }
+    validateTokenSequence(tokens, expected_values, "BasicClassDefinition");
+    validateTokenTypes(tokens, expected_types, "BasicClassDefinition");
 }
 
 TEST_F(RawTokenizationTest, ComplexSyntaxTokenization) {
@@ -178,6 +205,229 @@ TEST_F(RawTokenizationTest, LargeInput) {
         large_code += "class Test" + std::to_string(i) + " { value: i32, } ";
     }
     
-    auto tokens = tokenize(large_code);
+    auto tokens = tokenizeWithLogging(large_code, "LargeInput");
     EXPECT_GT(tokens.size(), 500) << "Large input should produce many tokens";
+}
+
+// ============================================================================
+// Enhanced CPrime Language Feature Tests
+// ============================================================================
+
+TEST_F(RawTokenizationTest, KeywordRecognition) {
+    std::string code = "int main void class auto true false";
+    auto tokens = tokenizeWithLogging(code, "KeywordRecognition");
+    
+    std::vector<std::string> expected_values = {"int", "main", "void", "class", "auto", "true", "false"};
+    std::vector<RawTokenType> expected_types = {
+        RawTokenType::KEYWORD,     // int
+        RawTokenType::IDENTIFIER,  // main (function name, not keyword)
+        RawTokenType::KEYWORD,     // void
+        RawTokenType::KEYWORD,     // class
+        RawTokenType::KEYWORD,     // auto
+        RawTokenType::KEYWORD,     // true
+        RawTokenType::KEYWORD      // false
+    };
+    
+    validateTokenSequence(tokens, expected_values, "KeywordRecognition");
+    validateTokenTypes(tokens, expected_types, "KeywordRecognition");
+}
+
+TEST_F(RawTokenizationTest, OperatorRecognition) {
+    std::string code = "= + - * / == != > < >= <= ++ --";
+    auto tokens = tokenizeWithLogging(code, "OperatorRecognition");
+    
+    std::vector<std::string> expected_values = {"=", "+", "-", "*", "/", "==", "!=", ">", "<", ">=", "<=", "++", "--"};
+    
+    // All should be recognized as operators
+    for (const auto& token : tokens) {
+        EXPECT_EQ(token.type, RawTokenType::OPERATOR) 
+            << "Token '" << token.value << "' should be recognized as operator";
+    }
+    
+    validateTokenSequence(tokens, expected_values, "OperatorRecognition");
+}
+
+TEST_F(RawTokenizationTest, PunctuationRecognition) {
+    std::string code = "{ } ( ) [ ] ; , :: .";
+    auto tokens = tokenizeWithLogging(code, "PunctuationRecognition");
+    
+    std::vector<std::string> expected_values = {"{", "}", "(", ")", "[", "]", ";", ",", "::", "."};
+    
+    // All should be recognized as punctuation
+    for (const auto& token : tokens) {
+        EXPECT_EQ(token.type, RawTokenType::PUNCTUATION) 
+            << "Token '" << token.value << "' should be recognized as punctuation";
+    }
+    
+    validateTokenSequence(tokens, expected_values, "PunctuationRecognition");
+}
+
+TEST_F(RawTokenizationTest, NumericLiterals) {
+    std::string code = "42 3.14159 0xFF 0b1010 123u 456l";
+    auto tokens = tokenizeWithLogging(code, "NumericLiterals");
+    
+    EXPECT_FALSE(tokens.empty()) << "Numeric literals should be tokenized";
+    
+    // Check that we have at least the expected number of literals
+    size_t literal_count = 0;
+    for (const auto& token : tokens) {
+        if (token.type == RawTokenType::LITERAL) {
+            literal_count++;
+            test_logger_->debug("Found numeric literal: {}", token.value);
+        }
+    }
+    
+    EXPECT_GE(literal_count, 4) << "Should tokenize at least basic numeric formats";
+}
+
+TEST_F(RawTokenizationTest, StringLiterals) {
+    std::string code = R"("hello world" "escaped\"string" 'c' "multiline
+string")";
+    auto tokens = tokenizeWithLogging(code, "StringLiterals");
+    
+    EXPECT_FALSE(tokens.empty()) << "String literals should be tokenized";
+    
+    // Find string literals in tokens
+    std::vector<std::string> found_strings;
+    for (const auto& token : tokens) {
+        if (token.type == RawTokenType::LITERAL && 
+            (token.value.front() == '"' || token.value.front() == '\'')) {
+            found_strings.push_back(token.value);
+        }
+    }
+    
+    EXPECT_GE(found_strings.size(), 2) << "Should find multiple string literals";
+}
+
+TEST_F(RawTokenizationTest, CompleteMainFunction) {
+    std::string code = R"(
+        int main(int argc, char* argv[]) {
+            auto x = 42;
+            print("Hello {}", x);
+            return 0;
+        }
+    )";
+    
+    auto tokens = tokenizeWithLogging(code, "CompleteMainFunction");
+    
+    // Verify key components are tokenized
+    auto token_values = getTokenValues(tokens);
+    
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "int"), token_values.end())
+        << "Should contain 'int' keyword";
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "main"), token_values.end())
+        << "Should contain 'main' identifier";
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "auto"), token_values.end())
+        << "Should contain 'auto' keyword";
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "print"), token_values.end())
+        << "Should contain 'print' identifier";
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "return"), token_values.end())
+        << "Should contain 'return' keyword";
+    
+    // Should have reasonable number of tokens for this complex function
+    EXPECT_GT(tokens.size(), 20) << "Complex main function should produce many tokens";
+}
+
+TEST_F(RawTokenizationTest, PrintStatementWithPlaceholders) {
+    std::string code = R"(print("x = {}, y = {}", x, y);)";
+    auto tokens = tokenizeWithLogging(code, "PrintStatementWithPlaceholders");
+    
+    auto token_values = getTokenValues(tokens);
+    
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "print"), token_values.end())
+        << "Should contain 'print' function call";
+    
+    // Should find the format string with placeholders
+    bool found_format_string = false;
+    for (const auto& token : tokens) {
+        if (token.type == RawTokenType::LITERAL && token.value.find("{}") != std::string::npos) {
+            found_format_string = true;
+            test_logger_->debug("Found format string with placeholders: {}", token.value);
+        }
+    }
+    
+    EXPECT_TRUE(found_format_string) << "Should find format string with placeholders";
+}
+
+TEST_F(RawTokenizationTest, VariableDeclarations) {
+    std::string code = R"(
+        int x = 42;
+        auto y = 10; 
+        bool flag = true;
+        char* name = "test";
+    )";
+    
+    auto tokens = tokenizeWithLogging(code, "VariableDeclarations");
+    
+    auto token_values = getTokenValues(tokens);
+    
+    // Check for variable declaration keywords
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "int"), token_values.end());
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "auto"), token_values.end());
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "bool"), token_values.end());
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "char"), token_values.end());
+    
+    // Check for assignment operators
+    size_t assignment_count = std::count(token_values.begin(), token_values.end(), "=");
+    EXPECT_EQ(assignment_count, 4) << "Should find 4 assignment operators";
+}
+
+// ============================================================================
+// Error Condition and Edge Case Tests
+// ============================================================================
+
+TEST_F(RawTokenizationTest, MixedWhitespace) {
+    std::string code = "int\t\tmain  (   )    {   return\n\n0;   }";
+    auto tokens = tokenizeWithLogging(code, "MixedWhitespace");
+    
+    // Extract non-whitespace tokens
+    std::vector<std::string> non_whitespace_values;
+    for (const auto& token : tokens) {
+        if (token.type != RawTokenType::WHITESPACE) {
+            non_whitespace_values.push_back(token.value);
+        }
+    }
+    
+    std::vector<std::string> expected = {"int", "main", "(", ")", "{", "return", "0", ";", "}"};
+    
+    ASSERT_EQ(non_whitespace_values.size(), expected.size()) 
+        << "Whitespace should not affect token recognition";
+    
+    for (size_t i = 0; i < expected.size(); ++i) {
+        EXPECT_EQ(non_whitespace_values[i], expected[i])
+            << "Token mismatch at position " << i << " with mixed whitespace";
+    }
+}
+
+TEST_F(RawTokenizationTest, CommentsWithCode) {
+    std::string code = R"(
+        int main() { // Entry point
+            /* Multi-line
+               comment */
+            return 0; // Success
+        }
+    )";
+    
+    auto tokens = tokenizeWithLogging(code, "CommentsWithCode");
+    
+    // Should still tokenize the actual code despite comments
+    auto token_values = getTokenValues(tokens);
+    
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "int"), token_values.end())
+        << "Should find 'int' despite comments";
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "main"), token_values.end())
+        << "Should find 'main' despite comments";
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "return"), token_values.end())
+        << "Should find 'return' despite comments";
+    
+    // Should also preserve comments as tokens
+    size_t comment_count = 0;
+    for (const auto& token : tokens) {
+        if (token.type == RawTokenType::COMMENT) {
+            comment_count++;
+            test_logger_->debug("Found comment: {}", token.value);
+        }
+    }
+    
+    EXPECT_GT(comment_count, 0) << "Should preserve comments as tokens";
 }

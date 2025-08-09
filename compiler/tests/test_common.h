@@ -9,6 +9,13 @@
 #include <sstream>
 #include <memory>
 
+// Include logger components for buffered testing
+#include "common/logger.h"
+#include "common/logger_components.h"
+
+// Include Layer 1 components for tokenization testing
+#include "layer1/raw_token.h"
+
 // Enable access to protected/private members for testing if needed
 #ifdef TESTING
 // Uncomment if needed for testing private members
@@ -88,6 +95,107 @@ protected:
             // Add more test cases as needed
         };
     }
+};
+
+/**
+ * Enhanced Layer 1 test fixture with selective buffering
+ * Automatically manages buffer lifecycle - dumps on failure, clears on success
+ */
+class BufferedLayer1Test : public Layer1Test {
+protected:
+    void SetUp() override {
+        Layer1Test::SetUp();
+        
+        // Start buffering debug+ messages for tests
+        CPRIME_BUFFER_BEGIN_DEBUG(CPRIME_COMPONENT_TESTS);
+        
+        // Get test logger for detailed logging
+        test_logger_ = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_TESTS);
+        test_logger_->set_level(spdlog::level::debug);
+        
+        // Log test start
+        test_logger_->info("=== Starting Layer 1 Test: {} ===", 
+                          ::testing::UnitTest::GetInstance()->current_test_info()->name());
+    }
+    
+    void TearDown() override {
+        auto test_info = ::testing::UnitTest::GetInstance()->current_test_info();
+        
+        if (HasFailure()) {
+            // Test failed - dump all buffered debug information
+            test_logger_->error("Test FAILED: {}", test_info->name());
+            CPRIME_BUFFER_DUMP(CPRIME_COMPONENT_TESTS);
+        } else {
+            // Test succeeded - just log completion (no buffer dump)
+            test_logger_->info("Test PASSED: {}", test_info->name());
+        }
+        
+        // Clean up buffer
+        CPRIME_BUFFER_END(CPRIME_COMPONENT_TESTS);
+        CPRIME_BUFFER_CLEAR(CPRIME_COMPONENT_TESTS);
+        
+        Layer1Test::TearDown();
+    }
+    
+    /**
+     * Helper to tokenize with automatic logging of each step
+     */
+    std::vector<cprime::RawToken> tokenizeWithLogging(const std::string& code, const std::string& context) {
+        test_logger_->debug("Tokenizing code for {}: '{}'", context, code);
+        test_logger_->debug("Code length: {} characters", code.length());
+        
+        try {
+            cprime::RawTokenizer tokenizer(code);
+            auto tokens = tokenizer.tokenize();
+            
+            test_logger_->debug("Tokenization successful: {} tokens generated", tokens.size());
+            
+            // Log each token for debugging
+            for (size_t i = 0; i < tokens.size(); ++i) {
+                test_logger_->debug("Token[{}]: {}", i, tokens[i].to_string());
+            }
+            
+            return tokens;
+            
+        } catch (const std::exception& e) {
+            test_logger_->error("Tokenization failed for {}: {}", context, e.what());
+            throw; // Re-throw to trigger test failure and buffer dump
+        }
+    }
+    
+    /**
+     * Simple tokenize wrapper (no logging) for basic usage
+     */
+    std::vector<cprime::RawToken> tokenize(const std::string& code) {
+        cprime::RawTokenizer tokenizer(code);
+        return tokenizer.tokenize();
+    }
+    
+    /**
+     * Enhanced token validation with detailed logging
+     */
+    void validateTokenSequence(const std::vector<cprime::RawToken>& tokens, 
+                             const std::vector<std::string>& expected_values,
+                             const std::string& context) {
+        test_logger_->debug("Validating token sequence for {}", context);
+        test_logger_->debug("Expected {} tokens, got {}", expected_values.size(), tokens.size());
+        
+        ASSERT_EQ(tokens.size(), expected_values.size()) 
+            << "Token count mismatch in " << context;
+        
+        for (size_t i = 0; i < expected_values.size(); ++i) {
+            test_logger_->debug("Checking token[{}]: expected '{}', got '{}'", 
+                               i, expected_values[i], tokens[i].value);
+            
+            EXPECT_EQ(tokens[i].value, expected_values[i])
+                << "Token mismatch at position " << i << " in " << context;
+        }
+        
+        test_logger_->debug("Token sequence validation completed successfully");
+    }
+
+protected:
+    std::shared_ptr<spdlog::logger> test_logger_;
 };
 
 /**

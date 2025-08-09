@@ -12,14 +12,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Enable testing
 enable_testing()
 
-# Find dependencies
-find_package(GTest CONFIG)
-if(GTest_FOUND)
-    message(STATUS "Google Test found - tests will be built")
-    set(BUILD_TESTS ON)
-else()
-    message(WARNING "Google Test not found - tests will be skipped")
-    set(BUILD_TESTS OFF)
+# Option to build tests (default OFF, enabled by -DBUILD_TESTS=ON)
+option(BUILD_TESTS "Build Google Test suite" OFF)
+
+# Find dependencies if tests are requested
+if(BUILD_TESTS)
+    find_package(GTest CONFIG)
+    if(NOT GTest_FOUND)
+        message(FATAL_ERROR "Google Test not found but BUILD_TESTS=ON. Install with: vcpkg install gtest")
+    endif()
 endif()
 
 # Find spdlog for logging

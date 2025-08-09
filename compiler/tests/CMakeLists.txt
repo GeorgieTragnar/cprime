@@ -41,6 +41,3 @@ add_custom_target(run_tests
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
     COMMENT "Running CPrime compiler tests"
 )
-
-# Print a message about test configuration
-message(STATUS "CPrime tests configured with Google Test")
