@@ -106,27 +106,27 @@ TEST_F(RawTokenizationTest, ComplexSyntaxTokenization) {
     EXPECT_GE(tokens.size(), 10) << "Complex syntax should produce multiple tokens";
     
     // Check for presence of key tokens
-    auto token_strings = getTokenStrings(tokens);
-    EXPECT_NE(std::find(token_strings.begin(), token_strings.end(), "class"), 
-              token_strings.end()) << "Should contain 'class' token";
-    EXPECT_NE(std::find(token_strings.begin(), token_strings.end(), "Connection"), 
-              token_strings.end()) << "Should contain 'Connection' token";
-    EXPECT_NE(std::find(token_strings.begin(), token_strings.end(), "fn"), 
-              token_strings.end()) << "Should contain 'fn' token";
+    auto token_values = getTokenValues(tokens);
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "class"), 
+              token_values.end()) << "Should contain 'class' token";
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "Connection"), 
+              token_values.end()) << "Should contain 'Connection' token";
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "fn"), 
+              token_values.end()) << "Should contain 'fn' token";
 }
 
 TEST_F(RawTokenizationTest, WhitespaceHandling) {
     std::string test_code = "  class   Test   {  }  ";
     auto tokens = tokenize(test_code);
     
-    auto token_strings = getTokenStrings(tokens);
-    std::vector<std::string> expected = {"class", "Test", "{", "}", "EOF"};
+    auto token_values = getTokenValues(tokens);
+    std::vector<std::string> expected = {"class", "Test", "{", "}", ""};
     
-    ASSERT_EQ(token_strings.size(), expected.size()) 
+    ASSERT_EQ(token_values.size(), expected.size()) 
         << "Whitespace should not affect tokenization";
     
     for (size_t i = 0; i < expected.size(); ++i) {
-        EXPECT_EQ(token_strings[i], expected[i]) 
+        EXPECT_EQ(token_values[i], expected[i]) 
             << "Token mismatch at position " << i << " with extra whitespace";
     }
 }
