@@ -18,7 +18,7 @@ echo "================================================"
 # Get the project root directory (parent of scripts/)
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-SOURCE_DIR="$PROJECT_ROOT/compiler/src"
+SOURCE_DIR="$PROJECT_ROOT/compiler"
 BUILD_DIR="$PROJECT_ROOT/build"
 
 # Verify source directory exists
@@ -158,11 +158,14 @@ echo -e "${GREEN}✓ Build successful${NC}"
 
 # List built artifacts
 echo -e "${BLUE}Built artifacts:${NC}"
-if [ -f "libcprime_compiler.a" ]; then
+if [ -f "src/libcprime_compiler.a" ]; then
     echo -e "  ${GREEN}✓ libcprime_compiler.a${NC} - Multi-layer compiler architecture library"
 fi
-if [ -f "cprime_cli" ]; then
-    echo -e "  ${GREEN}✓ cprime_cli${NC} - CPrime compiler CLI"
+if [ -f "bin/cprime" ]; then
+    echo -e "  ${GREEN}✓ bin/cprime${NC} - CPrime main compiler"
+fi
+if [ -f "src/cprime_cli" ]; then
+    echo -e "  ${GREEN}✓ cprime_cli${NC} - CPrime layer testing CLI"
 fi
 
 # List test executables
@@ -181,7 +184,7 @@ declare -a ALL_TESTS=(
 
 for test_entry in "${ALL_TESTS[@]}"; do
     IFS=':' read -r test_exe test_desc <<< "$test_entry"
-    if [ -f "$test_exe" ]; then
+    if [ -f "src/$test_exe" ]; then
         echo -e "    ${GREEN}✓ $test_exe${NC} - $test_desc"
     fi
 done
@@ -211,11 +214,11 @@ if [ "$RUN_TESTS" = true ]; then
         # Split on ':' to get executable and description
         IFS=':' read -r test_exe test_desc <<< "$test_entry"
         
-        if [ -f "$test_exe" ]; then
+        if [ -f "src/$test_exe" ]; then
             echo -e "${YELLOW}Running $test_desc...${NC}"
             
             # Run the test and capture output
-            if ./"$test_exe"; then
+            if ./src/"$test_exe"; then
                 TESTS_PASSED=$((TESTS_PASSED + 1))
             else
                 echo -e "${RED}✗ $test_desc failed${NC}"
@@ -249,15 +252,18 @@ echo "  - Layer 2: Context enrichment with 1:1 token mapping"
 echo "  - Layer 3: AST building with symbol table population"
 echo "  - Test suite demonstrating GPU-ready architecture"
 echo ""
-echo "To run the CLI:"
-echo "  cd $BUILD_DIR && echo 'class Test {}' | ./cprime_cli --build-ast --dump-ast"
+echo "To run the compiler:"
+echo "  $BUILD_DIR/bin/cprime hello.cprime -o hello"
+echo ""
+echo "To run the CLI for layer testing:"
+echo "  cd $BUILD_DIR && echo 'class Test {}' | ./src/cprime_cli --build-ast --dump-ast"
 echo ""
 echo "To run tests:"
-echo "  cd $BUILD_DIR && ./test_contextual_tokens"
-echo "  cd $BUILD_DIR && ./test_ast_builder"
+echo "  cd $BUILD_DIR && ./src/test_contextual_tokens"
+echo "  cd $BUILD_DIR && ./src/test_ast_builder"
 echo ""
 echo "Library location:"
-echo "  $BUILD_DIR/libcprime_compiler.a"
+echo "  $BUILD_DIR/src/libcprime_compiler.a"
 echo ""
 echo "Next steps:"
 echo "  - Implement semantic validator and optimizer (Layer 4)"

@@ -93,7 +93,14 @@ foreach(lib IN ITEMS cprime_layer1 cprime_layer1validation cprime_layer2 cprime_
     target_compile_options(${lib} PRIVATE ${COMPILER_FLAGS})
 endforeach()
 
-# CLI executable
+# Main compiler executable
+add_executable(cprime main.cpp)
+target_link_libraries(cprime cprime_compiler)
+set_target_properties(cprime PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+# CLI executable for layer testing
 add_executable(cprime_cli cli/cprime_cli.cpp)
 target_link_libraries(cprime_cli cprime_compiler)
 

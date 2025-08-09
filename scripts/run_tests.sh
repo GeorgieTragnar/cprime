@@ -118,8 +118,8 @@ for test_entry in "${TEST_SUITES[@]}"; do
         continue
     fi
     
-    # Check if executable exists
-    if [ ! -f "$test_exe" ]; then
+    # Check if executable exists (tests are in src/ subdirectory)
+    if [ ! -f "src/$test_exe" ]; then
         echo -e "${YELLOW}⚠ Skipping $test_name - executable not found${NC}"
         continue
     fi
@@ -140,11 +140,11 @@ for test_entry in "${TEST_SUITES[@]}"; do
     # Run test with timeout
     if [ "$VERBOSE" = true ]; then
         # Run with full output and timeout
-        timeout --preserve-status ${TIMEOUT_SECONDS}s ./"$test_exe" 2>&1 | tee "$TEMP_OUTPUT"
+        timeout --preserve-status ${TIMEOUT_SECONDS}s ./src/"$test_exe" 2>&1 | tee "$TEMP_OUTPUT"
         EXIT_CODE=${PIPESTATUS[0]}
     else
         # Run with captured output and timeout
-        timeout --preserve-status ${TIMEOUT_SECONDS}s ./"$test_exe" > "$TEMP_OUTPUT" 2>&1
+        timeout --preserve-status ${TIMEOUT_SECONDS}s ./src/"$test_exe" > "$TEMP_OUTPUT" 2>&1
         EXIT_CODE=$?
     fi
     
