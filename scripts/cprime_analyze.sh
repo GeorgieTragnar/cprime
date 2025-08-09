@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 # Get the project root directory (parent of scripts/)
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-CPRIME_CLI="$PROJECT_ROOT/compiler/src/build/cprime_cli"
+CPRIME_CLI="$PROJECT_ROOT/build/src/cprime_cli"
 
 echo -e "${BLUE}CPrime Code Analyzer${NC}"
 echo "==================="

@@ -1,34 +1,15 @@
-# Build directories
+# Build directories only
 build/
 compiler/build/
 
-# Compiled binaries
-*.o
-*.a
-*.so
-*.dll
-*.exe
-a.out
-
-# LLVM IR files
-*.ll
-*.bc
+# Log files
+logs/
 
 # Temporary files
 *.tmp
-/tmp/cprime_*
+.DS_Store
+Thumbs.db
 
 # IDE files
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Test outputs
-hello_test
-*_test
