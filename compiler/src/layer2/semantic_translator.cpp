@@ -1,386 +1,434 @@
 #include "semantic_translator.h"
 #include "../common/token_utils.h"
-#include <iostream>
-#include <chrono>
-#include <algorithm>
-#include <cassert>
+#include "../common/logger.h"
+#include "../common/logger_components.h"
+#include <sstream>
 
 namespace cprime {
 
-// SemanticTranslator implementation - pure enum transformations
+// ========================================================================
+// StructureBuilder Implementation
+// ========================================================================
+
+StructureBuilder::StructureBuilder(RawTokenStream raw_tokens, size_t raw_token_stream_id)
+    : raw_tokens(std::move(raw_tokens)), raw_token_stream_id_(raw_token_stream_id), current_position(0) {
+    // Initialize with root scope
+    scope_index_stack.push(StructuredTokens::ROOT_SCOPE_INDEX);
+    
+    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
+    logger->debug("StructureBuilder initialized with {} tokens, stream_id={}", 
+                  this->raw_tokens.get_tokens().size(), raw_token_stream_id_);
+}
+
+StructuredTokens StructureBuilder::build_structure() {
+    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
+    logger->info("Building structure from {} raw tokens", raw_tokens.get_tokens().size());
+    
+    current_position = 0;
+    errors.clear();
+    
+    // Process all tokens using cache-and-boundary methodology
+    while (!is_at_end()) {
+        const RawToken& token = current_raw_token();
+        
+        logger->trace("Processing token: {} at position {}", 
+                     token_kind_to_string(token.kind), current_position);
+        
+        // Check for boundary tokens
+        if (token.kind == TokenKind::SEMICOLON) {
+            handle_semicolon();
+        } else if (token.kind == TokenKind::LEFT_BRACE) {
+            handle_left_brace();
+        } else if (token.kind == TokenKind::RIGHT_BRACE) {
+            handle_right_brace();
+        } else {
+            // Regular token - add to cache
+            token_cache.push_back(token);
+        }
+        
+        advance_raw_token();
+    }
+    
+    // Validate final state - cache should be empty, only root scope should remain
+    if (!is_cache_empty()) {
+        error("Unexpected end of file - missing semicolon after final statement");
+    }
+    
+    if (scope_index_stack.size() != 1 || scope_index_stack.top() != StructuredTokens::ROOT_SCOPE_INDEX) {
+        error("Unexpected end of file - unclosed scope braces");
+    }
+    
+    logger->info("Structure building complete. {} scopes created, {} errors", 
+                result.total_scopes, errors.size());
+    
+    return std::move(result);
+}
+
+// ========================================================================
+// Boundary Handler Implementation - Cache-and-Boundary Methodology
+// ========================================================================
+
+void StructureBuilder::handle_semicolon() {
+    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
+    logger->trace("Handling semicolon - converting cache to instruction");
+    
+    if (is_cache_empty()) {
+        error("Empty statement - semicolon without preceding tokens");
+        return;
+    }
+    
+    add_instruction_to_current_scope();
+    clear_cache();
+}
+
+void StructureBuilder::handle_left_brace() {
+    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
+    logger->trace("Handling left brace - converting cache to scope signature");
+    
+    // Cache becomes scope signature (can be empty for naked scopes)
+    Scope::Type scope_type = determine_scope_type_from_cache();
+    
+    if (is_cache_empty()) {
+        // Naked scope
+        enter_new_scope(scope_type);
+    } else {
+        // Named scope with signature
+        std::vector<RawToken> signature(token_cache);
+        enter_new_scope(scope_type, std::move(signature));
+    }
+    
+    clear_cache();
+}
+
+void StructureBuilder::handle_right_brace() {
+    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
+    logger->trace("Handling right brace - exiting current scope");
+    
+    if (!is_cache_empty()) {
+        error_missing_semicolon();
+        return;
+    }
+    
+    exit_current_scope();
+}
+
+// ========================================================================
+// Scope Type Detection - Structural Patterns Only
+// ========================================================================
+
+Scope::Type StructureBuilder::determine_scope_type_from_cache() const {
+    if (is_cache_empty()) {
+        return Scope::NakedScope;
+    }
+    
+    // Check for named scope patterns
+    if (is_named_scope_pattern()) {
+        // Distinguish between function and class/struct
+        if (cache_contains_pattern({TokenKind::LEFT_PAREN})) {
+            return Scope::NamedFunction;
+        } else {
+            return Scope::NamedClass;
+        }
+    }
+    
+    // Check for control flow patterns
+    if (is_conditional_scope_pattern()) {
+        return Scope::ConditionalScope;
+    }
+    
+    if (is_loop_scope_pattern()) {
+        return Scope::LoopScope;
+    }
+    
+    if (is_try_scope_pattern()) {
+        return Scope::TryScope;
+    }
+    
+    // Default to naked scope for unrecognized patterns
+    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
+    logger->debug("Unrecognized scope pattern, defaulting to NakedScope");
+    return Scope::NakedScope;
+}
+
+bool StructureBuilder::is_named_scope_pattern() const {
+    // Look for class/struct/function patterns
+    return cache_starts_with_keyword(TokenKind::CLASS) ||
+           cache_starts_with_keyword(TokenKind::STRUCT) ||
+           cache_starts_with_keyword(TokenKind::UNION) ||
+           cache_starts_with_keyword(TokenKind::INTERFACE) ||
+           cache_contains_pattern({TokenKind::IDENTIFIER, TokenKind::LEFT_PAREN});  // function pattern
+}
+
+bool StructureBuilder::is_conditional_scope_pattern() const {
+    return cache_starts_with_keyword(TokenKind::IF) ||
+           cache_starts_with_keyword(TokenKind::ELSE) ||
+           cache_starts_with_keyword(TokenKind::SWITCH) ||
+           cache_starts_with_keyword(TokenKind::CASE);
+}
+
+bool StructureBuilder::is_loop_scope_pattern() const {
+    return cache_starts_with_keyword(TokenKind::FOR) ||
+           cache_starts_with_keyword(TokenKind::WHILE);
+}
+
+bool StructureBuilder::is_try_scope_pattern() const {
+    return cache_starts_with_keyword(TokenKind::TRY) ||
+           cache_starts_with_keyword(TokenKind::CATCH);
+}
+
+// ========================================================================
+// Pattern Matching Helpers
+// ========================================================================
+
+bool StructureBuilder::cache_starts_with_keyword(TokenKind keyword) const {
+    return !token_cache.empty() && token_cache[0].kind == keyword;
+}
+
+bool StructureBuilder::cache_contains_pattern(const std::vector<TokenKind>& pattern) const {
+    if (pattern.empty() || token_cache.size() < pattern.size()) {
+        return false;
+    }
+    
+    // Simple substring search
+    for (size_t i = 0; i <= token_cache.size() - pattern.size(); ++i) {
+        bool match = true;
+        for (size_t j = 0; j < pattern.size(); ++j) {
+            if (token_cache[i + j].kind != pattern[j]) {
+                match = false;
+                break;
+            }
+        }
+        if (match) return true;
+    }
+    
+    return false;
+}
+
+size_t StructureBuilder::find_token_in_cache(TokenKind kind, size_t start_offset) const {
+    for (size_t i = start_offset; i < token_cache.size(); ++i) {
+        if (token_cache[i].kind == kind) {
+            return i;
+        }
+    }
+    return token_cache.size();  // Not found
+}
+
+// ========================================================================
+// Cache Management
+// ========================================================================
+
+void StructureBuilder::add_instruction_to_current_scope() {
+    size_t current_scope_idx = get_current_scope_index();
+    
+    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
+    logger->trace("Adding instruction with {} tokens to scope {}", 
+                 token_cache.size(), current_scope_idx);
+    
+    // Add each cached token to the current scope's content
+    for (const RawToken& token : token_cache) {
+        result.add_content_token(current_scope_idx, token.kind);
+    }
+}
+
+void StructureBuilder::clear_cache() {
+    token_cache.clear();
+}
+
+// ========================================================================
+// Scope Management
+// ========================================================================
+
+void StructureBuilder::enter_new_scope(Scope::Type type) {
+    size_t parent_idx = get_current_scope_index();
+    size_t new_scope_idx = result.add_scope(type, parent_idx, raw_token_stream_id_);
+    
+    scope_index_stack.push(new_scope_idx);
+    
+    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
+    logger->debug("Entered new scope: {} (index {}), parent: {}", 
+                 scope_type_to_string(type), new_scope_idx, parent_idx);
+}
+
+void StructureBuilder::enter_new_scope(Scope::Type type, std::vector<RawToken> signature) {
+    size_t parent_idx = get_current_scope_index();
+    
+    // Convert RawToken signature to uint32_t for storage
+    std::vector<uint32_t> signature_kinds;
+    signature_kinds.reserve(signature.size());
+    for (const RawToken& token : signature) {
+        signature_kinds.push_back(static_cast<uint32_t>(token.kind));
+    }
+    
+    size_t new_scope_idx = result.add_scope(type, parent_idx, std::move(signature_kinds), raw_token_stream_id_);
+    scope_index_stack.push(new_scope_idx);
+    
+    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
+    logger->debug("Entered new named scope: {} (index {}), parent: {}, signature tokens: {}", 
+                 scope_type_to_string(type), new_scope_idx, parent_idx, signature.size());
+}
+
+void StructureBuilder::exit_current_scope() {
+    if (scope_index_stack.size() <= 1) {
+        error("Unexpected closing brace - no scope to exit");
+        return;
+    }
+    
+    size_t exited_scope_idx = scope_index_stack.top();
+    scope_index_stack.pop();
+    
+    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
+    logger->debug("Exited scope: {} (index {})", 
+                 scope_type_to_string(result.scopes[exited_scope_idx].type), exited_scope_idx);
+}
+
+size_t StructureBuilder::get_current_scope_index() const {
+    return scope_index_stack.top();
+}
+
+// ========================================================================
+// Token Stream Navigation
+// ========================================================================
+
+const RawToken& StructureBuilder::current_raw_token() const {
+    return raw_tokens.get_tokens()[current_position];
+}
+
+const RawToken& StructureBuilder::peek_raw_token(size_t offset) const {
+    size_t peek_pos = current_position + offset;
+    if (peek_pos >= raw_tokens.get_tokens().size()) {
+        static RawToken eof_token(TokenKind::EOF_TOKEN, 0, 0, UINT32_MAX);
+        return eof_token;
+    }
+    return raw_tokens.get_tokens()[peek_pos];
+}
+
+void StructureBuilder::advance_raw_token() {
+    if (current_position < raw_tokens.get_tokens().size()) {
+        current_position++;
+    }
+}
+
+bool StructureBuilder::is_at_end() const {
+    return current_position >= raw_tokens.get_tokens().size();
+}
+
+// ========================================================================
+// Error Reporting
+// ========================================================================
+
+void StructureBuilder::error(const std::string& message) {
+    const RawToken& token = current_raw_token();
+    error_at_position(message, current_position, token.line, token.column);
+}
+
+void StructureBuilder::error_at_position(const std::string& message, size_t pos, size_t line, size_t col) {
+    errors.emplace_back(message, pos, line, col);
+    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
+    logger->error("Structural error at {}:{}: {}", line, col, message);
+}
+
+void StructureBuilder::error_missing_semicolon() {
+    error("Missing semicolon - found tokens in cache when closing scope");
+}
+
+// ========================================================================
+// Debug Helpers
+// ========================================================================
+
+void StructureBuilder::debug_print_cache() const {
+    std::ostringstream oss;
+    oss << "Cache[" << token_cache.size() << "]: ";
+    for (const RawToken& token : token_cache) {
+        oss << token_kind_to_string(token.kind) << " ";
+    }
+    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
+    logger->debug("{}", oss.str());
+}
+
+void StructureBuilder::debug_print_scope_stack() const {
+    std::ostringstream oss;
+    oss << "Scope stack depth: " << scope_index_stack.size();
+    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
+    logger->debug("{}", oss.str());
+}
+
+std::string StructureBuilder::scope_type_to_string(Scope::Type type) const {
+    switch (type) {
+        case Scope::TopLevel: return "TopLevel";
+        case Scope::NamedFunction: return "NamedFunction";
+        case Scope::NamedClass: return "NamedClass";
+        case Scope::ConditionalScope: return "ConditionalScope";
+        case Scope::LoopScope: return "LoopScope";
+        case Scope::TryScope: return "TryScope";
+        case Scope::NakedScope: return "NakedScope";
+        default: return "Unknown";
+    }
+}
+
+// ========================================================================
+// Legacy SemanticTranslator Implementation
+// ========================================================================
+
 SemanticTranslator::SemanticTranslator(RawTokenStream raw_tokens, StringTable& string_table)
-    : raw_tokens(std::move(raw_tokens)), string_table_(string_table), position(0) {
-    context_resolver = std::make_unique<ContextResolver>(context_stack);
+    : string_table_(string_table) {
+    structure_builder = std::make_unique<StructureBuilder>(std::move(raw_tokens));
 }
 
 std::vector<ContextualToken> SemanticTranslator::translate() {
-    contextual_tokens.clear();
-    errors.clear();
-    position = 0;
+    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
+    logger->info("Legacy translation - building structure first");
     
-    // Reset context stack to initial state
-    context_stack.clear();
+    StructuredTokens structured = structure_builder->build_structure();
+    convert_structural_errors(structure_builder->get_errors());
     
-    while (!is_at_end()) {
-        try {
-            ContextualToken contextual_token = translate_next_token();
-            
-            // Update context based on translated token - enum-based only
-            enter_context_from_contextual_token(contextual_token);
-            
-            contextual_tokens.push_back(std::move(contextual_token));
-            
-        } catch (const std::exception& e) {
-            error("Translation error: " + std::string(e.what()));
-            advance_raw_token(); // Skip problematic token
-        }
-    }
-    
-    return contextual_tokens;
+    return flatten_structure_to_contextual_tokens(structured);
 }
 
 ContextualTokenStream SemanticTranslator::translate_to_stream() {
-    return ContextualTokenStream(translate());
+    auto tokens = translate();
+    return ContextualTokenStream{std::move(tokens)};
 }
 
-ContextualToken SemanticTranslator::translate_next_token() {
-    const RawToken& raw_token = current_raw_token();
+void SemanticTranslator::convert_structural_errors(const std::vector<StructureBuilder::StructuralError>& structural_errors) {
+    legacy_errors.clear();
+    legacy_errors.reserve(structural_errors.size());
     
-    // Determine contextual token kind through pure enum transformation
-    ContextualTokenKind contextual_kind = ContextualTokenKind::CONTEXTUAL_TODO;
-    
-    // Handle context-sensitive keywords using enum-only logic
-    if (raw_token.kind == TokenKind::RUNTIME) {
-        contextual_kind = resolve_runtime_context(raw_token);
-    } else if (raw_token.kind == TokenKind::DEFER) {
-        contextual_kind = resolve_defer_context(raw_token);
-    } else if (raw_token.kind == TokenKind::CLASS) {
-        contextual_kind = resolve_class_context(raw_token);
-    } else if (raw_token.kind == TokenKind::UNION) {
-        contextual_kind = resolve_union_context(raw_token);
-    } else if (raw_token.kind == TokenKind::INTERFACE) {
-        contextual_kind = resolve_interface_context(raw_token);
-    } else {
-        // Direct mapping for non-context-sensitive tokens
-        contextual_kind = map_token_kind_to_contextual(raw_token.kind);
+    for (const auto& structural_error : structural_errors) {
+        legacy_errors.emplace_back(structural_error.message, 
+                                   structural_error.line, 
+                                   structural_error.column, 
+                                   "Layer2/Structure");
     }
-    
-    // Update parsing context based on enum transformation
-    update_parse_context(raw_token.kind, contextual_kind);
-    
-    // Create contextual token with enum-based resolution
-    advance_raw_token();
-    return ContextualToken(raw_token, contextual_kind);
 }
 
-ContextualTokenKind SemanticTranslator::resolve_runtime_context(const RawToken& /* token */) {
-    // Pure enum-based context resolution for RUNTIME keyword
-    // Check next token for pattern matching without string operations
+std::vector<ContextualToken> SemanticTranslator::flatten_structure_to_contextual_tokens(const StructuredTokens& structured) {
+    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
+    logger->debug("Flattening {} scopes to legacy ContextualToken vector", structured.scopes.size());
     
-    if (peek_raw_token().kind == TokenKind::IDENTIFIER) {
-        // Could be "runtime exposes" for access rights
-        // Note: In pure enum mode, we can't check if next identifier is "exposes"
-        // We rely on Layer 1 to have correctly identified "exposes" as IDENTIFIER
-        // This is a limitation of the enum-only approach for context-sensitive identifiers
-        
-        // For now, assume runtime + identifier = runtime access right pattern
-        if (is_in_type_expression_context()) {
-            return ContextualTokenKind::RUNTIME_TYPE_PARAMETER;
-        } else {
-            return ContextualTokenKind::RUNTIME_ACCESS_RIGHT;
+    std::vector<ContextualToken> result;
+    
+    // Simple flattening - traverse scopes and convert stored TokenKind values
+    // This is temporary until Layer 3 contextualization is implemented
+    for (const auto& scope : structured.scopes) {
+        // Add signature tokens (for named scopes)
+        for (uint32_t token_kind_value : scope.signature_tokens) {
+            TokenKind kind = static_cast<TokenKind>(token_kind_value);
+            RawToken raw_token(kind, 0, 0, 0);  // Placeholder position info
+            ContextualTokenKind contextual_kind = static_cast<ContextualTokenKind>(kind);  // Direct cast for now
+            result.emplace_back(raw_token, contextual_kind);
         }
-    } else if (is_in_type_expression_context()) {
-        return ContextualTokenKind::RUNTIME_TYPE_PARAMETER;
-    } else {
-        return ContextualTokenKind::RUNTIME_VARIABLE_DECL;
-    }
-}
-
-ContextualTokenKind SemanticTranslator::resolve_defer_context(const RawToken& /* token */) {
-    // Pure enum-based context resolution for DEFER keyword
-    // Check context and next tokens for pattern matching
-    
-    auto interpretation = context_resolver->resolve_defer_keyword();
-    
-    switch (interpretation) {
-        case ContextResolver::KeywordInterpretation::DeferRaii:
-            return ContextualTokenKind::DEFER_RAII;
-        case ContextResolver::KeywordInterpretation::DeferCoroutine:
-            return ContextualTokenKind::DEFER_COROUTINE;
-        default:
-            // Default to RAII defer - most common case
-            return ContextualTokenKind::DEFER_RAII;
-    }
-}
-
-ContextualTokenKind SemanticTranslator::resolve_exposes_context(const RawToken& /* token */) {
-    // Pure enum-based context resolution for EXPOSES keyword
-    // Note: EXPOSES is identified as IDENTIFIER in Layer 1, this method handles the mapping
-    
-    if (is_in_runtime_context()) {
-        return ContextualTokenKind::EXPOSES_RUNTIME;
-    } else {
-        return ContextualTokenKind::EXPOSES_COMPILE_TIME;
-    }
-}
-
-ContextualTokenKind SemanticTranslator::resolve_class_context(const RawToken& /* token */) {
-    // Pure enum-based context resolution for CLASS keyword
-    // Determine class type based on current context
-    
-    const ParseContext* ctx = context_stack.current();
-    if (ctx && ctx->has_attribute("class_type")) {
-        const std::string& class_type = ctx->get_attribute("class_type");
-        if (class_type == "functional") {
-            return ContextualTokenKind::FUNCTIONAL_CLASS;
-        } else if (class_type == "danger") {
-            return ContextualTokenKind::DANGER_CLASS;
+        
+        // Add content tokens
+        for (uint32_t token_kind_value : scope.content) {
+            TokenKind kind = static_cast<TokenKind>(token_kind_value);
+            RawToken raw_token(kind, 0, 0, 0);  // Placeholder position info
+            ContextualTokenKind contextual_kind = static_cast<ContextualTokenKind>(kind);  // Direct cast for now
+            result.emplace_back(raw_token, contextual_kind);
         }
     }
     
-    // Default to data class
-    return ContextualTokenKind::DATA_CLASS;
-}
-
-ContextualTokenKind SemanticTranslator::resolve_union_context(const RawToken& /* token */) {
-    // Pure enum-based context resolution for UNION keyword
-    // Check if next token is RUNTIME for runtime union detection
-    
-    if (peek_raw_token().kind == TokenKind::RUNTIME || is_in_runtime_context()) {
-        return ContextualTokenKind::RUNTIME_UNION_DECLARATION;
-    } else {
-        return ContextualTokenKind::UNION_DECLARATION;
-    }
-}
-
-ContextualTokenKind SemanticTranslator::resolve_interface_context(const RawToken& /* token */) {
-    // Pure enum-based context resolution for INTERFACE keyword
-    return ContextualTokenKind::INTERFACE_DECLARATION;
-}
-
-ContextualTokenKind SemanticTranslator::resolve_function_context(const RawToken& /* token */) {
-    // Pure enum-based context resolution for function keywords
-    // Note: "fn" and "async" are IDENTIFIERs in Layer 1
-    
-    // Check if this is preceded by async keyword pattern
-    // This would need lookahead/lookbehind which complicates enum-only approach
-    // For now, default to regular function declaration
-    return ContextualTokenKind::FUNCTION_DECLARATION;
-}
-
-ContextualTokenKind SemanticTranslator::map_token_kind_to_contextual(TokenKind kind) {
-    // Direct 1:1 mapping for non-context-sensitive tokens
-    switch (kind) {
-        case TokenKind::IDENTIFIER: return ContextualTokenKind::IDENTIFIER;
-        case TokenKind::COMMENT: return ContextualTokenKind::COMMENT;
-        case TokenKind::WHITESPACE: return ContextualTokenKind::WHITESPACE;
-        case TokenKind::EOF_TOKEN: return ContextualTokenKind::EOF_TOKEN;
-        
-        // Literals - direct mapping
-        case TokenKind::INT_LITERAL: return ContextualTokenKind::INT_LITERAL;
-        case TokenKind::UINT_LITERAL: return ContextualTokenKind::UINT_LITERAL;
-        case TokenKind::LONG_LITERAL: return ContextualTokenKind::LONG_LITERAL;
-        case TokenKind::ULONG_LITERAL: return ContextualTokenKind::ULONG_LITERAL;
-        case TokenKind::LONG_LONG_LITERAL: return ContextualTokenKind::LONG_LONG_LITERAL;
-        case TokenKind::ULONG_LONG_LITERAL: return ContextualTokenKind::ULONG_LONG_LITERAL;
-        case TokenKind::FLOAT_LITERAL: return ContextualTokenKind::FLOAT_LITERAL;
-        case TokenKind::DOUBLE_LITERAL: return ContextualTokenKind::DOUBLE_LITERAL;
-        case TokenKind::LONG_DOUBLE_LITERAL: return ContextualTokenKind::LONG_DOUBLE_LITERAL;
-        case TokenKind::CHAR_LITERAL: return ContextualTokenKind::CHAR_LITERAL;
-        case TokenKind::WCHAR_LITERAL: return ContextualTokenKind::WCHAR_LITERAL;
-        case TokenKind::CHAR16_LITERAL: return ContextualTokenKind::CHAR16_LITERAL;
-        case TokenKind::CHAR32_LITERAL: return ContextualTokenKind::CHAR32_LITERAL;
-        case TokenKind::STRING_LITERAL: return ContextualTokenKind::STRING_LITERAL;
-        case TokenKind::WSTRING_LITERAL: return ContextualTokenKind::WSTRING_LITERAL;
-        case TokenKind::STRING16_LITERAL: return ContextualTokenKind::STRING16_LITERAL;
-        case TokenKind::STRING32_LITERAL: return ContextualTokenKind::STRING32_LITERAL;
-        case TokenKind::STRING8_LITERAL: return ContextualTokenKind::STRING8_LITERAL;
-        case TokenKind::RAW_STRING_LITERAL: return ContextualTokenKind::RAW_STRING_LITERAL;
-        case TokenKind::TRUE_LITERAL: return ContextualTokenKind::TRUE_LITERAL;
-        case TokenKind::FALSE_LITERAL: return ContextualTokenKind::FALSE_LITERAL;
-        case TokenKind::NULLPTR_LITERAL: return ContextualTokenKind::NULLPTR_LITERAL;
-        
-        // Operators - direct mapping
-        case TokenKind::PLUS: return ContextualTokenKind::PLUS;
-        case TokenKind::MINUS: return ContextualTokenKind::MINUS;
-        case TokenKind::LEFT_PAREN: return ContextualTokenKind::LEFT_PAREN;
-        case TokenKind::RIGHT_PAREN: return ContextualTokenKind::RIGHT_PAREN;
-        case TokenKind::LEFT_BRACE: return ContextualTokenKind::LEFT_BRACE;
-        case TokenKind::RIGHT_BRACE: return ContextualTokenKind::RIGHT_BRACE;
-        case TokenKind::LEFT_BRACKET: return ContextualTokenKind::LEFT_BRACKET;
-        case TokenKind::RIGHT_BRACKET: return ContextualTokenKind::RIGHT_BRACKET;
-        case TokenKind::SEMICOLON: return ContextualTokenKind::SEMICOLON;
-        case TokenKind::COMMA: return ContextualTokenKind::COMMA;
-        case TokenKind::COLON: return ContextualTokenKind::COLON;
-        
-        // Keywords - direct mapping for non-context-sensitive ones
-        case TokenKind::IF: return ContextualTokenKind::IF;
-        case TokenKind::ELSE: return ContextualTokenKind::ELSE;
-        case TokenKind::WHILE: return ContextualTokenKind::WHILE;
-        case TokenKind::FOR: return ContextualTokenKind::FOR;
-        case TokenKind::RETURN: return ContextualTokenKind::RETURN;
-        case TokenKind::VOID: return ContextualTokenKind::VOID;
-        case TokenKind::BOOL: return ContextualTokenKind::BOOL;
-        case TokenKind::INT: return ContextualTokenKind::INT;
-        case TokenKind::CONST: return ContextualTokenKind::CONST;
-        case TokenKind::MUT: return ContextualTokenKind::MUT;
-        case TokenKind::STATIC: return ContextualTokenKind::STATIC;
-        case TokenKind::VOLATILE: return ContextualTokenKind::VOLATILE;
-        
-        // Default to TODO for unhandled tokens
-        default: return ContextualTokenKind::CONTEXTUAL_TODO;
-    }
-}
-
-void SemanticTranslator::update_parse_context(TokenKind /* kind */, ContextualTokenKind contextual_kind) {
-    // Update parsing context based on enum transformations only
-    
-    switch (contextual_kind) {
-        case ContextualTokenKind::DATA_CLASS:
-        case ContextualTokenKind::FUNCTIONAL_CLASS:
-        case ContextualTokenKind::DANGER_CLASS:
-            // Push class context - using contextual kind to determine class type
-            if (contextual_kind == ContextualTokenKind::FUNCTIONAL_CLASS) {
-                context_stack.push(ParseContext(ParseContextType::ClassDefinition, {{"class_type", "functional"}}));
-            } else if (contextual_kind == ContextualTokenKind::DANGER_CLASS) {
-                context_stack.push(ParseContext(ParseContextType::ClassDefinition, {{"class_type", "danger"}}));
-            } else {
-                context_stack.push(ParseContext(ParseContextType::ClassDefinition, {{"class_type", "data"}}));
-            }
-            break;
-            
-        case ContextualTokenKind::UNION_DECLARATION:
-        case ContextualTokenKind::RUNTIME_UNION_DECLARATION:
-            context_stack.push(ParseContext(ParseContextType::UnionDefinition, {}));
-            break;
-            
-        case ContextualTokenKind::INTERFACE_DECLARATION:
-            context_stack.push(ParseContext(ParseContextType::InterfaceDefinition, {}));
-            break;
-            
-        case ContextualTokenKind::FUNCTION_DECLARATION:
-        case ContextualTokenKind::ASYNC_FUNCTION_DECLARATION:
-            context_stack.push(ParseContext(ParseContextType::FunctionBody, {}));
-            break;
-            
-        case ContextualTokenKind::LEFT_BRACE:
-            // Block start - context should already be set by preceding construct
-            break;
-            
-        case ContextualTokenKind::RIGHT_BRACE:
-            // Block end - pop context
-            if (context_stack.depth() > 1) {
-                context_stack.pop();
-            }
-            break;
-            
-        default:
-            // No context change needed for other tokens
-            break;
-    }
-}
-
-bool SemanticTranslator::is_in_runtime_context() const {
-    return context_stack.current_context_is_runtime();
-}
-
-bool SemanticTranslator::is_in_type_expression_context() const {
-    const ParseContext* ctx = context_stack.current();
-    return ctx && ctx->type == ParseContextType::TypeExpression;
-}
-
-bool SemanticTranslator::is_in_class_declaration_context() const {
-    const ParseContext* ctx = context_stack.current();
-    return ctx && ctx->type == ParseContextType::ClassDefinition;
-}
-
-void SemanticTranslator::enter_context_from_contextual_token(const ContextualToken& /* token */) {
-    // Context changes are handled in update_parse_context during translation
-    // This method is kept for interface compatibility but delegates to enum-based logic
-}
-
-bool SemanticTranslator::peek_for_token_sequence(const std::vector<TokenKind>& sequence) {
-    for (size_t i = 0; i < sequence.size(); ++i) {
-        if (raw_tokens.position() + i >= raw_tokens.size()) {
-            return false; // Not enough tokens remaining
-        }
-        if (raw_tokens.peek(i).kind != sequence[i]) {
-            return false;
-        }
-    }
-    return true;
-}
-
-bool SemanticTranslator::peek_for_runtime_modifier() {
-    return peek_raw_token().kind == TokenKind::RUNTIME;
-}
-
-bool SemanticTranslator::is_start_of_access_rights_declaration() const {
-    // Pattern: IDENTIFIER("exposes") followed by IDENTIFIER
-    // Note: In pure enum mode, "exposes" is IDENTIFIER, so we can't easily distinguish
-    // This is a fundamental limitation of the enum-only approach for context-sensitive identifiers
-    
-    const RawToken& current = current_raw_token();
-    if (current.kind != TokenKind::IDENTIFIER) {
-        return false;
-    }
-    
-    // Check if next token is also identifier (access right name)
-    return peek_raw_token().kind == TokenKind::IDENTIFIER;
-}
-
-bool SemanticTranslator::is_start_of_union_declaration() const {
-    return current_raw_token().kind == TokenKind::UNION;
-}
-
-bool SemanticTranslator::is_start_of_class_declaration() const {
-    return current_raw_token().kind == TokenKind::CLASS;
-}
-
-bool SemanticTranslator::is_start_of_function_declaration() const {
-    // Pattern: IDENTIFIER("fn") or IDENTIFIER("async") followed by IDENTIFIER("fn")
-    // Note: In enum mode, both "fn" and "async" are IDENTIFIERs
-    
-    const RawToken& current = current_raw_token();
-    if (current.kind != TokenKind::IDENTIFIER) {
-        return false;
-    }
-    
-    // This is a fundamental limitation - we can't easily distinguish "fn" from other identifiers
-    // without string operations. For now, assume any IDENTIFIER followed by IDENTIFIER could be function
-    return peek_raw_token().kind == TokenKind::IDENTIFIER;
-}
-
-void SemanticTranslator::exit_context_on_block_end() {
-    // Pop context when exiting a block
-    if (context_stack.depth() > 1) { // Keep at least top-level context
-        context_stack.pop();
-    }
-}
-
-const RawToken& SemanticTranslator::current_raw_token() const {
-    return raw_tokens.current();
-}
-
-const RawToken& SemanticTranslator::peek_raw_token(size_t offset) const {
-    return raw_tokens.peek(offset);
-}
-
-void SemanticTranslator::advance_raw_token() {
-    raw_tokens.advance();
-}
-
-bool SemanticTranslator::is_at_end() const {
-    return raw_tokens.is_at_end();
-}
-
-void SemanticTranslator::error(const std::string& message) {
-    const RawToken& token = current_raw_token();
-    error_at_token(message, token);
-}
-
-void SemanticTranslator::error_at_token(const std::string& message, const RawToken& token) {
-    errors.emplace_back(message, token.line, token.column, context_stack.get_context_path_string());
+    logger->info("Flattened to {} contextual tokens", result.size());
+    return result;
 }
 
 } // namespace cprime

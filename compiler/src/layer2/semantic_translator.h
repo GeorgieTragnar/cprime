@@ -27,7 +27,7 @@ public:
     explicit StructureBuilder(RawTokenStream raw_tokens, size_t raw_token_stream_id = 0);
     
     // Main structure building method
-    RawStructuredTokens build_structure();
+    StructuredTokens build_structure();
     
     // Error handling
     struct StructuralError {
@@ -49,7 +49,7 @@ private:
     std::vector<StructuralError> errors;
     
     // Structure building state
-    RawStructuredTokens result;
+    StructuredTokens result;
     std::stack<size_t> scope_index_stack;       // Current scope chain
     std::vector<RawToken> token_cache;          // Accumulate tokens until boundary
     size_t current_position;
@@ -63,7 +63,7 @@ private:
     void handle_right_brace();                  // Validate empty cache, exit scope
     
     // Scope type detection from cached signature tokens
-    typename Scope<RawToken>::Type determine_scope_type_from_cache() const;
+    Scope::Type determine_scope_type_from_cache() const;
     bool is_named_scope_pattern() const;
     bool is_conditional_scope_pattern() const;
     bool is_loop_scope_pattern() const;
@@ -80,8 +80,8 @@ private:
     bool is_cache_empty() const { return token_cache.empty(); }
     
     // Scope management  
-    void enter_new_scope(typename Scope<RawToken>::Type type);
-    void enter_new_scope(typename Scope<RawToken>::Type type, std::vector<RawToken> signature);
+    void enter_new_scope(Scope::Type type);
+    void enter_new_scope(Scope::Type type, std::vector<RawToken> signature);
     void exit_current_scope();
     size_t get_current_scope_index() const;
     
@@ -99,7 +99,7 @@ private:
     // Debug helpers
     void debug_print_cache() const;
     void debug_print_scope_stack() const;
-    std::string scope_type_to_string(typename Scope<RawToken>::Type type) const;
+    std::string scope_type_to_string(Scope::Type type) const;
 };
 
 /**
@@ -136,7 +136,7 @@ private:
     void convert_structural_errors(const std::vector<StructureBuilder::StructuralError>& structural_errors);
     
     // Temporary: flatten structured tokens back to simple ContextualToken vector
-    std::vector<ContextualToken> flatten_structure_to_contextual_tokens(const RawStructuredTokens& structured);
+    std::vector<ContextualToken> flatten_structure_to_contextual_tokens(const StructuredTokens& structured);
 };
 
 } // namespace cprime

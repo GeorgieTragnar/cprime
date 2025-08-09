@@ -4,44 +4,86 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
+#include <cassert>
+#include <functional>
 
 namespace cprime {
 
 // ========================================================================
-// Template instantiation for common types
+// Type-safe token access methods
 // ========================================================================
 
-// Explicit template instantiation for RawToken and ContextualToken
-template struct StructuredTokens<RawToken>;
-template struct StructuredTokens<ContextualToken>;
-template struct Scope<RawToken>;
-template struct Scope<ContextualToken>;
+TokenKind StructuredTokens::get_raw_token_kind(size_t scope_idx, size_t token_idx, bool from_signature) const {
+    assert(!contextualized && "Cannot access as TokenKind when contextualized flag is true");
+    assert(scope_idx < scopes.size() && "Scope index out of bounds");
+    
+    const auto& token_vector = from_signature ? scopes[scope_idx].signature_tokens : scopes[scope_idx].content;
+    assert(token_idx < token_vector.size() && "Token index out of bounds");
+    
+    return static_cast<TokenKind>(token_vector[token_idx]);
+}
+
+ContextualTokenKind StructuredTokens::get_contextual_token_kind(size_t scope_idx, size_t token_idx, bool from_signature) const {
+    assert(contextualized && "Cannot access as ContextualTokenKind when contextualized flag is false");
+    assert(scope_idx < scopes.size() && "Scope index out of bounds");
+    
+    const auto& token_vector = from_signature ? scopes[scope_idx].signature_tokens : scopes[scope_idx].content;
+    assert(token_idx < token_vector.size() && "Token index out of bounds");
+    
+    return static_cast<ContextualTokenKind>(token_vector[token_idx]);
+}
+
+void StructuredTokens::add_content_token(size_t scope_idx, TokenKind kind) {
+    assert(!contextualized && "Cannot add TokenKind when contextualized");
+    assert(scope_idx < scopes.size() && "Scope index out of bounds");
+    scopes[scope_idx].content.push_back(static_cast<uint32_t>(kind));
+}
+
+void StructuredTokens::add_content_token(size_t scope_idx, ContextualTokenKind kind) {
+    assert(contextualized && "Cannot add ContextualTokenKind when not contextualized");
+    assert(scope_idx < scopes.size() && "Scope index out of bounds");
+    scopes[scope_idx].content.push_back(static_cast<uint32_t>(kind));
+}
+
+void StructuredTokens::add_signature_token(size_t scope_idx, TokenKind kind) {
+    assert(!contextualized && "Cannot add TokenKind when contextualized");
+    assert(scope_idx < scopes.size() && "Scope index out of bounds");
+    scopes[scope_idx].signature_tokens.push_back(static_cast<uint32_t>(kind));
+}
+
+void StructuredTokens::add_signature_token(size_t scope_idx, ContextualTokenKind kind) {
+    assert(contextualized && "Cannot add ContextualTokenKind when not contextualized");
+    assert(scope_idx < scopes.size() && "Scope index out of bounds");
+    scopes[scope_idx].signature_tokens.push_back(static_cast<uint32_t>(kind));
+}
 
 // ========================================================================
 // StructuredTokens Navigation Helpers
 // ========================================================================
 
-template<typename TokenType>
-std::vector<size_t> StructuredTokens<TokenType>::get_child_scope_indices(size_t parent_idx) const {
+std::vector<size_t> StructuredTokens::get_child_scope_indices(size_t parent_idx) const {
     if (parent_idx >= scopes.size()) {
         return {};
     }
     
     std::vector<size_t> child_indices;
     
-    // For RawToken scopes, we need to scan for child scopes manually
-    // (scope indices not encoded yet)
-    for (size_t i = 0; i < scopes.size(); ++i) {
-        if (scopes[i].parent_index == parent_idx) {
-            child_indices.push_back(i);
+    if (contextualized) {
+        // When contextualized, check content for scope index markers
+        return get_child_scope_indices_from_content(parent_idx);
+    } else {
+        // When not contextualized, scan all scopes for matching parent_index
+        for (size_t i = 0; i < scopes.size(); ++i) {
+            if (scopes[i].parent_index == parent_idx) {
+                child_indices.push_back(i);
+            }
         }
     }
     
     return child_indices;
 }
 
-template<typename TokenType>
-size_t StructuredTokens<TokenType>::calculate_nesting_depth(size_t scope_idx) const {
+size_t StructuredTokens::calculate_nesting_depth(size_t scope_idx) const {
     if (scope_idx >= scopes.size()) {
         return 0;
     }
@@ -61,10 +103,9 @@ size_t StructuredTokens<TokenType>::calculate_nesting_depth(size_t scope_idx) co
     return depth;
 }
 
-template<typename TokenType>
-std::string StructuredTokens<TokenType>::to_debug_string() const {
+std::string StructuredTokens::to_debug_string() const {
     std::ostringstream oss;
-    oss << "StructuredTokens<" << typeid(TokenType).name() << "> {\n";
+    oss << "StructuredTokens { contextualized: " << (contextualized ? "true" : "false") << "\n";
     oss << "  Total Scopes: " << total_scopes << "\n";
     oss << "  Max Nesting Depth: " << max_nesting_depth << "\n";
     oss << "  Errors: " << errors.size() << "\n";
@@ -79,13 +120,13 @@ std::string StructuredTokens<TokenType>::to_debug_string() const {
             
             oss << indent_str << "Scope[" << scope_idx << "] { type: ";
             switch (scope.type) {
-                case Scope<TokenType>::TopLevel: oss << "TopLevel"; break;
-                case Scope<TokenType>::NamedFunction: oss << "NamedFunction"; break;
-                case Scope<TokenType>::NamedClass: oss << "NamedClass"; break;
-                case Scope<TokenType>::ConditionalScope: oss << "ConditionalScope"; break;
-                case Scope<TokenType>::LoopScope: oss << "LoopScope"; break;
-                case Scope<TokenType>::TryScope: oss << "TryScope"; break;
-                case Scope<TokenType>::NakedScope: oss << "NakedScope"; break;
+                case Scope::TopLevel: oss << "TopLevel"; break;
+                case Scope::NamedFunction: oss << "NamedFunction"; break;
+                case Scope::NamedClass: oss << "NamedClass"; break;
+                case Scope::ConditionalScope: oss << "ConditionalScope"; break;
+                case Scope::LoopScope: oss << "LoopScope"; break;
+                case Scope::TryScope: oss << "TryScope"; break;
+                case Scope::NakedScope: oss << "NakedScope"; break;
             }
             
             oss << ", parent: " << scope.parent_index;
@@ -117,29 +158,28 @@ std::string StructuredTokens<TokenType>::to_debug_string() const {
     return oss.str();
 }
 
-template<typename TokenType>
-void StructuredTokens<TokenType>::print_structure() const {
+void StructuredTokens::print_structure() const {
     std::cout << to_debug_string() << std::endl;
 }
 
 // ========================================================================
-// Specialized implementations for ContextualToken
+// Specialized child scope detection based on contextualized flag
 // ========================================================================
 
-// Specialized method for ContextualToken to handle scope indices in content
-template<>
-std::vector<size_t> StructuredTokens<ContextualToken>::get_child_scope_indices(size_t parent_idx) const {
-    if (parent_idx >= scopes.size()) {
+// When contextualized, look for scope index markers in content tokens
+std::vector<size_t> StructuredTokens::get_child_scope_indices_from_content(size_t parent_idx) const {
+    if (parent_idx >= scopes.size() || !contextualized) {
         return {};
     }
     
     std::vector<size_t> child_indices;
     const auto& parent_scope = scopes[parent_idx];
     
-    // For ContextualToken, scan content for scope index markers
-    for (const auto& token : parent_scope.content) {
-        if (scope_encoding::is_scope_index(token.get_contextual_kind())) {
-            size_t child_idx = scope_encoding::extract_scope_index(token.get_contextual_kind());
+    // Scan content for scope index markers (only when contextualized)
+    for (uint32_t token_value : parent_scope.content) {
+        ContextualTokenKind kind = static_cast<ContextualTokenKind>(token_value);
+        if (scope_encoding::is_scope_index(kind)) {
+            size_t child_idx = scope_encoding::extract_scope_index(kind);
             child_indices.push_back(child_idx);
         }
     }

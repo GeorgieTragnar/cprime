@@ -39,11 +39,18 @@ add_library(cprime_layer1validation
 
 add_library(cprime_layer2
     layer2/semantic_translator.cpp
-    layer2/contextual_token.cpp
 )
 
 add_library(cprime_layer2validation
     layer2validation/context_validator.cpp
+)
+
+add_library(cprime_layer3
+    layer3/contextualizer.cpp
+)
+
+add_library(cprime_layer3validation
+    layer3validation/contextualization_validator.cpp
 )
 
 add_library(cprime_layer4
@@ -83,6 +90,12 @@ target_link_libraries(cprime_layer2 PUBLIC cprime_common)
 target_include_directories(cprime_layer2validation PUBLIC .)
 target_link_libraries(cprime_layer2validation PUBLIC cprime_common cprime_layer2)
 
+target_include_directories(cprime_layer3 PUBLIC .)
+target_link_libraries(cprime_layer3 PUBLIC cprime_common)
+
+target_include_directories(cprime_layer3validation PUBLIC .)
+target_link_libraries(cprime_layer3validation PUBLIC cprime_common cprime_layer3)
+
 target_include_directories(cprime_layer4 PUBLIC .)
 target_link_libraries(cprime_layer4 PUBLIC cprime_common)
 
@@ -97,8 +110,10 @@ target_link_libraries(cprime_layer5validation PUBLIC cprime_common cprime_layer5
 
 # Layer 2 depends on Layer 1 for ContextStack and ContextResolver
 target_link_libraries(cprime_layer2 PUBLIC cprime_layer1)
-# Layer 4 depends on Layer 2 for structural tokens (Layer 3 will be added later)
-# target_link_libraries(cprime_layer4 PUBLIC cprime_layer2)
+# Layer 3 depends on Layer 2 for structured tokens
+target_link_libraries(cprime_layer3 PUBLIC cprime_layer2)
+# Layer 4 depends on Layer 3 for contextualized tokens
+target_link_libraries(cprime_layer4 PUBLIC cprime_layer3)
 # Layer 5 depends on Layer 4 for AST
 target_link_libraries(cprime_layer5 PUBLIC cprime_layer4)
 
@@ -107,7 +122,7 @@ target_link_libraries(cprime_compiler
     cprime_common
     cprime_layer1 cprime_layer1validation
     cprime_layer2 cprime_layer2validation
-    # cprime_layer3 cprime_layer3validation  # Will be added when Layer 3 is implemented
+    cprime_layer3 cprime_layer3validation
     cprime_layer4 cprime_layer4validation
     cprime_layer5 cprime_layer5validation
 )
@@ -123,7 +138,8 @@ set(COMPILER_FLAGS
 
 # Apply flags to all layer libraries (including common)
 foreach(lib IN ITEMS cprime_common cprime_layer1 cprime_layer1validation cprime_layer2 cprime_layer2validation 
-                     cprime_layer4 cprime_layer4validation cprime_layer5 cprime_layer5validation cprime_compiler)
+                     cprime_layer3 cprime_layer3validation cprime_layer4 cprime_layer4validation 
+                     cprime_layer5 cprime_layer5validation cprime_compiler)
     target_compile_features(${lib} PUBLIC cxx_std_17)
     target_compile_options(${lib} PRIVATE ${COMPILER_FLAGS})
 endforeach()
