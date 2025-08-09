@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../common/tokens.h"
-#include "../common/token_streams.h"
 #include "../common/structural_types.h"
 #include "../common/token_utils.h"
 #include "../layer1/context_stack.h"
@@ -13,7 +12,7 @@ namespace cprime {
 
 /**
  * Structure Builder - Layer 2 of the N-layer architecture.
- * Pure structural organization: converts RawTokenStream into hierarchical scopes.
+ * Pure structural organization: converts raw token vector into hierarchical scopes.
  * NO CONTEXTUALIZATION - only bracket matching and scope detection.
  * 
  * Algorithm:
@@ -24,7 +23,7 @@ namespace cprime {
  */
 class StructureBuilder {
 public:
-    explicit StructureBuilder(RawTokenStream raw_tokens, size_t raw_token_stream_id = 0);
+    explicit StructureBuilder(const std::vector<RawToken>& raw_tokens, StringTable& string_table);
     
     // Main structure building method
     StructuredTokens build_structure();
@@ -44,15 +43,15 @@ public:
     bool has_errors() const { return !errors.empty(); }
     
 private:
-    RawTokenStream raw_tokens;
-    size_t raw_token_stream_id_;
+    const std::vector<RawToken>& raw_tokens_;
+    StringTable& string_table_;
+    size_t current_position_;
     std::vector<StructuralError> errors;
     
     // Structure building state
     StructuredTokens result;
     std::stack<size_t> scope_index_stack;       // Current scope chain
     std::vector<RawToken> token_cache;          // Accumulate tokens until boundary
-    size_t current_position;
     
     // Core algorithm implementation
     void process_token_cache_and_boundary();
@@ -102,41 +101,5 @@ private:
     std::string scope_type_to_string(Scope::Type type) const;
 };
 
-/**
- * Legacy interface compatibility - will be phased out
- * TODO: Remove this once Layer 3 is implemented
- */
-class SemanticTranslator {
-public:
-    explicit SemanticTranslator(RawTokenStream raw_tokens, StringTable& string_table);
-    
-    // Legacy methods - temporarily redirect to structure building
-    std::vector<ContextualToken> translate();
-    ContextualTokenStream translate_to_stream();
-    
-    struct TranslationError {
-        std::string message;
-        size_t line;
-        size_t column;
-        std::string context_path;
-        
-        TranslationError(const std::string& msg, size_t line, size_t col, const std::string& ctx)
-            : message(msg), line(line), column(col), context_path(ctx) {}
-    };
-    
-    const std::vector<TranslationError>& get_errors() const { return legacy_errors; }
-    bool has_errors() const { return !legacy_errors.empty(); }
-    
-private:
-    std::unique_ptr<StructureBuilder> structure_builder;
-    StringTable& string_table_;
-    std::vector<TranslationError> legacy_errors;
-    
-    // Convert structural errors to legacy format
-    void convert_structural_errors(const std::vector<StructureBuilder::StructuralError>& structural_errors);
-    
-    // Temporary: flatten structured tokens back to simple ContextualToken vector
-    std::vector<ContextualToken> flatten_structure_to_contextual_tokens(const StructuredTokens& structured);
-};
 
 } // namespace cprime

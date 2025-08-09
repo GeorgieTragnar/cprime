@@ -28,7 +28,7 @@ fi
 BUILD_TYPE="Debug"
 CLEAN_BUILD=false
 BUILD_TESTS=false
-VERBOSE=false
+VERBOSE=true
 
 # Use getopts for proper short option parsing
 while getopts "ctvhrs-:" opt; do

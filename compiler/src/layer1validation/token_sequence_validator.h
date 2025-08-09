@@ -2,6 +2,7 @@
 
 #include "../validation_common.h"
 #include "../layer1/raw_token.h"
+#include "../common/string_table.h"
 #include <vector>
 #include <unordered_set>
 
@@ -27,7 +28,7 @@ struct TokenSpan {
  */
 class TokenSequenceValidator : public validation::BaseValidator {
 public:
-    explicit TokenSequenceValidator(const std::vector<RawToken>& tokens);
+    explicit TokenSequenceValidator(const std::vector<RawToken>& tokens, const StringTable& string_table);
     
     friend class SyntaxRuleChecker;
     
@@ -44,6 +45,7 @@ public:
     
 private:
     const std::vector<RawToken>& tokens_;
+    const StringTable& string_table_;
     
     // Bracket matching helpers
     struct BracketPair {
@@ -132,7 +134,7 @@ private:
  */
 class BracketMatcher {
 public:
-    explicit BracketMatcher(const std::vector<RawToken>& tokens);
+    explicit BracketMatcher(const std::vector<RawToken>& tokens, const StringTable& string_table);
     
     validation::ValidationResult validate_matching();
     
@@ -151,6 +153,8 @@ private:
                                            std::vector<std::pair<size_t, size_t>>& pairs);
     
     validation::SourceLocation token_location(size_t index) const;
+    
+    const StringTable& string_table_;
 };
 
 } // namespace cprime::layer1validation

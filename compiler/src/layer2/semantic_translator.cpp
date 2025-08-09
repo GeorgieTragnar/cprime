@@ -2,6 +2,7 @@
 #include "../common/token_utils.h"
 #include "../common/logger.h"
 #include "../common/logger_components.h"
+#include "../common/debug_utils.h"
 #include <sstream>
 
 namespace cprime {
@@ -10,21 +11,20 @@ namespace cprime {
 // StructureBuilder Implementation
 // ========================================================================
 
-StructureBuilder::StructureBuilder(RawTokenStream raw_tokens, size_t raw_token_stream_id)
-    : raw_tokens(std::move(raw_tokens)), raw_token_stream_id_(raw_token_stream_id), current_position(0) {
+StructureBuilder::StructureBuilder(const std::vector<RawToken>& raw_tokens, StringTable& string_table)
+    : raw_tokens_(raw_tokens), string_table_(string_table), current_position_(0) {
     // Initialize with root scope
     scope_index_stack.push(StructuredTokens::ROOT_SCOPE_INDEX);
     
     auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
-    logger->debug("StructureBuilder initialized with {} tokens, stream_id={}", 
-                  this->raw_tokens.get_tokens().size(), raw_token_stream_id_);
+    logger->debug("StructureBuilder initialized with {} tokens", raw_tokens_.size());
 }
 
 StructuredTokens StructureBuilder::build_structure() {
     auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
-    logger->info("Building structure from {} raw tokens", raw_tokens.get_tokens().size());
+    logger->info("Building structure from {} raw tokens", raw_tokens_.size());
     
-    current_position = 0;
+    current_position_ = 0;
     errors.clear();
     
     // Process all tokens using cache-and-boundary methodology
@@ -32,7 +32,7 @@ StructuredTokens StructureBuilder::build_structure() {
         const RawToken& token = current_raw_token();
         
         logger->trace("Processing token: {} at position {}", 
-                     token_kind_to_string(token.kind), current_position);
+                     debug_utils::token_kind_to_string(token.kind), current_position_);
         
         // Check for boundary tokens
         if (token.kind == TokenKind::SEMICOLON) {
@@ -240,7 +240,7 @@ void StructureBuilder::clear_cache() {
 
 void StructureBuilder::enter_new_scope(Scope::Type type) {
     size_t parent_idx = get_current_scope_index();
-    size_t new_scope_idx = result.add_scope(type, parent_idx, raw_token_stream_id_);
+    size_t new_scope_idx = result.add_scope(type, parent_idx, 0);  // Stream ID not needed anymore
     
     scope_index_stack.push(new_scope_idx);
     
@@ -259,7 +259,7 @@ void StructureBuilder::enter_new_scope(Scope::Type type, std::vector<RawToken> s
         signature_kinds.push_back(static_cast<uint32_t>(token.kind));
     }
     
-    size_t new_scope_idx = result.add_scope(type, parent_idx, std::move(signature_kinds), raw_token_stream_id_);
+    size_t new_scope_idx = result.add_scope(type, parent_idx, std::move(signature_kinds), 0);  // Stream ID not needed anymore
     scope_index_stack.push(new_scope_idx);
     
     auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
@@ -290,26 +290,26 @@ size_t StructureBuilder::get_current_scope_index() const {
 // ========================================================================
 
 const RawToken& StructureBuilder::current_raw_token() const {
-    return raw_tokens.get_tokens()[current_position];
+    return raw_tokens_[current_position_];
 }
 
 const RawToken& StructureBuilder::peek_raw_token(size_t offset) const {
-    size_t peek_pos = current_position + offset;
-    if (peek_pos >= raw_tokens.get_tokens().size()) {
+    size_t peek_pos = current_position_ + offset;
+    if (peek_pos >= raw_tokens_.size()) {
         static RawToken eof_token(TokenKind::EOF_TOKEN, 0, 0, UINT32_MAX);
         return eof_token;
     }
-    return raw_tokens.get_tokens()[peek_pos];
+    return raw_tokens_[peek_pos];
 }
 
 void StructureBuilder::advance_raw_token() {
-    if (current_position < raw_tokens.get_tokens().size()) {
-        current_position++;
+    if (current_position_ < raw_tokens_.size()) {
+        current_position_++;
     }
 }
 
 bool StructureBuilder::is_at_end() const {
-    return current_position >= raw_tokens.get_tokens().size();
+    return current_position_ >= raw_tokens_.size();
 }
 
 // ========================================================================
@@ -318,7 +318,7 @@ bool StructureBuilder::is_at_end() const {
 
 void StructureBuilder::error(const std::string& message) {
     const RawToken& token = current_raw_token();
-    error_at_position(message, current_position, token.line, token.column);
+    error_at_position(message, current_position_, token.line, token.column);
 }
 
 void StructureBuilder::error_at_position(const std::string& message, size_t pos, size_t line, size_t col) {
@@ -339,7 +339,7 @@ void StructureBuilder::debug_print_cache() const {
     std::ostringstream oss;
     oss << "Cache[" << token_cache.size() << "]: ";
     for (const RawToken& token : token_cache) {
-        oss << token_kind_to_string(token.kind) << " ";
+        oss << debug_utils::token_kind_to_string(token.kind) << " ";
     }
     auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
     logger->debug("{}", oss.str());
@@ -363,72 +363,6 @@ std::string StructureBuilder::scope_type_to_string(Scope::Type type) const {
         case Scope::NakedScope: return "NakedScope";
         default: return "Unknown";
     }
-}
-
-// ========================================================================
-// Legacy SemanticTranslator Implementation
-// ========================================================================
-
-SemanticTranslator::SemanticTranslator(RawTokenStream raw_tokens, StringTable& string_table)
-    : string_table_(string_table) {
-    structure_builder = std::make_unique<StructureBuilder>(std::move(raw_tokens));
-}
-
-std::vector<ContextualToken> SemanticTranslator::translate() {
-    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
-    logger->info("Legacy translation - building structure first");
-    
-    StructuredTokens structured = structure_builder->build_structure();
-    convert_structural_errors(structure_builder->get_errors());
-    
-    return flatten_structure_to_contextual_tokens(structured);
-}
-
-ContextualTokenStream SemanticTranslator::translate_to_stream() {
-    auto tokens = translate();
-    return ContextualTokenStream{std::move(tokens)};
-}
-
-void SemanticTranslator::convert_structural_errors(const std::vector<StructureBuilder::StructuralError>& structural_errors) {
-    legacy_errors.clear();
-    legacy_errors.reserve(structural_errors.size());
-    
-    for (const auto& structural_error : structural_errors) {
-        legacy_errors.emplace_back(structural_error.message, 
-                                   structural_error.line, 
-                                   structural_error.column, 
-                                   "Layer2/Structure");
-    }
-}
-
-std::vector<ContextualToken> SemanticTranslator::flatten_structure_to_contextual_tokens(const StructuredTokens& structured) {
-    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_LAYER2);
-    logger->debug("Flattening {} scopes to legacy ContextualToken vector", structured.scopes.size());
-    
-    std::vector<ContextualToken> result;
-    
-    // Simple flattening - traverse scopes and convert stored TokenKind values
-    // This is temporary until Layer 3 contextualization is implemented
-    for (const auto& scope : structured.scopes) {
-        // Add signature tokens (for named scopes)
-        for (uint32_t token_kind_value : scope.signature_tokens) {
-            TokenKind kind = static_cast<TokenKind>(token_kind_value);
-            RawToken raw_token(kind, 0, 0, 0);  // Placeholder position info
-            ContextualTokenKind contextual_kind = static_cast<ContextualTokenKind>(kind);  // Direct cast for now
-            result.emplace_back(raw_token, contextual_kind);
-        }
-        
-        // Add content tokens
-        for (uint32_t token_kind_value : scope.content) {
-            TokenKind kind = static_cast<TokenKind>(token_kind_value);
-            RawToken raw_token(kind, 0, 0, 0);  // Placeholder position info
-            ContextualTokenKind contextual_kind = static_cast<ContextualTokenKind>(kind);  // Direct cast for now
-            result.emplace_back(raw_token, contextual_kind);
-        }
-    }
-    
-    logger->info("Flattened to {} contextual tokens", result.size());
-    return result;
 }
 
 } // namespace cprime

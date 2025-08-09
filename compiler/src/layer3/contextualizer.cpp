@@ -2,6 +2,7 @@
 #include "../common/logger.h"
 #include "../common/logger_components.h"
 #include "../common/token_utils.h"
+#include "../common/debug_utils.h"
 
 namespace cprime {
 
@@ -88,7 +89,7 @@ void Contextualizer::contextualize_token_sequence(StructuredTokens& structured_t
         
         logger->trace("Token {} at scope {}[{}]: {} → {}", 
                      token_idx, scope_index, is_signature ? "sig" : "cont",
-                     token_kind_to_string(original_kind), 
+                     debug_utils::token_kind_to_string(original_kind), 
                      static_cast<int>(contextual_kind));
     }
 }

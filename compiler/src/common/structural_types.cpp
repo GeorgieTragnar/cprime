@@ -103,63 +103,9 @@ size_t StructuredTokens::calculate_nesting_depth(size_t scope_idx) const {
     return depth;
 }
 
-std::string StructuredTokens::to_debug_string() const {
-    std::ostringstream oss;
-    oss << "StructuredTokens { contextualized: " << (contextualized ? "true" : "false") << "\n";
-    oss << "  Total Scopes: " << total_scopes << "\n";
-    oss << "  Max Nesting Depth: " << max_nesting_depth << "\n";
-    oss << "  Errors: " << errors.size() << "\n";
-    
-    // Print scope hierarchy
-    std::function<void(size_t, int)> print_scope_recursive = 
-        [&](size_t scope_idx, int indent) {
-            if (scope_idx >= scopes.size()) return;
-            
-            std::string indent_str(indent * 2, ' ');
-            const auto& scope = scopes[scope_idx];
-            
-            oss << indent_str << "Scope[" << scope_idx << "] { type: ";
-            switch (scope.type) {
-                case Scope::TopLevel: oss << "TopLevel"; break;
-                case Scope::NamedFunction: oss << "NamedFunction"; break;
-                case Scope::NamedClass: oss << "NamedClass"; break;
-                case Scope::ConditionalScope: oss << "ConditionalScope"; break;
-                case Scope::LoopScope: oss << "LoopScope"; break;
-                case Scope::TryScope: oss << "TryScope"; break;
-                case Scope::NakedScope: oss << "NakedScope"; break;
-            }
-            
-            oss << ", parent: " << scope.parent_index;
-            oss << ", stream_id: " << scope.raw_token_stream_id;
-            oss << ", signature_tokens: " << scope.signature_tokens.size();
-            oss << ", content_tokens: " << scope.content.size();
-            oss << " }\n";
-            
-            // Print child scopes
-            auto children = get_child_scope_indices(scope_idx);
-            for (size_t child_idx : children) {
-                print_scope_recursive(child_idx, indent + 1);
-            }
-        };
-    
-    print_scope_recursive(ROOT_SCOPE_INDEX, 1);
-    
-    // Print errors if any
-    if (!errors.empty()) {
-        oss << "\n  Errors:\n";
-        for (const auto& error : errors) {
-            oss << "    - " << error.message 
-                << " (pos:" << error.token_position 
-                << ", scope:" << error.scope_index << ")\n";
-        }
-    }
-    
-    oss << "}";
-    return oss.str();
-}
-
 void StructuredTokens::print_structure() const {
-    std::cout << to_debug_string() << std::endl;
+    std::cout << "StructuredTokens debug printing moved to layer validation utilities." << std::endl;
+    std::cout << "Use layer2validation::DebugUtils::print_structured_tokens() instead." << std::endl;
 }
 
 // ========================================================================

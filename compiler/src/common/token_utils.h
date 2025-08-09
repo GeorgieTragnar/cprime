@@ -7,21 +7,11 @@ namespace cprime {
 
 // Forward declarations
 struct RawToken;
-struct ContextualToken;
 
 /**
  * Utility functions for token and context type conversions and queries.
  */
 
-/**
- * Convert TokenKind to string for debugging.
- */
-const char* token_kind_to_string(TokenKind kind);
-
-/**
- * Convert ContextualTokenKind to string for debugging.
- */
-const char* contextual_token_kind_to_string(ContextualTokenKind kind);
 
 
 /**

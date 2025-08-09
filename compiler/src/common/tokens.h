@@ -137,13 +137,6 @@ struct RawToken {
         return string_table.get_string(string_index);
     }
     
-    // Temporary backward-compatible method - will be removed once all layers use StringTable
-    const std::string& get_string() const {
-        static thread_local std::string empty_string = "[STRING_TABLE_NOT_PROVIDED]";
-        // This is a temporary compatibility method that should not be used in production
-        // All callers should be updated to pass StringTable
-        return empty_string;
-    }
     
     StringTable::StringIndex get_string_index() const {
         return string_index;
@@ -153,62 +146,8 @@ struct RawToken {
         return string_index != StringTable::INVALID_INDEX;
     }
     
-    // Debug string representation
-    std::string to_string(const StringTable& string_table) const;
 };
 
 
-/**
- * Context-enriched token - Layer 2 output.
- * Contains original raw token plus contextual interpretation as enum.
- * This enables zero string comparisons in Layer 3 and provides clear semantic meaning.
- */
-struct ContextualToken {
-    // Original raw token (unchanged)
-    RawToken raw_token;
-    
-    // Primary contextual interpretation (enum-based for performance)
-    ContextualTokenKind contextual_kind;
-    
-    ContextualToken(const RawToken& raw_token, ContextualTokenKind contextual_kind)
-        : raw_token(raw_token), contextual_kind(contextual_kind) {}
-    
-    // Primary accessors - use contextual_kind for semantic processing
-    ContextualTokenKind get_contextual_kind() const { return contextual_kind; }
-    bool is_contextual_kind(ContextualTokenKind kind) const { return contextual_kind == kind; }
-    
-    // Convenience accessors (delegate to raw_token)
-    TokenKind kind() const { return raw_token.kind; }
-    
-    // String access with StringTable
-    const std::string& get_string(const StringTable& string_table) const {
-        return raw_token.get_string(string_table);
-    }
-    
-    // Position information
-    size_t line() const { return raw_token.line; }
-    size_t column() const { return raw_token.column; }
-    size_t position() const { return raw_token.position; }
-    
-    // Token type queries (enum-based only)
-    bool is_identifier() const {
-        return raw_token.kind == TokenKind::IDENTIFIER;
-    }
-    
-    bool is_literal() const {
-        return raw_token.is_literal();
-    }
-    
-    bool is_operator() const {
-        return raw_token.is_operator();
-    }
-    
-    bool is_keyword() const {
-        return raw_token.is_keyword();
-    }
-    
-    // Debug representation
-    std::string to_string() const;
-};
 
 } // namespace cprime

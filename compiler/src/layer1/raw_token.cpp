@@ -109,78 +109,7 @@ const std::unordered_set<std::string> RawTokenizer::multi_char_symbols = {
     "..."
 };
 
-// RawToken implementation
-std::string RawToken::to_string(const StringTable& string_table) const {
-    std::stringstream ss;
-    ss << "RawToken(";
-    
-    // Convert TokenKind to string
-    ss << static_cast<int>(kind);
-    
-    if (has_string_value() && has_valid_string_index()) {
-        ss << ", \"" << string_table.get_string(string_index) << "\"";
-    } else if (has_literal_value()) {
-        ss << ", literal_value";
-    }
-    
-    ss << ", " << line << ":" << column << ")";
-    return ss.str();
-}
 
-// RawTokenStream implementation
-RawTokenStream::RawTokenStream(std::vector<RawToken> tokens)
-    : tokens(std::move(tokens)), pos(0) {}
-
-const RawToken& RawTokenStream::current() const {
-    ensure_valid_position();
-    return tokens[pos];
-}
-
-const RawToken& RawTokenStream::peek(size_t offset) const {
-    size_t peek_pos = pos + offset;
-    if (peek_pos >= tokens.size()) {
-        // Return EOF token if peeking beyond end
-        static const RawToken eof_token(TokenKind::EOF_TOKEN, 0, 0, 0);
-        return eof_token;
-    }
-    return tokens[peek_pos];
-}
-
-const RawToken& RawTokenStream::previous() const {
-    if (pos == 0) {
-        throw std::runtime_error("Cannot access previous token at beginning of stream");
-    }
-    return tokens[pos - 1];
-}
-
-void RawTokenStream::advance() {
-    if (pos < tokens.size()) {
-        pos++;
-    }
-}
-
-void RawTokenStream::rewind() {
-    if (pos > 0) {
-        pos--;
-    }
-}
-
-bool RawTokenStream::is_at_end() const {
-    return pos >= tokens.size() || tokens[pos].kind == TokenKind::EOF_TOKEN;
-}
-
-void RawTokenStream::set_position(size_t new_pos) {
-    if (new_pos > tokens.size()) {
-        throw std::runtime_error("Invalid token stream position");
-    }
-    pos = new_pos;
-}
-
-void RawTokenStream::ensure_valid_position() const {
-    if (pos >= tokens.size()) {
-        throw std::runtime_error("Token stream position out of bounds");
-    }
-}
 
 // RawTokenizer implementation
 RawTokenizer::RawTokenizer(const std::string& source, StringTable& string_table)
@@ -323,9 +252,6 @@ std::vector<RawToken> RawTokenizer::tokenize() {
     }
 }
 
-RawTokenStream RawTokenizer::tokenize_to_stream() {
-    return RawTokenStream(tokenize());
-}
 
 char RawTokenizer::peek() const {
     if (is_at_end()) return '\0';

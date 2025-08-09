@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../common/tokens.h"
-#include "../common/token_streams.h"
 #include "../common/token_utils.h"
 #include <string>
 #include <vector>
@@ -14,7 +13,7 @@ namespace spdlog { class logger; }
 
 namespace cprime {
 
-// TokenKind, RawToken, and RawTokenStream are now defined in common/ headers
+// TokenKind and RawToken are now defined in common/ headers
 
 /**
  * Raw tokenizer - Layer 1 of the three-layer architecture.
@@ -28,8 +27,6 @@ public:
     // Main tokenization method - returns tokens and populated string table
     std::vector<RawToken> tokenize();
     
-    // Get result as stream for convenient processing
-    RawTokenStream tokenize_to_stream();
     
     // Get the string table used during tokenization
     const StringTable& get_string_table() const { return string_table_; }

@@ -16,11 +16,12 @@ add_library(cprime_common
     common/token_types.h
     common/parse_context.h
     common/tokens.h
-    common/token_streams.h
     common/token_utils.h
     common/token_utils.cpp
     common/structural_types.h
     common/structural_types.cpp
+    common/debug_utils.h
+    common/debug_utils.cpp
 )
 
 # Common library is header-only, but we need to link spdlog

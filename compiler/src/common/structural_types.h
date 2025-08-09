@@ -136,8 +136,6 @@ struct StructuredTokens {
     std::vector<size_t> get_child_scope_indices_from_content(size_t parent_idx) const;
     size_t calculate_nesting_depth(size_t scope_idx) const;
     
-    // Debug output
-    std::string to_debug_string() const;
     void print_structure() const;
 };
 
@@ -168,11 +166,6 @@ namespace scope_encoding {
         return static_cast<ContextualTokenKind>(SCOPE_INDEX_MASK | static_cast<uint32_t>(scope_index));
     }
     
-    // Create scope marker token
-    inline ContextualToken create_scope_marker(size_t scope_index) {
-        RawToken dummy_raw(TokenKind::EOF_TOKEN, 0, 0, 0);  // Placeholder raw token
-        return ContextualToken(dummy_raw, encode_scope_index(scope_index));
-    }
 }
 
 // No more type aliases needed - single unified type
