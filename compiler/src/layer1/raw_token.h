@@ -4,6 +4,10 @@
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
+#include <memory>
+
+// Forward declare logger to avoid circular includes
+namespace spdlog { class logger; }
 
 namespace cprime {
 
@@ -110,6 +114,9 @@ private:
     size_t pos;
     size_t line;
     size_t column;
+    
+    // Debug trace logging
+    std::shared_ptr<spdlog::logger> trace_logger;
     
     // Tokenization state
     static const std::unordered_set<std::string> keywords;

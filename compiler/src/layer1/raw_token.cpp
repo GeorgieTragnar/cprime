@@ -3,6 +3,10 @@
 #include <sstream>
 #include <iostream>
 
+// Include logging infrastructure
+#include "../common/logger.h"
+#include "../common/logger_components.h"
+
 namespace cprime {
 
 // Static keyword definitions - context-sensitive keywords handled in semantic layer
@@ -157,13 +161,27 @@ void RawTokenStream::ensure_valid_position() const {
 
 // RawTokenizer implementation
 RawTokenizer::RawTokenizer(const std::string& source)
-    : source(source), pos(0), line(1), column(1) {}
+    : source(source), pos(0), line(1), column(1) {
+    // Initialize trace logger for detailed debugging
+    trace_logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_TOKENIZER);
+    trace_logger->set_level(spdlog::level::trace);
+}
 
 std::vector<RawToken> RawTokenizer::tokenize() {
+    // Start trace logging with buffer
+    CPRIME_BUFFER_BEGIN_TRACE(CPRIME_COMPONENT_TOKENIZER);
+    trace_logger->trace("=== TOKENIZATION START ===");
+    trace_logger->trace("Source length: {} characters", source.length());
+    trace_logger->trace("Source content: '{}'", source);
+    
     std::vector<RawToken> tokens;
+    
+    try {
     
     while (!is_at_end()) {
         char c = peek();
+        trace_logger->trace("Main loop: pos={}, line={}, col={}, char='{}' (code={})", 
+                          pos, line, column, (c >= 32 && c <= 126) ? std::string(1, c) : "\\x" + std::to_string(static_cast<unsigned char>(c)), static_cast<int>(c));
         
         // Skip whitespace (but preserve for formatting in some contexts)
         if (is_whitespace(c)) {
@@ -201,13 +219,16 @@ std::vector<RawToken> RawTokenizer::tokenize() {
         }
         
         // Handle operators (check longer multi-char first)
+        trace_logger->trace("Attempting operator parsing for char: '{}'", c);
         std::string potential_operator = "";
         potential_operator += c;
         
         // Check for 3-character operators first
         if (!is_at_end() && pos + 1 < source.length() && pos + 2 < source.length()) {
             std::string three_char_op = potential_operator + peek_next() + source[pos + 2];
+            trace_logger->trace("Checking 3-char operator: '{}'", three_char_op);
             if (multi_char_operators.count(three_char_op)) {
+                trace_logger->trace("Found 3-char operator: '{}'", three_char_op);
                 tokens.emplace_back(RawTokenType::OPERATOR, three_char_op, line, column, current_position());
                 advance(); // First character
                 advance(); // Second character  
@@ -219,7 +240,9 @@ std::vector<RawToken> RawTokenizer::tokenize() {
         // Check for 2-character operators
         if (!is_at_end() && pos + 1 < source.length()) {
             potential_operator += peek_next();
+            trace_logger->trace("Checking 2-char operator: '{}'", potential_operator);
             if (multi_char_operators.count(potential_operator)) {
+                trace_logger->trace("Found 2-char operator: '{}'", potential_operator);
                 tokens.emplace_back(RawTokenType::OPERATOR, potential_operator, line, column, current_position());
                 advance(); // First character
                 advance(); // Second character
@@ -228,7 +251,9 @@ std::vector<RawToken> RawTokenizer::tokenize() {
         }
         
         // Single character operators
+        trace_logger->trace("Checking single-char operator: '{}'", c);
         if (operators.count(std::string(1, c))) {
+            trace_logger->trace("Found single-char operator: '{}'", c);
             tokens.emplace_back(RawTokenType::OPERATOR, std::string(1, c), line, column, current_position());
             advance();
             continue;
@@ -248,7 +273,25 @@ std::vector<RawToken> RawTokenizer::tokenize() {
     // Add EOF token
     tokens.emplace_back(RawTokenType::EOF_TOKEN, "", line, column, current_position());
     
+    // Success - clear trace buffer and return
+    trace_logger->trace("=== TOKENIZATION SUCCESS ===");
+    trace_logger->trace("Total tokens created: {}", tokens.size());
+    CPRIME_BUFFER_CLEAR(CPRIME_COMPONENT_TOKENIZER);
+    
     return tokens;
+    
+    } catch (const std::exception& e) {
+        // Error occurred - dump all trace logs for debugging
+        trace_logger->error("=== TOKENIZATION FAILED ===");
+        trace_logger->error("Error: {}", e.what());
+        trace_logger->error("Position: {}:{} (absolute: {})", line, column, pos);
+        if (pos < source.length()) {
+            trace_logger->error("Current character: '{}' (code: {})", source[pos], static_cast<int>(source[pos]));
+        }
+        CPRIME_BUFFER_DUMP(CPRIME_COMPONENT_TOKENIZER);
+        CPRIME_BUFFER_CLEAR(CPRIME_COMPONENT_TOKENIZER);
+        throw; // Re-throw the original exception
+    }
 }
 
 RawTokenStream RawTokenizer::tokenize_to_stream() {
@@ -267,8 +310,13 @@ char RawTokenizer::peek_next() const {
 
 void RawTokenizer::advance() {
     if (!is_at_end()) {
-        update_position(source[pos]);
+        char current_char = source[pos];
+        trace_logger->trace("Advancing: consuming '{}' (code={}) at pos={}", 
+                          (current_char >= 32 && current_char <= 126) ? std::string(1, current_char) : "\\x" + std::to_string(static_cast<unsigned char>(current_char)), 
+                          static_cast<int>(current_char), pos);
+        update_position(current_char);
         pos++;
+        trace_logger->trace("After advance: pos={}, line={}, col={}", pos, line, column);
     }
 }
 

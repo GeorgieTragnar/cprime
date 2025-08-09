@@ -220,7 +220,7 @@ TEST_F(RawTokenizationTest, KeywordRecognition) {
     std::string code = "int main void class auto true false";
     auto tokens = tokenizeWithLogging(code, "KeywordRecognition");
     
-    std::vector<std::string> expected_values = {"int", "main", "void", "class", "auto", "true", "false"};
+    std::vector<std::string> expected_values = {"int", "main", "void", "class", "auto", "true", "false", ""};
     std::vector<RawTokenType> expected_types = {
         RawTokenType::KEYWORD,     // int
         RawTokenType::IDENTIFIER,  // main (function name, not keyword)
@@ -228,7 +228,8 @@ TEST_F(RawTokenizationTest, KeywordRecognition) {
         RawTokenType::KEYWORD,     // class
         RawTokenType::KEYWORD,     // auto
         RawTokenType::KEYWORD,     // true
-        RawTokenType::KEYWORD      // false
+        RawTokenType::KEYWORD,     // false
+        RawTokenType::EOF_TOKEN    // EOF
     };
     
     validateTokenSequence(tokens, expected_values, "KeywordRecognition");
