@@ -69,10 +69,8 @@ ContextualToken SemanticTranslator::translate_next_token() {
     update_parse_context(raw_token.kind, contextual_kind);
     
     // Create contextual token with enum-based resolution
-    const ParseContext* current_context = context_stack.current();
-    ParseContextType context_type = current_context ? current_context->type : ParseContextType::TopLevel;
     advance_raw_token();
-    return ContextualToken(raw_token, contextual_kind, context_type);
+    return ContextualToken(raw_token, contextual_kind);
 }
 
 ContextualTokenKind SemanticTranslator::resolve_runtime_context(const RawToken& /* token */) {

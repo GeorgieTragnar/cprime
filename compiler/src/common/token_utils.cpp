@@ -252,27 +252,6 @@ const char* contextual_token_kind_to_string(ContextualTokenKind kind) {
     }
 }
 
-const char* parse_context_type_to_string(ParseContextType context) {
-    switch (context) {
-        case ParseContextType::TopLevel: return "TopLevel";
-        case ParseContextType::ClassDefinition: return "ClassDefinition";
-        case ParseContextType::FunctionalClassDefinition: return "FunctionalClassDefinition";
-        case ParseContextType::DangerClassDefinition: return "DangerClassDefinition";
-        case ParseContextType::UnionDefinition: return "UnionDefinition";
-        case ParseContextType::InterfaceDefinition: return "InterfaceDefinition";
-        case ParseContextType::FunctionBody: return "FunctionBody";
-        case ParseContextType::Block: return "Block";
-        case ParseContextType::TypeExpression: return "TypeExpression";
-        case ParseContextType::AccessRightsDeclaration: return "AccessRightsDeclaration";
-        case ParseContextType::FieldDeclaration: return "FieldDeclaration";
-        case ParseContextType::ParameterList: return "ParameterList";
-        case ParseContextType::ExpressionContext: return "ExpressionContext";
-        case ParseContextType::CoroutineContext: return "CoroutineContext";
-        case ParseContextType::TemplateContext: return "TemplateContext";
-        case ParseContextType::AttributeContext: return "AttributeContext";
-        default: return "UNKNOWN_PARSE_CONTEXT";
-    }
-}
 
 bool is_literal(TokenKind kind) {
     return kind >= TokenKind::TRUE_LITERAL && kind <= TokenKind::RAW_STRING_LITERAL;
@@ -323,24 +302,7 @@ std::string RawToken::to_string(const StringTable& string_table) const {
 std::string ContextualToken::to_string() const {
     std::ostringstream oss;
     oss << contextual_token_kind_to_string(contextual_kind);
-    oss << " [" << parse_context_type_to_string(current_context) << "]";
     oss << " (" << raw_token.line << ":" << raw_token.column << ")";
-    return oss.str();
-}
-
-std::string ParseContext::to_string() const {
-    std::ostringstream oss;
-    oss << parse_context_type_to_string(type);
-    if (!attributes.empty()) {
-        oss << " {";
-        bool first = true;
-        for (const auto& attr : attributes) {
-            if (!first) oss << ", ";
-            oss << attr.first << "=" << attr.second;
-            first = false;
-        }
-        oss << "}";
-    }
     return oss.str();
 }
 

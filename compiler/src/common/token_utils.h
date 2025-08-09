@@ -1,7 +1,6 @@
 #pragma once
 
 #include "token_types.h"
-#include "parse_context.h"
 #include <string>
 
 namespace cprime {
@@ -24,10 +23,6 @@ const char* token_kind_to_string(TokenKind kind);
  */
 const char* contextual_token_kind_to_string(ContextualTokenKind kind);
 
-/**
- * Convert ParseContextType to string for debugging.
- */
-const char* parse_context_type_to_string(ParseContextType context);
 
 /**
  * Check if a TokenKind represents a literal value.

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../validation_common.h"
-#include "../layer2/semantic_token.h"
+#include "../common/tokens.h"
 #include <vector>
 #include <unordered_set>
 
@@ -20,7 +20,7 @@ namespace cprime::layer2validation {
  */
 class ContextValidator : public validation::BaseValidator {
 public:
-    explicit ContextValidator(const std::vector<SemanticToken>& tokens);
+    explicit ContextValidator(const std::vector<ContextualToken>& tokens);
     
     // BaseValidator interface
     validation::ValidationResult validate() override;
@@ -34,7 +34,7 @@ public:
     validation::ValidationResult validate_keyword_context_resolution();
     
 private:
-    const std::vector<SemanticToken>& tokens_;
+    const std::vector<ContextualToken>& tokens_;
 };
 
 } // namespace cprime::layer2validation

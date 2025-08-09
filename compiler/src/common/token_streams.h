@@ -60,10 +60,9 @@ public:
     // Token access
     const std::vector<ContextualToken>& get_tokens() const { return tokens; }
     
-    // Context-specific queries
-    std::vector<ContextualToken> filter_by_resolution(const std::string& resolution) const;
-    std::vector<ContextualToken> filter_by_context(ParseContextType context) const;
-    size_t count_by_resolution(const std::string& resolution) const;
+    // Enum-based queries
+    std::vector<ContextualToken> filter_by_contextual_kind(ContextualTokenKind kind) const;
+    size_t count_by_contextual_kind(ContextualTokenKind kind) const;
     
 private:
     std::vector<ContextualToken> tokens;
