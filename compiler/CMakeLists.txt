@@ -1,4 +1,8 @@
 cmake_minimum_required(VERSION 3.16)
+
+# Setup vcpkg script with CMake (note: should be placed before project() call)
+set(CMAKE_TOOLCHAIN_FILE ${CMAKE_SOURCE_DIR}/../../vcpkg/scripts/buildsystems/vcpkg.cmake CACHE STRING "Vcpkg toolchain file")
+
 project(cprime VERSION 2.0.0 LANGUAGES CXX)
 
 # C++17 is required
@@ -8,12 +12,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Enable testing
 enable_testing()
 
-# Setup vcpkg if available
-if(EXISTS "${CMAKE_SOURCE_DIR}/../../vcpkg/scripts/buildsystems/vcpkg.cmake")
-    set(CMAKE_TOOLCHAIN_FILE ${CMAKE_SOURCE_DIR}/../../vcpkg/scripts/buildsystems/vcpkg.cmake CACHE STRING "Vcpkg toolchain file")
-endif()
-
-# Find Google Test package
+# Find dependencies
 find_package(GTest CONFIG)
 if(GTest_FOUND)
     message(STATUS "Google Test found - tests will be built")
@@ -22,6 +21,10 @@ else()
     message(WARNING "Google Test not found - tests will be skipped")
     set(BUILD_TESTS OFF)
 endif()
+
+# Find spdlog for logging
+find_package(spdlog CONFIG REQUIRED)
+message(STATUS "spdlog found - logging will be available")
 
 # Add the src subdirectory which contains the actual compiler implementation
 add_subdirectory(src)

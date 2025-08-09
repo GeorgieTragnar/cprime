@@ -1,3 +1,5 @@
+#include "../common/logger.h"
+#include "../common/common_types.h"
 #include "../layer1/raw_token.h"
 #include "../layer2/semantic_token.h"
 #include "../layer2/semantic_translator.h"
@@ -9,6 +11,7 @@
 #include <vector>
 #include <iomanip>
 #include <getopt.h>
+#include <filesystem>
 
 using namespace cprime;
 
@@ -25,7 +28,7 @@ struct CLIOptions {
 };
 
 void print_help(const char* program_name) {
-    std::cout << "CPrime V2 Compiler - Development CLI\n";
+    std::cout << cprime::VersionInfo::get_full_version_string() << " - Development CLI\n";
     std::cout << "Usage: " << program_name << " [OPTIONS] [input_file]\n\n";
     std::cout << "OPTIONS:\n";
     std::cout << "  --dump-tokens        Dump raw tokens to output\n";
@@ -396,6 +399,13 @@ void show_pipeline_status(std::ostream& out) {
 }
 
 int main(int argc, char* argv[]) {
+    // Create logs directory if it doesn't exist
+    std::filesystem::create_directories("logs");
+    
+    // Initialize CLI logger
+    auto logger = CPRIME_LOGGER("cli");
+    logger->set_level(spdlog::level::debug);
+    
     CLIOptions options = parse_arguments(argc, argv);
     
     if (options.show_help) {
@@ -422,28 +432,34 @@ int main(int argc, char* argv[]) {
         std::string source = read_input(options);
         
         if (source.empty()) {
-            std::cerr << "Warning: Input is empty\n";
+            CPRIME_LOG_WARN("Input is empty");
             return 0;
         }
+        
+        CPRIME_LOG_DEBUG("Processing source input, {} characters", source.length());
         
         std::ofstream file_stream;
         std::ostream& out = get_output_stream(options, file_stream);
         
         if (options.dump_tokens) {
+            CPRIME_LOG_DEBUG("Dumping raw tokens");
             RawTokenizer tokenizer(source);
             auto tokens = tokenizer.tokenize();
             dump_raw_tokens(tokens, out);
         }
         
         if (options.debug_context) {
+            CPRIME_LOG_DEBUG("Processing with debug context");
             process_with_debug_context(source, out);
         }
         
         if (options.build_ast || options.dump_ast || options.dump_symbols) {
+            CPRIME_LOG_DEBUG("Building AST from source");
             build_ast_from_source(source, out, options.dump_ast, options.dump_symbols);
         }
         
     } catch (const std::exception& e) {
+        CPRIME_LOG_ERROR("CLI Error: {}", e.what());
         std::cerr << "Error: " << e.what() << "\n";
         return 1;
     }

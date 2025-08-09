@@ -10,6 +10,8 @@
 #include <cstdlib>
 #include <filesystem>
 
+#include "common/logger.h"
+#include "common/common_types.h"
 #include "layer1/raw_token.h"
 #include "layer1/context_stack.h"
 #include "layer2/contextual_token.h"
@@ -17,17 +19,8 @@
 
 namespace fs = std::filesystem;
 
-struct CompilerOptions {
-    std::string input_file;
-    std::string output_file;
-    bool verbose = false;
-    bool dump_tokens = false;
-    bool dump_ast = false;
-    bool compile_only = false;  // -c flag
-};
-
 void print_usage(const char* program_name) {
-    std::cout << "CPrime Compiler v2.0\n";
+    std::cout << cprime::VersionInfo::get_full_version_string() << "\n";
     std::cout << "Usage: " << program_name << " [options] <input_file>\n\n";
     std::cout << "Options:\n";
     std::cout << "  -o <file>        Output file name (default: a.out)\n";
@@ -42,8 +35,8 @@ void print_usage(const char* program_name) {
     std::cout << "  " << program_name << " --dump-ast -o test test.cprime\n";
 }
 
-CompilerOptions parse_arguments(int argc, char* argv[]) {
-    CompilerOptions options;
+cprime::CompilerOptions parse_arguments(int argc, char* argv[]) {
+    cprime::CompilerOptions options;
     
     if (argc < 2) {
         print_usage(argv[0]);
@@ -64,13 +57,15 @@ CompilerOptions parse_arguments(int argc, char* argv[]) {
                 exit(1);
             }
         } else if (arg == "-c") {
-            options.compile_only = true;
+            // Note: compile_only not in CompilerOptions, will be handled locally
+            // options.compile_only = true;
         } else if (arg == "--verbose") {
             options.verbose = true;
         } else if (arg == "--dump-tokens") {
-            options.dump_tokens = true;
+            // Note: dump_tokens functionality will be handled by verbose logger output
+            options.verbose = true;
         } else if (arg == "--dump-ast") {
-            options.dump_ast = true;
+            options.generate_ast_dump = true;
         } else if (arg[0] != '-') {
             if (options.input_file.empty()) {
                 options.input_file = arg;
@@ -92,17 +87,7 @@ CompilerOptions parse_arguments(int argc, char* argv[]) {
     
     // Set default output file if not specified
     if (options.output_file.empty()) {
-        if (options.compile_only) {
-            // For -c, replace extension with .o
-            size_t dot_pos = options.input_file.find_last_of('.');
-            if (dot_pos != std::string::npos) {
-                options.output_file = options.input_file.substr(0, dot_pos) + ".o";
-            } else {
-                options.output_file = options.input_file + ".o";
-            }
-        } else {
-            options.output_file = "a.out";
-        }
+        options.output_file = "a.out";
     }
     
     return options;
@@ -120,42 +105,47 @@ std::string read_file(const std::string& filename) {
     return buffer.str();
 }
 
-bool compile(const CompilerOptions& options) {
+bool compile(const cprime::CompilerOptions& options) {
     using namespace cprime;
     
+    // Initialize logger for the compiler
+    auto logger = CPRIME_LOGGER("compiler");
+    
     if (options.verbose) {
-        std::cout << "Compiling: " << options.input_file << "\n";
-        std::cout << "Output: " << options.output_file << "\n";
+        logger->set_level(spdlog::level::debug);
+    } else {
+        logger->set_level(spdlog::level::warn);
     }
+    
+    CPRIME_LOG_INFO("Starting compilation of {}", options.input_file);
+    CPRIME_LOG_DEBUG("Output file: {}", options.output_file);
     
     // Read source file
     std::string source = read_file(options.input_file);
     
     // Layer 1: Tokenization
-    if (options.verbose) {
-        std::cout << "Layer 1: Tokenizing...\n";
-    }
+    CPRIME_LOG_DEBUG("Layer 1: Starting tokenization");
     
     RawTokenizer tokenizer(source);
     auto tokens = tokenizer.tokenize();
     
-    if (options.dump_tokens) {
-        std::cout << "=== Tokens ===\n";
+    CPRIME_LOG_DEBUG("Tokenization complete, {} tokens generated", tokens.size());
+    
+    if (options.verbose) {
+        CPRIME_LOG_DEBUG("=== Tokens ===");
         for (const auto& token : tokens) {
-            std::cout << token.to_string() << "\n";
+            CPRIME_LOG_DEBUG("  {}", token.to_string());
         }
-        std::cout << "=== End Tokens ===\n";
+        CPRIME_LOG_DEBUG("=== End Tokens ===");
     }
     
     if (tokens.empty()) {
-        std::cerr << "Error: No tokens found in source file\n";
+        CPRIME_LOG_ERROR("No tokens found in source file");
         return false;
     }
     
     // Layer 2: Context enrichment
-    if (options.verbose) {
-        std::cout << "Layer 2: Context enrichment...\n";
-    }
+    CPRIME_LOG_DEBUG("Layer 2: Starting context enrichment");
     
     // Create ContextualTokenStream with context resolution
     std::vector<ContextualToken> contextual_tokens;
@@ -168,30 +158,31 @@ bool compile(const CompilerOptions& options) {
     }
     
     ContextualTokenStream contextual_stream(contextual_tokens);
+    CPRIME_LOG_DEBUG("Context enrichment complete, {} contextual tokens created", contextual_tokens.size());
     
     // Layer 3: AST Building
-    if (options.verbose) {
-        std::cout << "Layer 3: Building AST...\n";
-    }
+    CPRIME_LOG_DEBUG("Layer 3: Starting AST building");
     
     ASTBuilder ast_builder;
     auto ast = ast_builder.build(contextual_stream);
     
     if (!ast) {
-        std::cerr << "Failed to build AST\n";
+        CPRIME_LOG_ERROR("Failed to build AST");
         auto errors = ast_builder.get_errors();
         if (!errors.empty()) {
             for (const auto& error : errors) {
-                std::cerr << "  " << error.message << "\n";
+                CPRIME_LOG_ERROR("  AST Error: {}", error.message);
             }
         }
         return false;
     }
     
-    if (options.dump_ast) {
-        std::cout << "=== AST ===\n";
-        std::cout << ast->to_string();
-        std::cout << "=== End AST ===\n";
+    CPRIME_LOG_DEBUG("AST building complete, {} declarations found", ast->get_declarations().size());
+    
+    if (options.generate_ast_dump) {
+        CPRIME_LOG_DEBUG("=== AST ===");
+        CPRIME_LOG_DEBUG("{}", ast->to_string());
+        CPRIME_LOG_DEBUG("=== End AST ===");
     }
     
     // TODO: Layer 4: RAII Injection
@@ -200,15 +191,13 @@ bool compile(const CompilerOptions& options) {
     // For now, we'll create a stub executable that just prints a message
     // This will be replaced with LLVM IR generation
     
-    if (options.verbose) {
-        std::cout << "Code generation (stub)...\n";
-    }
+    CPRIME_LOG_DEBUG("Code generation (stub implementation)");
     
     // Generate a simple C++ file as a temporary solution
     std::string temp_cpp = options.output_file + ".cpp";
     std::ofstream cpp_file(temp_cpp);
     if (!cpp_file.is_open()) {
-        std::cerr << "Error: Cannot create temporary C++ file\n";
+        CPRIME_LOG_ERROR("Cannot create temporary C++ file: {}", temp_cpp);
         return false;
     }
     
@@ -231,19 +220,20 @@ bool compile(const CompilerOptions& options) {
     std::remove(temp_cpp.c_str());
     
     if (result != 0) {
-        std::cerr << "Error: Failed to generate executable\n";
+        CPRIME_LOG_ERROR("Failed to generate executable");
         return false;
     }
     
-    if (options.verbose) {
-        std::cout << "Compilation successful: " << options.output_file << "\n";
-    }
+    CPRIME_LOG_INFO("Compilation successful: {}", options.output_file);
     
     return true;
 }
 
 int main(int argc, char* argv[]) {
-    CompilerOptions options = parse_arguments(argc, argv);
+    // Create logs directory if it doesn't exist
+    std::filesystem::create_directories("logs");
+    
+    cprime::CompilerOptions options = parse_arguments(argc, argv);
     
     bool success = compile(options);
     

@@ -2,6 +2,17 @@
 cmake_minimum_required(VERSION 3.16)
 project(cprime_compiler VERSION 1.0.0 LANGUAGES CXX)
 
+# Create common library first (contains logger and shared types)
+add_library(cprime_common
+    common/logger.h
+    common/validation_types.h
+    common/common_types.h
+)
+
+# Common library is header-only, but we need to link spdlog
+target_include_directories(cprime_common PUBLIC .)
+target_link_libraries(cprime_common PUBLIC spdlog::spdlog)
+
 # Create libraries for each layer with validation
 add_library(cprime_layer1
     layer1/raw_token.cpp
@@ -46,31 +57,41 @@ add_library(cprime_compiler
     validation_pipeline.cpp
 )
 
-# Set include directories for all libraries
+# Set include directories and link common library for all layers
 target_include_directories(cprime_layer1 PUBLIC .)
-target_include_directories(cprime_layer1validation PUBLIC .)
-target_include_directories(cprime_layer2 PUBLIC .)
-target_include_directories(cprime_layer2validation PUBLIC .)
-target_include_directories(cprime_layer3 PUBLIC .)
-target_include_directories(cprime_layer3validation PUBLIC .)
-target_include_directories(cprime_layer4 PUBLIC .)
-target_include_directories(cprime_layer4validation PUBLIC .)
+target_link_libraries(cprime_layer1 PUBLIC cprime_common)
 
-# Link validation libraries to their respective layers
-target_link_libraries(cprime_layer1validation cprime_layer1)
-target_link_libraries(cprime_layer2validation cprime_layer2)
-target_link_libraries(cprime_layer3validation cprime_layer3)
-target_link_libraries(cprime_layer4validation cprime_layer4)
+target_include_directories(cprime_layer1validation PUBLIC .)
+target_link_libraries(cprime_layer1validation PUBLIC cprime_common cprime_layer1)
+
+target_include_directories(cprime_layer2 PUBLIC .)
+target_link_libraries(cprime_layer2 PUBLIC cprime_common)
+
+target_include_directories(cprime_layer2validation PUBLIC .)
+target_link_libraries(cprime_layer2validation PUBLIC cprime_common cprime_layer2)
+
+target_include_directories(cprime_layer3 PUBLIC .)
+target_link_libraries(cprime_layer3 PUBLIC cprime_common)
+
+target_include_directories(cprime_layer3validation PUBLIC .)
+target_link_libraries(cprime_layer3validation PUBLIC cprime_common cprime_layer3)
+
+target_include_directories(cprime_layer4 PUBLIC .)
+target_link_libraries(cprime_layer4 PUBLIC cprime_common)
+
+target_include_directories(cprime_layer4validation PUBLIC .)
+target_link_libraries(cprime_layer4validation PUBLIC cprime_common cprime_layer4)
 
 # Layer 2 depends on Layer 1 for ContextStack and ContextResolver
-target_link_libraries(cprime_layer2 cprime_layer1)
+target_link_libraries(cprime_layer2 PUBLIC cprime_layer1)
 # Layer 3 depends on Layer 2 for semantic tokens
-target_link_libraries(cprime_layer3 cprime_layer2)
+target_link_libraries(cprime_layer3 PUBLIC cprime_layer2)
 # Layer 4 depends on Layer 3 for AST
-target_link_libraries(cprime_layer4 cprime_layer3)
+target_link_libraries(cprime_layer4 PUBLIC cprime_layer3)
 
 # Link all layers and validation libraries
 target_link_libraries(cprime_compiler
+    cprime_common
     cprime_layer1 cprime_layer1validation
     cprime_layer2 cprime_layer2validation  
     cprime_layer3 cprime_layer3validation
@@ -86,8 +107,8 @@ set(COMPILER_FLAGS
     $<$<CONFIG:Release>:-O3 -DNDEBUG>
 )
 
-# Apply flags to all layer libraries
-foreach(lib IN ITEMS cprime_layer1 cprime_layer1validation cprime_layer2 cprime_layer2validation 
+# Apply flags to all layer libraries (including common)
+foreach(lib IN ITEMS cprime_common cprime_layer1 cprime_layer1validation cprime_layer2 cprime_layer2validation 
                      cprime_layer3 cprime_layer3validation cprime_layer4 cprime_layer4validation cprime_compiler)
     target_compile_features(${lib} PUBLIC cxx_std_17)
     target_compile_options(${lib} PRIVATE ${COMPILER_FLAGS})
