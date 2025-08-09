@@ -13,9 +13,8 @@ std::string ContextualToken::to_string() const {
     switch (raw_token.type) {
         case RawTokenType::KEYWORD: ss << "KEYWORD"; break;
         case RawTokenType::IDENTIFIER: ss << "IDENTIFIER"; break;
-        case RawTokenType::OPERATOR: ss << "OPERATOR"; break;
+        case RawTokenType::SYMBOL: ss << "SYMBOL"; break;
         case RawTokenType::LITERAL: ss << "LITERAL"; break;
-        case RawTokenType::PUNCTUATION: ss << "PUNCTUATION"; break;
         case RawTokenType::WHITESPACE: ss << "WHITESPACE"; break;
         case RawTokenType::COMMENT: ss << "COMMENT"; break;
         case RawTokenType::EOF_TOKEN: ss << "EOF"; break;

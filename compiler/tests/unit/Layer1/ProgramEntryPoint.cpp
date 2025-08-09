@@ -73,7 +73,7 @@ protected:
                     break;
                     
                 case EXPECT_OPEN_PAREN:
-                    if (token.type == RawTokenType::PUNCTUATION && token.value == "(") {
+                    if (token.type == RawTokenType::SYMBOL && token.value == "(") {
                         test_logger_->debug("Found opening parenthesis");
                         state = IN_PARAMETERS;
                     }
@@ -87,7 +87,7 @@ protected:
                     break;
                     
                 case IN_PARAMETERS:
-                    if (token.type == RawTokenType::PUNCTUATION && token.value == ")") {
+                    if (token.type == RawTokenType::SYMBOL && token.value == ")") {
                         test_logger_->debug("Found closing parenthesis (empty parameters)");
                         state = EXPECT_OPEN_BRACE;
                     }
@@ -101,7 +101,7 @@ protected:
                     break;
                     
                 case EXPECT_CLOSE_PAREN:
-                    if (token.type == RawTokenType::PUNCTUATION && token.value == ")") {
+                    if (token.type == RawTokenType::SYMBOL && token.value == ")") {
                         test_logger_->debug("Found closing parenthesis (with parameters)");
                         state = EXPECT_OPEN_BRACE;
                     }
@@ -109,7 +109,7 @@ protected:
                     break;
                     
                 case EXPECT_OPEN_BRACE:
-                    if (token.type == RawTokenType::PUNCTUATION && token.value == "{") {
+                    if (token.type == RawTokenType::SYMBOL && token.value == "{") {
                         test_logger_->debug("Found opening brace - VALID ENTRY POINT DETECTED!");
                         found_valid_entry = true;
                         state = FOUND_ENTRY_POINT;

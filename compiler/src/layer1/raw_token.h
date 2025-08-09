@@ -19,9 +19,8 @@ enum class RawTokenType {
     // Keywords (context-sensitive interpretation happens in semantic layer)
     KEYWORD,        // "runtime", "defer", "exposes", "class", "union", etc.
     IDENTIFIER,     // Variable names, type names, function names
-    OPERATOR,       // "::,", "<", ">", "=", "+", "-", etc.
+    SYMBOL,         // Unified operator-or-punctuator: "::,", "<", ">", "=", "+", "-", "{", "}", etc.
     LITERAL,        // Numbers, strings, booleans
-    PUNCTUATION,    // "{", "}", "(", ")", ";", ",", etc.
     
     // Meta tokens
     WHITESPACE,     // Spaces, tabs, newlines (preserved for formatting)
@@ -52,12 +51,17 @@ struct RawToken {
         return type == RawTokenType::IDENTIFIER;
     }
     
+    bool is_symbol(const std::string& sym) const {
+        return type == RawTokenType::SYMBOL && value == sym;
+    }
+    
+    // Legacy methods for backward compatibility - both check SYMBOL type
     bool is_operator(const std::string& op) const {
-        return type == RawTokenType::OPERATOR && value == op;
+        return type == RawTokenType::SYMBOL && value == op;
     }
     
     bool is_punctuation(const std::string& punct) const {
-        return type == RawTokenType::PUNCTUATION && value == punct;
+        return type == RawTokenType::SYMBOL && value == punct;
     }
     
     // Debug string representation
@@ -120,9 +124,8 @@ private:
     
     // Tokenization state
     static const std::unordered_set<std::string> keywords;
-    static const std::unordered_set<std::string> operators;
-    static const std::unordered_set<std::string> multi_char_operators;
-    static const std::unordered_set<char> single_char_punctuation;
+    static const std::unordered_set<std::string> symbols;
+    static const std::unordered_set<std::string> multi_char_symbols;
     
     // Character inspection
     char peek() const;
@@ -139,8 +142,6 @@ private:
     RawToken read_identifier_or_keyword();
     RawToken read_string_literal();
     RawToken read_number_literal();
-    RawToken read_operator();
-    RawToken read_punctuation();
     
     // Character classification
     bool is_alpha(char c) const;

@@ -70,8 +70,7 @@ private:
     // Pass-through token handlers
     SemanticToken handle_identifier();
     SemanticToken handle_literal();
-    SemanticToken handle_operator();
-    SemanticToken handle_punctuation();
+    SemanticToken handle_symbol();
     SemanticToken handle_comment();
     
     // Context management helpers

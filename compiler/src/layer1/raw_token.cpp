@@ -40,7 +40,7 @@ const std::unordered_set<std::string> RawTokenizer::keywords = {
     "sizeof", "alignof", "decltype"
 };
 
-const std::unordered_set<std::string> RawTokenizer::operators = {
+const std::unordered_set<std::string> RawTokenizer::symbols = {
     // Arithmetic
     "+", "-", "*", "/", "%",
     "+=", "-=", "*=", "/=", "%=",
@@ -64,11 +64,14 @@ const std::unordered_set<std::string> RawTokenizer::operators = {
     // Assignment
     "=",
     
-    // Conditional and comma operators
-    "?", ":", "," // Also in punctuation - context determines usage
+    // Structural punctuation
+    "{", "}", "(", ")", "[", "]",
+    ";", ",", ":", "?",
+    
+    // Note: Quote characters (', ") handled specially in string literal parsing
 };
 
-const std::unordered_set<std::string> RawTokenizer::multi_char_operators = {
+const std::unordered_set<std::string> RawTokenizer::multi_char_symbols = {
     "==", "!=", "<=", ">=", "<=>",
     "&&", "||", "<<", ">>",
     "+=", "-=", "*=", "/=", "%=",
@@ -76,12 +79,6 @@ const std::unordered_set<std::string> RawTokenizer::multi_char_operators = {
     "++", "--", // Increment/decrement
     "->", "::",
     "->*", ".*" // C++ pointer-to-member operators
-};
-
-const std::unordered_set<char> RawTokenizer::single_char_punctuation = {
-    '{', '}', '(', ')', '[', ']',
-    ';', ',', ':', '?',
-    '`', '\'', '"' // Quote characters handled specially
 };
 
 // RawToken implementation
@@ -92,9 +89,8 @@ std::string RawToken::to_string() const {
     switch (type) {
         case RawTokenType::KEYWORD: ss << "KEYWORD"; break;
         case RawTokenType::IDENTIFIER: ss << "IDENTIFIER"; break;
-        case RawTokenType::OPERATOR: ss << "OPERATOR"; break;
+        case RawTokenType::SYMBOL: ss << "SYMBOL"; break;
         case RawTokenType::LITERAL: ss << "LITERAL"; break;
-        case RawTokenType::PUNCTUATION: ss << "PUNCTUATION"; break;
         case RawTokenType::WHITESPACE: ss << "WHITESPACE"; break;
         case RawTokenType::COMMENT: ss << "COMMENT"; break;
         case RawTokenType::EOF_TOKEN: ss << "EOF"; break;
@@ -218,18 +214,18 @@ std::vector<RawToken> RawTokenizer::tokenize() {
             continue;
         }
         
-        // Handle operators (check longer multi-char first)
-        trace_logger->trace("Attempting operator parsing for char: '{}'", c);
-        std::string potential_operator = "";
-        potential_operator += c;
+        // Handle symbols (unified operator-or-punctuator, check longer multi-char first)
+        trace_logger->trace("Attempting symbol parsing for char: '{}'", c);
+        std::string potential_symbol = "";
+        potential_symbol += c;
         
-        // Check for 3-character operators first
+        // Check for 3-character symbols first
         if (!is_at_end() && pos + 1 < source.length() && pos + 2 < source.length()) {
-            std::string three_char_op = potential_operator + peek_next() + source[pos + 2];
-            trace_logger->trace("Checking 3-char operator: '{}'", three_char_op);
-            if (multi_char_operators.count(three_char_op)) {
-                trace_logger->trace("Found 3-char operator: '{}'", three_char_op);
-                tokens.emplace_back(RawTokenType::OPERATOR, three_char_op, line, column, current_position());
+            std::string three_char_symbol = potential_symbol + peek_next() + source[pos + 2];
+            trace_logger->trace("Checking 3-char symbol: '{}'", three_char_symbol);
+            if (multi_char_symbols.count(three_char_symbol)) {
+                trace_logger->trace("Found 3-char symbol: '{}'", three_char_symbol);
+                tokens.emplace_back(RawTokenType::SYMBOL, three_char_symbol, line, column, current_position());
                 advance(); // First character
                 advance(); // Second character  
                 advance(); // Third character
@@ -237,31 +233,24 @@ std::vector<RawToken> RawTokenizer::tokenize() {
             }
         }
         
-        // Check for 2-character operators
+        // Check for 2-character symbols
         if (!is_at_end() && pos + 1 < source.length()) {
-            potential_operator += peek_next();
-            trace_logger->trace("Checking 2-char operator: '{}'", potential_operator);
-            if (multi_char_operators.count(potential_operator)) {
-                trace_logger->trace("Found 2-char operator: '{}'", potential_operator);
-                tokens.emplace_back(RawTokenType::OPERATOR, potential_operator, line, column, current_position());
+            potential_symbol += peek_next();
+            trace_logger->trace("Checking 2-char symbol: '{}'", potential_symbol);
+            if (multi_char_symbols.count(potential_symbol)) {
+                trace_logger->trace("Found 2-char symbol: '{}'", potential_symbol);
+                tokens.emplace_back(RawTokenType::SYMBOL, potential_symbol, line, column, current_position());
                 advance(); // First character
                 advance(); // Second character
                 continue;
             }
         }
         
-        // Single character operators
-        trace_logger->trace("Checking single-char operator: '{}'", c);
-        if (operators.count(std::string(1, c))) {
-            trace_logger->trace("Found single-char operator: '{}'", c);
-            tokens.emplace_back(RawTokenType::OPERATOR, std::string(1, c), line, column, current_position());
-            advance();
-            continue;
-        }
-        
-        // Handle punctuation
-        if (single_char_punctuation.count(c)) {
-            tokens.emplace_back(RawTokenType::PUNCTUATION, std::string(1, c), line, column, current_position());
+        // Single character symbols
+        trace_logger->trace("Checking single-char symbol: '{}'", c);
+        if (symbols.count(std::string(1, c))) {
+            trace_logger->trace("Found single-char symbol: '{}'", c);
+            tokens.emplace_back(RawTokenType::SYMBOL, std::string(1, c), line, column, current_position());
             advance();
             continue;
         }

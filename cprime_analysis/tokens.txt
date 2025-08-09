@@ -1,0 +1,12 @@
+=== Raw Token Dump ===
+Total tokens: 8
+
+[0] RawToken(SYMBOL, "{", 1:1)
+[1] RawToken(SYMBOL, "}", 1:3)
+[2] RawToken(SYMBOL, "(", 1:5)
+[3] RawToken(SYMBOL, ")", 1:7)
+[4] RawToken(SYMBOL, "[", 1:9)
+[5] RawToken(SYMBOL, "]", 1:11)
+[6] RawToken(SYMBOL, ";", 1:13)
+[7] RawToken(EOF, "", 2:1)
+

@@ -77,10 +77,8 @@ SemanticToken SemanticTranslator::translate_next_token() {
             return handle_identifier();
         case RawTokenType::LITERAL:
             return handle_literal();
-        case RawTokenType::OPERATOR:
-            return handle_operator();
-        case RawTokenType::PUNCTUATION:
-            return handle_punctuation();
+        case RawTokenType::SYMBOL:
+            return handle_symbol();
         case RawTokenType::COMMENT:
             return handle_comment();
         default:
@@ -412,17 +410,7 @@ SemanticToken SemanticTranslator::handle_literal() {
     return SemanticToken::literal(token.value, literal_type, token.line, token.column);
 }
 
-SemanticToken SemanticTranslator::handle_operator() {
-    const RawToken& token = current_raw_token();
-    advance_raw_token();
-    
-    SemanticToken semantic_token(SemanticTokenType::Operator, token.line, token.column);
-    semantic_token.set_attribute("operator", token.value);
-    semantic_token.raw_value = token.value;
-    return semantic_token;
-}
-
-SemanticToken SemanticTranslator::handle_punctuation() {
+SemanticToken SemanticTranslator::handle_symbol() {
     const RawToken& token = current_raw_token();
     advance_raw_token();
     
@@ -433,10 +421,23 @@ SemanticToken SemanticTranslator::handle_punctuation() {
         exit_context_on_block_end();
     }
     
-    SemanticToken semantic_token(SemanticTokenType::Punctuation, token.line, token.column);
-    semantic_token.set_attribute("punctuation", token.value);
-    semantic_token.raw_value = token.value;
-    return semantic_token;
+    // Determine semantic type based on symbol characteristics
+    // For now, use the original logic: operators get Operator type, structural punctuation gets Punctuation
+    bool is_structural = (token.value == "{" || token.value == "}" || token.value == "(" || 
+                         token.value == ")" || token.value == "[" || token.value == "]" || 
+                         token.value == ";" || token.value == "," || token.value == ":");
+    
+    if (is_structural) {
+        SemanticToken semantic_token(SemanticTokenType::Punctuation, token.line, token.column);
+        semantic_token.set_attribute("punctuation", token.value);
+        semantic_token.raw_value = token.value;
+        return semantic_token;
+    } else {
+        SemanticToken semantic_token(SemanticTokenType::Operator, token.line, token.column);
+        semantic_token.set_attribute("operator", token.value);
+        semantic_token.raw_value = token.value;
+        return semantic_token;
+    }
 }
 
 SemanticToken SemanticTranslator::handle_comment() {
