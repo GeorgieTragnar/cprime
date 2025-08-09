@@ -13,8 +13,12 @@
 #include "common/logger.h"
 #include "common/logger_components.h"
 
-// Include Layer 1 components for tokenization testing
+// Include components for testing
 #include "layer1/raw_token.h"
+#include "layer2/semantic_translator.h"
+#include "layer3/contextualizer.h"
+#include "common/string_table.h"
+#include "common/structural_types.h"
 
 // Enable access to protected/private members for testing if needed
 #ifdef TESTING
@@ -138,22 +142,19 @@ protected:
     }
     
     /**
-     * Helper to tokenize with automatic logging of each step
+     * Helper to tokenize with StringTable integration
      */
     std::vector<cprime::RawToken> tokenizeWithLogging(const std::string& code, const std::string& context) {
         test_logger_->debug("Tokenizing code for {}: '{}'", context, code);
         test_logger_->debug("Code length: {} characters", code.length());
         
         try {
-            cprime::RawTokenizer tokenizer(code);
+            string_table_.clear();  // Reset for each test
+            cprime::RawTokenizer tokenizer(code, string_table_);
             auto tokens = tokenizer.tokenize();
             
             test_logger_->debug("Tokenization successful: {} tokens generated", tokens.size());
-            
-            // Log each token for debugging
-            for (size_t i = 0; i < tokens.size(); ++i) {
-                test_logger_->debug("Token[{}]: {}", i, tokens[i].to_string());
-            }
+            test_logger_->debug("String table contains {} entries", string_table_.size());
             
             return tokens;
             
@@ -167,28 +168,32 @@ protected:
      * Simple tokenize wrapper (no logging) for basic usage
      */
     std::vector<cprime::RawToken> tokenize(const std::string& code) {
-        cprime::RawTokenizer tokenizer(code);
+        string_table_.clear();
+        cprime::RawTokenizer tokenizer(code, string_table_);
         return tokenizer.tokenize();
     }
     
     /**
-     * Enhanced token validation with detailed logging
+     * Get the string table used in tokenization
+     */
+    const StringTable& getStringTable() const { return string_table_; }
+    StringTable& getStringTable() { return string_table_; }
+    
+    /**
+     * Enhanced token validation using TokenKind and StringTable
      */
     void validateTokenSequence(const std::vector<cprime::RawToken>& tokens, 
-                             const std::vector<std::string>& expected_values,
+                             const std::vector<TokenKind>& expected_kinds,
                              const std::string& context) {
         test_logger_->debug("Validating token sequence for {}", context);
-        test_logger_->debug("Expected {} tokens, got {}", expected_values.size(), tokens.size());
+        test_logger_->debug("Expected {} tokens, got {}", expected_kinds.size(), tokens.size());
         
-        ASSERT_EQ(tokens.size(), expected_values.size()) 
+        ASSERT_EQ(tokens.size(), expected_kinds.size()) 
             << "Token count mismatch in " << context;
         
-        for (size_t i = 0; i < expected_values.size(); ++i) {
-            test_logger_->debug("Checking token[{}]: expected '{}', got '{}'", 
-                               i, expected_values[i], tokens[i].value);
-            
-            EXPECT_EQ(tokens[i].value, expected_values[i])
-                << "Token mismatch at position " << i << " in " << context;
+        for (size_t i = 0; i < expected_kinds.size(); ++i) {
+            EXPECT_EQ(tokens[i].kind, expected_kinds[i])
+                << "Token kind mismatch at position " << i << " in " << context;
         }
         
         test_logger_->debug("Token sequence validation completed successfully");
@@ -196,6 +201,7 @@ protected:
 
 protected:
     std::shared_ptr<spdlog::logger> test_logger_;
+    StringTable string_table_;  // Shared string table for tests
 };
 
 /**
