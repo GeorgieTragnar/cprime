@@ -3,6 +3,117 @@
 namespace cprime {
 
 /**
+ * Comprehensive token classification for CPrime language.
+ * Each token kind represents a specific lexical element with no ambiguity.
+ * This eliminates string comparisons in Layer 2 and provides typed literal values.
+ */
+enum class TokenKind {
+    // === KEYWORDS ===
+    // Core language constructs
+    CLASS, STRUCT, UNION, INTERFACE, PLEX,
+    
+    // Context-sensitive keywords (reserved but meaning depends on context)
+    RUNTIME, DEFER,
+    
+    // Control flow
+    IF, ELSE, WHILE, FOR, CASE, SWITCH, DEFAULT,
+    BREAK, CONTINUE, RETURN, GOTO,
+    
+    // Exception handling
+    THROW, TRY, CATCH,
+    
+    // Type system
+    AUTO, VOID, BOOL, CHAR, WCHAR_T,
+    INT, SHORT, LONG, SIGNED, UNSIGNED,
+    FLOAT, DOUBLE,
+    INT8_T, INT16_T, INT32_T, INT64_T,
+    UINT8_T, UINT16_T, UINT32_T, UINT64_T,
+    CHAR8_T, CHAR16_T, CHAR32_T,
+    
+    // Type qualifiers and storage
+    CONST, MUT, STATIC, EXTERN, REGISTER, THREAD_LOCAL, VOLATILE,
+    CONSTEXPR, CONSTEVAL, CONSTINIT, NOEXCEPT, INLINE,
+    
+    // Memory management
+    NEW, DELETE, DANGER,
+    
+    // Access control
+    PUBLIC, PRIVATE, PROTECTED, FRIEND,
+    
+    // Metaprogramming
+    SIZEOF, ALIGNOF, ALIGNAS, DECLTYPE, TYPEOF, TYPEID,
+    TEMPLATE, TYPENAME, USING, NAMESPACE,
+    
+    // === OPERATORS AND PUNCTUATION ===
+    // Arithmetic operators
+    PLUS, MINUS, MULTIPLY, DIVIDE, MODULO,
+    
+    // Assignment operators
+    ASSIGN, PLUS_ASSIGN, MINUS_ASSIGN, MULTIPLY_ASSIGN, DIVIDE_ASSIGN, MODULO_ASSIGN,
+    
+    // Increment/decrement
+    INCREMENT, DECREMENT,
+    
+    // Comparison operators
+    EQUAL_EQUAL, NOT_EQUAL, LESS_THAN, GREATER_THAN, LESS_EQUAL, GREATER_EQUAL,
+    SPACESHIP, // <=> (three-way comparison)
+    
+    // Logical operators
+    LOGICAL_AND, LOGICAL_OR, LOGICAL_NOT,
+    
+    // Bitwise operators
+    BIT_AND, BIT_OR, BIT_XOR, BIT_NOT, LEFT_SHIFT, RIGHT_SHIFT,
+    BIT_AND_ASSIGN, BIT_OR_ASSIGN, BIT_XOR_ASSIGN, LEFT_SHIFT_ASSIGN, RIGHT_SHIFT_ASSIGN,
+    
+    // Member access
+    DOT, ARROW, SCOPE_RESOLUTION, DOT_STAR, ARROW_STAR,
+    
+    // Punctuation
+    LEFT_PAREN, RIGHT_PAREN,        // ( )
+    LEFT_BRACE, RIGHT_BRACE,        // { }
+    LEFT_BRACKET, RIGHT_BRACKET,    // [ ]
+    SEMICOLON, COMMA, COLON, QUESTION, ELLIPSIS,
+    
+    // === LITERALS ===
+    // Boolean and null
+    TRUE_LITERAL, FALSE_LITERAL, NULLPTR_LITERAL,
+    
+    // Integer literals (with suffix variants)
+    INT_LITERAL,           // 42
+    UINT_LITERAL,          // 42u, 42U
+    LONG_LITERAL,          // 42l, 42L  
+    ULONG_LITERAL,         // 42ul, 42UL, 42Lu, 42LU
+    LONG_LONG_LITERAL,     // 42ll, 42LL
+    ULONG_LONG_LITERAL,    // 42ull, 42ULL, 42LLu, 42LLU
+    
+    // Floating point literals
+    FLOAT_LITERAL,         // 3.14f, 3.14F
+    DOUBLE_LITERAL,        // 3.14 (default floating point)
+    LONG_DOUBLE_LITERAL,   // 3.14l, 3.14L
+    
+    // Character literals
+    CHAR_LITERAL,          // 'c'
+    WCHAR_LITERAL,         // L'c'
+    CHAR16_LITERAL,        // u'c' 
+    CHAR32_LITERAL,        // U'c'
+    // CHAR8_LITERAL,      // u8'c' (requires C++20, omitted for C++17 compatibility)
+    
+    // String literals
+    STRING_LITERAL,        // "hello"
+    WSTRING_LITERAL,       // L"hello"
+    STRING16_LITERAL,      // u"hello"
+    STRING32_LITERAL,      // U"hello" 
+    STRING8_LITERAL,       // u8"hello" (C++20 - limited support in C++17)
+    RAW_STRING_LITERAL,    // R"delimiter(content)delimiter"
+    
+    // === DYNAMIC TOKENS ===
+    IDENTIFIER,            // Variable names, function names, type names
+    COMMENT,               // Line and block comments
+    WHITESPACE,            // Spaces, tabs, newlines
+    EOF_TOKEN,             // End of file marker
+};
+
+/**
  * Comprehensive contextual token classification for Layer 2 output.
  * Each value represents a context-resolved interpretation of raw tokens.
  * This enables zero string comparisons in Layer 2 and provides clear
@@ -119,35 +230,5 @@ enum class ContextualTokenKind {
     CONTEXTUAL_ERROR,            // Invalid contextual interpretation
     CONTEXTUAL_UNKNOWN,          // Unknown context - needs investigation
 };
-
-/**
- * Convert ContextualTokenKind to string for debugging.
- */
-const char* contextual_token_kind_to_string(ContextualTokenKind kind);
-
-/**
- * Check if a ContextualTokenKind represents a literal value.
- */
-bool is_contextual_literal(ContextualTokenKind kind);
-
-/**
- * Check if a ContextualTokenKind represents an operator.
- */
-bool is_contextual_operator(ContextualTokenKind kind);
-
-/**
- * Check if a ContextualTokenKind represents a keyword.
- */
-bool is_contextual_keyword(ContextualTokenKind kind);
-
-/**
- * Check if a ContextualTokenKind represents a type declaration.
- */
-bool is_contextual_type_declaration(ContextualTokenKind kind);
-
-/**
- * Check if a ContextualTokenKind represents a context-sensitive interpretation.
- */
-bool is_context_sensitive(ContextualTokenKind kind);
 
 } // namespace cprime

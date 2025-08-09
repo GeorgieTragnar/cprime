@@ -1,4 +1,5 @@
 #include "semantic_translator.h"
+#include "../common/token_utils.h"
 #include <iostream>
 #include <chrono>
 #include <algorithm>

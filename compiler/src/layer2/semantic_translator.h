@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../layer1/raw_token.h"
-#include "contextual_token.h"
-#include "contextual_token_kind.h"
+#include "../common/tokens.h"
+#include "../common/token_streams.h"
+#include "../common/token_utils.h"
 #include "../layer1/context_stack.h"
 #include "../common/string_table.h"
 #include <functional>

@@ -1,116 +1,14 @@
 #pragma once
 
+#include "../common/parse_context.h"
 #include <vector>
 #include <string>
-#include <unordered_map>
 #include <functional>
 #include <memory>
 
 namespace cprime {
 
-/**
- * Parsing contexts for context-sensitive keyword resolution.
- * These contexts determine how keywords like 'runtime', 'defer', 'exposes' are interpreted.
- */
-enum class ParseContextType {
-    TopLevel,                    // Global scope
-    ClassDefinition,            // Inside class { ... }
-    FunctionalClassDefinition,  // Inside functional class { ... }
-    DangerClassDefinition,      // Inside danger class { ... }
-    UnionDefinition,            // Inside union { ... }
-    InterfaceDefinition,        // Inside interface { ... }
-    FunctionBody,               // Inside function body { ... }
-    Block,                      // Inside general block { ... }
-    TypeExpression,             // In type position: Connection<runtime UserOps>
-    AccessRightsDeclaration,    // In "exposes" declaration
-    FieldDeclaration,           // In class field declaration
-    ParameterList,              // In function parameter list
-    ExpressionContext,          // In expression evaluation
-    CoroutineContext,           // In async function or coroutine
-    TemplateContext,            // In template/generic parameter list
-    AttributeContext,           // In attribute declaration #[...]
-};
-
-/**
- * Context data structure - holds context type and associated metadata.
- */
-struct ParseContext {
-    ParseContextType type;
-    std::unordered_map<std::string, std::string> attributes;
-    
-    ParseContext(ParseContextType type) : type(type) {}
-    
-    ParseContext(ParseContextType type, std::unordered_map<std::string, std::string> attributes)
-        : type(type), attributes(std::move(attributes)) {}
-    
-    // Convenience constructors for common contexts
-    static ParseContext top_level() {
-        return ParseContext(ParseContextType::TopLevel);
-    }
-    
-    static ParseContext class_definition(const std::string& class_name, bool is_data_class = true) {
-        return ParseContext(ParseContextType::ClassDefinition, {
-            {"class_name", class_name},
-            {"is_data_class", is_data_class ? "true" : "false"}
-        });
-    }
-    
-    static ParseContext functional_class_definition(const std::string& class_name) {
-        return ParseContext(ParseContextType::FunctionalClassDefinition, {
-            {"class_name", class_name}
-        });
-    }
-    
-    static ParseContext union_definition(const std::string& union_name, bool is_runtime = false) {
-        return ParseContext(ParseContextType::UnionDefinition, {
-            {"union_name", union_name},
-            {"is_runtime", is_runtime ? "true" : "false"}
-        });
-    }
-    
-    static ParseContext function_body(const std::string& function_name, bool is_coroutine = false) {
-        return ParseContext(ParseContextType::FunctionBody, {
-            {"function_name", function_name},
-            {"is_coroutine", is_coroutine ? "true" : "false"}
-        });
-    }
-    
-    static ParseContext access_rights_declaration(const std::string& access_right, bool is_runtime = false) {
-        return ParseContext(ParseContextType::AccessRightsDeclaration, {
-            {"access_right", access_right},
-            {"is_runtime", is_runtime ? "true" : "false"}
-        });
-    }
-    
-    static ParseContext type_expression() {
-        return ParseContext(ParseContextType::TypeExpression);
-    }
-    
-    static ParseContext coroutine_context(const std::string& function_name) {
-        return ParseContext(ParseContextType::CoroutineContext, {
-            {"function_name", function_name}
-        });
-    }
-    
-    // Attribute accessors
-    bool has_attribute(const std::string& key) const {
-        return attributes.find(key) != attributes.end();
-    }
-    
-    std::string get_attribute(const std::string& key, const std::string& default_value = "") const {
-        auto it = attributes.find(key);
-        return it != attributes.end() ? it->second : default_value;
-    }
-    
-    bool get_bool_attribute(const std::string& key, bool default_value = false) const {
-        auto value = get_attribute(key);
-        if (value.empty()) return default_value;
-        return value == "true";
-    }
-    
-    // Debug string representation
-    std::string to_string() const;
-};
+// ParseContextType and ParseContext are now defined in common/parse_context.h
 
 /**
  * Context stack for tracking nested parsing contexts.

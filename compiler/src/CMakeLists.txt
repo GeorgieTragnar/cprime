@@ -13,6 +13,12 @@ add_library(cprime_common
     common/logger_components.h
     common/string_table.h
     common/string_table.cpp
+    common/token_types.h
+    common/parse_context.h
+    common/tokens.h
+    common/token_streams.h
+    common/token_utils.h
+    common/token_utils.cpp
 )
 
 # Common library is header-only, but we need to link spdlog
@@ -33,7 +39,6 @@ add_library(cprime_layer2
     layer2/semantic_token.cpp
     layer2/semantic_translator.cpp
     layer2/contextual_token.cpp
-    layer2/contextual_token_kind.cpp
 )
 
 add_library(cprime_layer2validation
