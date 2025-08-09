@@ -104,41 +104,13 @@ set_target_properties(cprime PROPERTIES
 add_executable(cprime_cli cli/cprime_cli.cpp)
 target_link_libraries(cprime_cli cprime_compiler)
 
-# Raw tokenization tests
-add_executable(test_raw_tokenization tests/test_raw_tokenization.cpp)
-target_link_libraries(test_raw_tokenization cprime_compiler)
-
-# Context stack tests
-add_executable(test_context_stack tests/test_context_stack.cpp)
-target_link_libraries(test_context_stack cprime_compiler)
-
-# Semantic translation tests
-add_executable(test_semantic_translation tests/test_semantic_translation.cpp)
-target_link_libraries(test_semantic_translation cprime_compiler)
-
-# Feature registry tests
-add_executable(test_feature_registry tests/test_feature_registry.cpp)
-target_link_libraries(test_feature_registry cprime_compiler)
-
-# Pipeline integration tests  
-add_executable(test_pipeline_integration tests/test_pipeline_integration.cpp)
-target_link_libraries(test_pipeline_integration cprime_compiler)
-
-# Contextual tokens demo
-add_executable(test_contextual_tokens tests/test_contextual_tokens.cpp)
-target_link_libraries(test_contextual_tokens cprime_compiler)
-
-# AST builder test
-add_executable(test_ast_builder tests/test_ast_builder.cpp)
-target_link_libraries(test_ast_builder cprime_compiler)
-
-# RAII injector test
-add_executable(test_raii_injector tests/test_raii_injector.cpp)
-target_link_libraries(test_raii_injector cprime_compiler)
-
-# Validation layers test
-add_executable(test_validation_layers tests/test_validation_layers.cpp)
-target_link_libraries(test_validation_layers cprime_compiler)
+# NOTE: Individual test executables have been migrated to Google Test
+# Tests are now located in ../tests/ and built as cprime_tests
+# 
+# To run tests:
+#   make cprime_tests && ./cprime_tests
+# Or:
+#   make run_tests
 
 # Optional: Add to parent project if called from main CMakeLists.txt
 if(NOT CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
@@ -149,7 +121,5 @@ if(NOT CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
     set_target_properties(cprime_cli PROPERTIES 
         FOLDER "compiler"
     )
-    set_target_properties(test_pipeline_integration PROPERTIES 
-        FOLDER "compiler/tests"
-    )
+    # Note: Individual test executables removed - now using Google Test
 endif()

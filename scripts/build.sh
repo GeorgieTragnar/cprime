@@ -168,78 +168,34 @@ if [ -f "src/cprime_cli" ]; then
     echo -e "  ${GREEN}✓ cprime_cli${NC} - CPrime layer testing CLI"
 fi
 
-# List test executables
-echo -e "  ${BLUE}Test Executables:${NC}"
-declare -a ALL_TESTS=(
-    "test_validation_layers:Validation System Tests"
-    "test_contextual_tokens:Contextual Token Tests"
-    "test_ast_builder:AST Builder Tests"
-    "test_raii_injector:RAII Injector Tests"
-    "test_raw_tokenization:Raw Tokenization Tests"
-    "test_context_stack:Context Stack Tests"
-    "test_semantic_translation:Semantic Translation Tests"
-    "test_feature_registry:Feature Registry Tests"
-    "test_pipeline_integration:Pipeline Integration Tests"
-)
-
-for test_entry in "${ALL_TESTS[@]}"; do
-    IFS=':' read -r test_exe test_desc <<< "$test_entry"
-    if [ -f "src/$test_exe" ]; then
-        echo -e "    ${GREEN}✓ $test_exe${NC} - $test_desc"
-    fi
-done
+# List Google Test executable
+echo -e "  ${BLUE}Test Suite:${NC}"
+if [ -f "tests/cprime_tests" ]; then
+    echo -e "    ${GREEN}✓ cprime_tests${NC} - Google Test suite with all compiler tests"
+else
+    echo -e "    ${YELLOW}⚠ cprime_tests${NC} - Not built (Google Test may not be available)"
+fi
 
 # Run tests if requested
 if [ "$RUN_TESTS" = true ]; then
-    echo -e "${BLUE}Running CPrime compiler test suite...${NC}"
+    echo -e "${BLUE}Running CPrime compiler test suite with Google Test...${NC}"
     echo ""
     
-    # List of all test executables with descriptions
-    declare -a TEST_EXECUTABLES=(
-        "test_validation_layers:Validation System Tests"
-        "test_contextual_tokens:Contextual Token Tests" 
-        "test_ast_builder:AST Builder Tests"
-        "test_raii_injector:RAII Injector Tests"
-        "test_raw_tokenization:Raw Tokenization Tests"
-        "test_context_stack:Context Stack Tests"
-        "test_semantic_translation:Semantic Translation Tests"
-        "test_feature_registry:Feature Registry Tests"
-        "test_pipeline_integration:Pipeline Integration Tests"
-    )
-    
-    TESTS_PASSED=0
-    TESTS_TOTAL=0
-    
-    for test_entry in "${TEST_EXECUTABLES[@]}"; do
-        # Split on ':' to get executable and description
-        IFS=':' read -r test_exe test_desc <<< "$test_entry"
+    if [ -f "tests/cprime_tests" ]; then
+        echo -e "${YELLOW}Running Google Test suite...${NC}"
         
-        if [ -f "src/$test_exe" ]; then
-            echo -e "${YELLOW}Running $test_desc...${NC}"
-            
-            # Run the test and capture output
-            if ./src/"$test_exe"; then
-                TESTS_PASSED=$((TESTS_PASSED + 1))
-            else
-                echo -e "${RED}✗ $test_desc failed${NC}"
-                # Don't exit immediately - run all tests and report summary
-            fi
-            TESTS_TOTAL=$((TESTS_TOTAL + 1))
-            echo ""
+        # Run Google Test suite
+        if ./tests/cprime_tests --gtest_color=yes; then
+            echo -e "${GREEN}✓ Google Test suite passed!${NC}"
         else
-            echo -e "${YELLOW}Skipping $test_desc - executable not found${NC}"
+            echo -e "${RED}✗ Google Test suite failed${NC}"
+            exit 1
         fi
-    done
-    
-    # Test summary
-    echo -e "${BLUE}=== Test Suite Summary ===${NC}"
-    if [ $TESTS_PASSED -eq $TESTS_TOTAL ] && [ $TESTS_TOTAL -gt 0 ]; then
-        echo -e "${GREEN}✓ All $TESTS_TOTAL tests passed!${NC}"
-    elif [ $TESTS_TOTAL -eq 0 ]; then
-        echo -e "${YELLOW}⚠ No test executables found${NC}"
     else
-        echo -e "${RED}✗ $((TESTS_TOTAL - TESTS_PASSED))/$TESTS_TOTAL tests failed${NC}"
-        exit 1
+        echo -e "${YELLOW}⚠ Google Test suite not found${NC}"
+        echo "Make sure Google Test is installed via vcpkg:"
+        echo "  vcpkg install gtest"
+        echo "Then reconfigure and rebuild."
     fi
 fi
 
