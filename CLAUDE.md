@@ -141,6 +141,14 @@ echo 'class Test {}' | ./scripts/cprime_analyze.sh tokens
 
 ## Development Rules & Policies
 
+### Problem Resolution Policy
+**For any problems with uncertainty of resolution:**
+1. **DO NOT** automate problem-solving without explicit user permission
+2. **DO** analyze the problem thoroughly and present options
+3. **DO** ask for explicit permission before proceeding with uncertain fixes
+4. **DO** proceed systematically through problems one by one
+5. **ONLY** automate when user explicitly requests it for a range of known problems
+
 ### Script Enhancement Policy
 **If the build/test/debug scripts cannot do something you need:**
 1. **DO NOT** bypass the scripts

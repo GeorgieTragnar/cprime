@@ -58,27 +58,30 @@ protected:
 
 TEST_F(RawTokenizationTest, EmptyInput) {
     auto tokens = tokenizeWithLogging("", "EmptyInput");
-    EXPECT_TRUE(tokens.empty()) << "Empty input should produce no tokens";
+    ASSERT_EQ(tokens.size(), 1) << "Empty input should produce EOF token";
+    EXPECT_EQ(tokens[0].type, RawTokenType::EOF_TOKEN);
 }
 
 TEST_F(RawTokenizationTest, SingleIdentifier) {
     auto tokens = tokenizeWithLogging("identifier", "SingleIdentifier");
     
-    ASSERT_EQ(tokens.size(), 1) << "Single identifier should produce exactly one token";
+    ASSERT_EQ(tokens.size(), 2) << "Single identifier should produce identifier + EOF token";
     EXPECT_EQ(tokens[0].value, "identifier");
     EXPECT_EQ(tokens[0].type, RawTokenType::IDENTIFIER);
+    EXPECT_EQ(tokens[1].type, RawTokenType::EOF_TOKEN);
 }
 
 TEST_F(RawTokenizationTest, BasicClassDefinition) {
     std::string test_code = "class Connection {}";
     auto tokens = tokenizeWithLogging(test_code, "BasicClassDefinition");
     
-    std::vector<std::string> expected_values = {"class", "Connection", "{", "}"};
+    std::vector<std::string> expected_values = {"class", "Connection", "{", "}", ""};
     std::vector<RawTokenType> expected_types = {
         RawTokenType::KEYWORD, 
         RawTokenType::IDENTIFIER, 
         RawTokenType::PUNCTUATION, 
-        RawTokenType::PUNCTUATION
+        RawTokenType::PUNCTUATION,
+        RawTokenType::EOF_TOKEN
     };
     
     validateTokenSequence(tokens, expected_values, "BasicClassDefinition");
@@ -117,7 +120,7 @@ TEST_F(RawTokenizationTest, WhitespaceHandling) {
     auto tokens = tokenize(test_code);
     
     auto token_strings = getTokenStrings(tokens);
-    std::vector<std::string> expected = {"class", "Test", "{", "}"};
+    std::vector<std::string> expected = {"class", "Test", "{", "}", "EOF"};
     
     ASSERT_EQ(token_strings.size(), expected.size()) 
         << "Whitespace should not affect tokenization";
@@ -388,7 +391,7 @@ TEST_F(RawTokenizationTest, MixedWhitespace) {
         }
     }
     
-    std::vector<std::string> expected = {"int", "main", "(", ")", "{", "return", "0", ";", "}"};
+    std::vector<std::string> expected = {"int", "main", "(", ")", "{", "return", "0", ";", "}", ""};
     
     ASSERT_EQ(non_whitespace_values.size(), expected.size()) 
         << "Whitespace should not affect token recognition";

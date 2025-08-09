@@ -1,0 +1,9 @@
+=== Raw Token Dump ===
+Total tokens: 5
+
+[0] RawToken(KEYWORD, "class", 1:1)
+[1] RawToken(IDENTIFIER, "Test", 1:7)
+[2] RawToken(PUNCTUATION, "{", 1:12)
+[3] RawToken(PUNCTUATION, "}", 1:13)
+[4] RawToken(EOF, "", 2:1)
+
