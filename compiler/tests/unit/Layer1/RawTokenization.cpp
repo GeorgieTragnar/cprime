@@ -142,11 +142,11 @@ TEST_F(RawTokenizationTest, Comments) {
     auto tokens = tokenize(test_code);
     EXPECT_FALSE(tokens.empty()) << "Code with comments should still produce tokens";
     
-    auto token_strings = getTokenStrings(tokens);
-    EXPECT_NE(std::find(token_strings.begin(), token_strings.end(), "class"), 
-              token_strings.end()) << "Should contain 'class' despite comments";
-    EXPECT_NE(std::find(token_strings.begin(), token_strings.end(), "Test"), 
-              token_strings.end()) << "Should contain 'Test' despite comments";
+    auto token_values = getTokenValues(tokens);
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "class"), 
+              token_values.end()) << "Should contain 'class' despite comments";
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "Test"), 
+              token_values.end()) << "Should contain 'Test' despite comments";
 }
 
 TEST_F(RawTokenizationTest, SpecialCharacters) {
@@ -155,14 +155,14 @@ TEST_F(RawTokenizationTest, SpecialCharacters) {
     
     EXPECT_FALSE(tokens.empty()) << "Special characters should be tokenized";
     
-    auto token_strings = getTokenStrings(tokens);
+    auto token_values = getTokenValues(tokens);
     // Should contain brackets, semicolon, arrow, angle brackets
-    EXPECT_NE(std::find(token_strings.begin(), token_strings.end(), "["), 
-              token_strings.end()) << "Should tokenize '[' bracket";
-    EXPECT_NE(std::find(token_strings.begin(), token_strings.end(), "]"), 
-              token_strings.end()) << "Should tokenize ']' bracket";
-    EXPECT_NE(std::find(token_strings.begin(), token_strings.end(), ";"), 
-              token_strings.end()) << "Should tokenize ';' semicolon";
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "["), 
+              token_values.end()) << "Should tokenize '[' bracket";
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), "]"), 
+              token_values.end()) << "Should tokenize ']' bracket";
+    EXPECT_NE(std::find(token_values.begin(), token_values.end(), ";"), 
+              token_values.end()) << "Should tokenize ';' semicolon";
 }
 
 TEST_F(RawTokenizationTest, Numbers) {
@@ -193,12 +193,11 @@ TEST_F(RawTokenizationTest, UnterminatedString) {
     // 2. Create an error token
     // 3. Treat as partial token
     
-    // For now, just ensure it doesn't crash
-    EXPECT_NO_THROW({
+    // The tokenizer should throw an exception for unterminated strings
+    EXPECT_THROW({
         auto tokens = tokenize(test_code);
-        // If no exception, at least verify we get some result
         (void)tokens;  // Suppress unused variable warning
-    }) << "Tokenizer should handle unterminated strings gracefully";
+    }, std::runtime_error) << "Tokenizer should throw exception for unterminated strings";
 }
 
 TEST_F(RawTokenizationTest, LargeInput) {

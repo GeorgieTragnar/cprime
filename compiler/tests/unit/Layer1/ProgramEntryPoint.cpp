@@ -230,10 +230,8 @@ TEST_F(ProgramEntryPointTest, MissingReturnType) {
     
     auto tokens = tokenizeWithLogging(code, "MissingReturnType");
     
-    // This should fail validation - no valid entry point
-    EXPECT_THROW({
-        validateProgramEntryPoint(tokens, "MissingReturnType");
-    }, ::testing::AssertionException);
+    // This should be recognized as invalid - missing return type
+    validateInvalidEntryPoint(tokens, "MissingReturnType", "Missing return type");
 }
 
 TEST_F(ProgramEntryPointTest, WrongReturnType) {
@@ -241,10 +239,8 @@ TEST_F(ProgramEntryPointTest, WrongReturnType) {
     
     auto tokens = tokenizeWithLogging(code, "WrongReturnType");
     
-    // This should fail validation - void instead of int
-    EXPECT_THROW({
-        validateProgramEntryPoint(tokens, "WrongReturnType");
-    }, ::testing::AssertionException);
+    // This should be recognized as invalid - wrong return type
+    validateInvalidEntryPoint(tokens, "WrongReturnType", "Wrong return type (void instead of int)");
 }
 
 TEST_F(ProgramEntryPointTest, WrongFunctionName) {
@@ -252,10 +248,8 @@ TEST_F(ProgramEntryPointTest, WrongFunctionName) {
     
     auto tokens = tokenizeWithLogging(code, "WrongFunctionName");
     
-    // This should fail validation - Main instead of main
-    EXPECT_THROW({
-        validateProgramEntryPoint(tokens, "WrongFunctionName");
-    }, ::testing::AssertionException);
+    // This should be recognized as invalid - wrong function name
+    validateInvalidEntryPoint(tokens, "WrongFunctionName", "Wrong function name (Main instead of main)");
 }
 
 TEST_F(ProgramEntryPointTest, MissingParentheses) {
@@ -263,10 +257,8 @@ TEST_F(ProgramEntryPointTest, MissingParentheses) {
     
     auto tokens = tokenizeWithLogging(code, "MissingParentheses");
     
-    // This should fail validation - missing ()
-    EXPECT_THROW({
-        validateProgramEntryPoint(tokens, "MissingParentheses");
-    }, ::testing::AssertionException);
+    // This should be recognized as invalid - missing parentheses
+    validateInvalidEntryPoint(tokens, "MissingParentheses", "Missing parentheses after main");
 }
 
 TEST_F(ProgramEntryPointTest, EmptyInput) {
@@ -274,10 +266,8 @@ TEST_F(ProgramEntryPointTest, EmptyInput) {
     
     auto tokens = tokenizeWithLogging(code, "EmptyInput");
     
-    // This should fail validation - no tokens
-    EXPECT_THROW({
-        validateProgramEntryPoint(tokens, "EmptyInput");
-    }, ::testing::AssertionException);
+    // This should be recognized as invalid - empty input
+    validateInvalidEntryPoint(tokens, "EmptyInput", "No code provided");
 }
 
 // ============================================================================

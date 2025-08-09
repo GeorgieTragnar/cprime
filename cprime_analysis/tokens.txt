@@ -1,12 +1,13 @@
 === Raw Token Dump ===
-Total tokens: 8
+Total tokens: 9
 
-[0] RawToken(SYMBOL, "{", 1:1)
-[1] RawToken(SYMBOL, "}", 1:3)
-[2] RawToken(SYMBOL, "(", 1:5)
-[3] RawToken(SYMBOL, ")", 1:7)
-[4] RawToken(SYMBOL, "[", 1:9)
-[5] RawToken(SYMBOL, "]", 1:11)
-[6] RawToken(SYMBOL, ";", 1:13)
-[7] RawToken(EOF, "", 2:1)
+[0] RawToken(IDENTIFIER, "main", 1:1)
+[1] RawToken(SYMBOL, "(", 1:5)
+[2] RawToken(SYMBOL, ")", 1:6)
+[3] RawToken(SYMBOL, "{", 1:8)
+[4] RawToken(KEYWORD, "return", 1:10)
+[5] RawToken(LITERAL, "0", 1:17)
+[6] RawToken(SYMBOL, ";", 1:18)
+[7] RawToken(SYMBOL, "}", 1:20)
+[8] RawToken(EOF, "", 2:1)
 
