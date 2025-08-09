@@ -183,7 +183,7 @@ fi
 if [ "$VERBOSE" = true ]; then
     make -j$CORES VERBOSE=1
 else
-    make -j$CORES 2>/dev/null
+    make -j$CORES
 fi
 
 if [ $? -ne 0 ]; then

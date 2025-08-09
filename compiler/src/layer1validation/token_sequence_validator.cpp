@@ -89,14 +89,14 @@ validation::ValidationResult TokenSequenceValidator::validate_statement_terminat
         const auto& token = tokens_[i];
         
         // Look for statements that need semicolon termination
-        if (token.value == "return" || token.value == "break" || token.value == "continue") {
+        if (token.kind == TokenKind::RETURN || token.kind == TokenKind::BREAK || token.kind == TokenKind::CONTINUE) {
             // Find the end of this statement
             size_t end = i + 1;
-            while (end < tokens_.size() && tokens_[end].value != ";" && tokens_[end].value != "}") {
+            while (end < tokens_.size() && tokens_[end].kind != TokenKind::SEMICOLON && tokens_[end].kind != TokenKind::RIGHT_BRACE) {
                 end++;
             }
             
-            if (end >= tokens_.size() || tokens_[end].value != ";") {
+            if (end >= tokens_.size() || tokens_[end].kind != TokenKind::SEMICOLON) {
                 result.add_error(
                     "Statement must be terminated with semicolon",
                     token_to_location(i),
@@ -117,7 +117,8 @@ std::vector<TokenSpan> TokenSequenceValidator::find_class_declarations() const {
     std::vector<TokenSpan> declarations;
     
     for (size_t i = 0; i < tokens_.size(); ++i) {
-        if (CLASS_KEYWORDS.count(tokens_[i].value)) {
+        if (tokens_[i].kind == TokenKind::CLASS || tokens_[i].kind == TokenKind::STRUCT || 
+            tokens_[i].kind == TokenKind::UNION || tokens_[i].kind == TokenKind::INTERFACE) {
             // Simple implementation: class keyword to end of tokens
             size_t start = i;
             size_t end = std::min(start + 10, tokens_.size()); // Simple bound
@@ -133,7 +134,8 @@ std::vector<TokenSpan> TokenSequenceValidator::find_function_declarations() cons
     std::vector<TokenSpan> declarations;
     
     for (size_t i = 0; i < tokens_.size(); ++i) {
-        if (tokens_[i].value == "fn") {
+        // Note: 'fn' is not in our TokenKind enum yet, checking as identifier
+        if (tokens_[i].kind == TokenKind::IDENTIFIER && tokens_[i].has_string_value() && tokens_[i].get_string() == "fn") {
             // Simple implementation: fn keyword to end of tokens
             size_t start = i;
             size_t end = std::min(start + 10, tokens_.size()); // Simple bound
@@ -149,7 +151,8 @@ std::vector<TokenSpan> TokenSequenceValidator::find_type_specifier_sequences() c
     std::vector<TokenSpan> sequences;
     
     for (size_t i = 0; i < tokens_.size(); ++i) {
-        if (TYPE_KEYWORDS.count(tokens_[i].value)) {
+        if (tokens_[i].kind == TokenKind::INT || tokens_[i].kind == TokenKind::FLOAT || tokens_[i].kind == TokenKind::DOUBLE || 
+            tokens_[i].kind == TokenKind::CHAR || tokens_[i].kind == TokenKind::BOOL || tokens_[i].kind == TokenKind::VOID) {
             // Simple implementation: type keyword to next token
             size_t start = i;
             size_t end = std::min(start + 2, tokens_.size());
@@ -162,7 +165,7 @@ std::vector<TokenSpan> TokenSequenceValidator::find_type_specifier_sequences() c
 }
 
 bool TokenSequenceValidator::is_valid_identifier_token(const RawToken& token) const {
-    return token.type == RawTokenType::IDENTIFIER;
+    return token.kind == TokenKind::IDENTIFIER;
 }
 
 bool TokenSequenceValidator::is_type_specifier_keyword(const std::string& keyword) const {
@@ -174,7 +177,7 @@ bool TokenSequenceValidator::is_access_modifier(const std::string& keyword) cons
 }
 
 bool TokenSequenceValidator::is_statement_terminator(const RawToken& token) const {
-    return token.value == ";";
+    return token.kind == TokenKind::SEMICOLON;
 }
 
 validation::SourceLocation TokenSequenceValidator::token_to_location(size_t token_index) const {
@@ -184,7 +187,7 @@ validation::SourceLocation TokenSequenceValidator::token_to_location(size_t toke
     
     const auto& token = tokens_[token_index];
     return validation::SourceLocation(token.line, token.column, token.position, 
-                                    token.position + token.value.length());
+                                    token.position + (token.has_string_value() ? token.get_string().length() : 1));
 }
 
 validation::SourceLocation TokenSequenceValidator::span_to_location(const TokenSpan& span) const {
@@ -197,7 +200,7 @@ validation::SourceLocation TokenSequenceValidator::span_to_location(const TokenS
     
     return validation::SourceLocation(
         first.line, first.column, first.position, 
-        last.position + last.value.length()
+        last.position + (last.has_string_value() ? last.get_string().length() : 1)
     );
 }
 
@@ -213,11 +216,12 @@ validation::ValidationResult SyntaxRuleChecker::validate_class_syntax(const Toke
     }
     
     // Simple validation: check if first token is a class keyword
-    if (!TokenSequenceValidator::CLASS_KEYWORDS.count(tokens.begin->value)) {
+    if (!(tokens.begin->kind == TokenKind::CLASS || tokens.begin->kind == TokenKind::STRUCT || 
+          tokens.begin->kind == TokenKind::UNION || tokens.begin->kind == TokenKind::INTERFACE)) {
         result.add_error(
             "Expected class keyword",
             validation::SourceLocation(tokens.begin->line, tokens.begin->column, 
-                                     tokens.begin->position, tokens.begin->position + tokens.begin->value.length()),
+                                     tokens.begin->position, tokens.begin->position + (tokens.begin->has_string_value() ? tokens.begin->get_string().length() : 1)),
             "Use 'class', 'struct', 'union', or 'interface'"
         );
     }
@@ -233,11 +237,11 @@ validation::ValidationResult SyntaxRuleChecker::validate_function_syntax(const T
     }
     
     // Simple validation: check if first token is 'fn'
-    if (tokens.begin->value != "fn") {
+    if (!(tokens.begin->kind == TokenKind::IDENTIFIER && tokens.begin->has_string_value() && tokens.begin->get_string() == "fn")) {
         result.add_error(
             "Expected function keyword 'fn'",
             validation::SourceLocation(tokens.begin->line, tokens.begin->column, 
-                                     tokens.begin->position, tokens.begin->position + tokens.begin->value.length()),
+                                     tokens.begin->position, tokens.begin->position + (tokens.begin->has_string_value() ? tokens.begin->get_string().length() : 1)),
             "Functions should start with 'fn' keyword"
         );
     }
@@ -253,11 +257,12 @@ validation::ValidationResult SyntaxRuleChecker::validate_type_expression_syntax(
     }
     
     // Simple validation: check if first token is a valid type
-    if (!TokenSequenceValidator::TYPE_KEYWORDS.count(tokens.begin->value)) {
+    if (!(tokens.begin->kind == TokenKind::INT || tokens.begin->kind == TokenKind::FLOAT || tokens.begin->kind == TokenKind::DOUBLE || 
+          tokens.begin->kind == TokenKind::CHAR || tokens.begin->kind == TokenKind::BOOL || tokens.begin->kind == TokenKind::VOID)) {
         result.add_warning(
-            "Unknown type specifier: " + tokens.begin->value,
+            "Unknown type specifier: " + (tokens.begin->has_string_value() ? tokens.begin->get_string() : "[unknown]"),
             validation::SourceLocation(tokens.begin->line, tokens.begin->column, 
-                                     tokens.begin->position, tokens.begin->position + tokens.begin->value.length()),
+                                     tokens.begin->position, tokens.begin->position + (tokens.begin->has_string_value() ? tokens.begin->get_string().length() : 1)),
             "Use a known type or define a custom type"
         );
     }
@@ -266,11 +271,12 @@ validation::ValidationResult SyntaxRuleChecker::validate_type_expression_syntax(
 }
 
 bool SyntaxRuleChecker::is_valid_identifier(const RawToken& token) {
-    return token.type == RawTokenType::IDENTIFIER && !token.value.empty();
+    return token.kind == TokenKind::IDENTIFIER && token.has_string_value() && !token.get_string().empty();
 }
 
 bool SyntaxRuleChecker::is_valid_type_specifier(const RawToken& token) {
-    return TokenSequenceValidator::TYPE_KEYWORDS.count(token.value) > 0;
+    return token.kind == TokenKind::INT || token.kind == TokenKind::FLOAT || token.kind == TokenKind::DOUBLE || 
+           token.kind == TokenKind::CHAR || token.kind == TokenKind::BOOL || token.kind == TokenKind::VOID;
 }
 
 bool SyntaxRuleChecker::follows_naming_convention(const std::string& name, const std::string& /* context */) {
@@ -305,10 +311,10 @@ validation::ValidationResult BracketMatcher::match_brackets_of_type(char open_ch
     for (size_t i = 0; i < tokens_.size(); ++i) {
         const auto& token = tokens_[i];
         
-        if (token.value.length() == 1) {
-            if (token.value[0] == open_char) {
+        if (token.has_string_value() && token.get_string().length() == 1) {
+            if (token.get_string()[0] == open_char) {
                 stack.push(i);
-            } else if (token.value[0] == close_char) {
+            } else if (token.get_string()[0] == close_char) {
                 if (stack.empty()) {
                     result.add_error(
                         std::string("Unmatched closing bracket: ") + close_char,
@@ -345,7 +351,7 @@ validation::SourceLocation BracketMatcher::token_location(size_t index) const {
     
     const auto& token = tokens_[index];
     return validation::SourceLocation(token.line, token.column, token.position, 
-                                    token.position + token.value.length());
+                                    token.position + (token.has_string_value() ? token.get_string().length() : 1));
 }
 
 } // namespace cprime::layer1validation

@@ -9,18 +9,32 @@ std::string ContextualToken::to_string() const {
     std::stringstream ss;
     ss << "ContextualToken(";
     
-    // Raw token info
-    switch (raw_token.type) {
-        case RawTokenType::KEYWORD: ss << "KEYWORD"; break;
-        case RawTokenType::IDENTIFIER: ss << "IDENTIFIER"; break;
-        case RawTokenType::SYMBOL: ss << "SYMBOL"; break;
-        case RawTokenType::LITERAL: ss << "LITERAL"; break;
-        case RawTokenType::WHITESPACE: ss << "WHITESPACE"; break;
-        case RawTokenType::COMMENT: ss << "COMMENT"; break;
-        case RawTokenType::EOF_TOKEN: ss << "EOF"; break;
+    // Raw token info - use TokenKind
+    if (raw_token.is_keyword()) {
+        ss << "KEYWORD";
+    } else if (raw_token.kind == TokenKind::IDENTIFIER) {
+        ss << "IDENTIFIER";
+    } else if (raw_token.is_operator()) {
+        ss << "OPERATOR";
+    } else if (raw_token.is_literal()) {
+        ss << "LITERAL";
+    } else if (raw_token.kind == TokenKind::COMMENT) {
+        ss << "COMMENT";
+    } else if (raw_token.kind == TokenKind::WHITESPACE) {
+        ss << "WHITESPACE";
+    } else if (raw_token.kind == TokenKind::EOF_TOKEN) {
+        ss << "EOF";
+    } else {
+        ss << "UNKNOWN";
     }
     
-    ss << ", \"" << raw_token.value << "\", " << raw_token.line << ":" << raw_token.column;
+    if (raw_token.has_string_value()) {
+        ss << ", \"" << raw_token.get_string() << "\"";
+    } else if (raw_token.has_literal_value()) {
+        ss << ", [typed_literal]";
+    }
+    
+    ss << ", " << raw_token.line << ":" << raw_token.column;
     
     // Context info
     if (!context_resolution.empty()) {
@@ -55,7 +69,7 @@ const ContextualToken& ContextualTokenStream::peek(size_t offset) const {
     size_t peek_pos = pos + offset;
     if (peek_pos >= tokens.size()) {
         // Return EOF-like token if peeking beyond end
-        static const RawToken eof_raw(RawTokenType::EOF_TOKEN, "", 0, 0, 0);
+        static const RawToken eof_raw(TokenKind::EOF_TOKEN, 0, 0, 0);
         static const ContextualToken eof_contextual(eof_raw, static_cast<ParseContextType>(0));
         return eof_contextual;
     }

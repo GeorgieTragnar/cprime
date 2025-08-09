@@ -2,6 +2,8 @@
 #include <stdexcept>
 #include <sstream>
 #include <iostream>
+#include <algorithm>
+#include <cctype>
 
 // Include logging infrastructure
 #include "../common/logger.h"
@@ -9,66 +11,91 @@
 
 namespace cprime {
 
-// Static keyword definitions - context-sensitive keywords handled in semantic layer
-const std::unordered_set<std::string> RawTokenizer::keywords = {
-    // Core language keywords
-    "class", "plex", "struct", "union", "interface",
-    "runtime", "defer",
+// Comprehensive keyword mapping - all CPrime reserved words
+const std::unordered_map<std::string, TokenKind> RawTokenizer::keywords = {
+    // Core language constructs
+    {"class", TokenKind::CLASS}, {"struct", TokenKind::STRUCT}, {"union", TokenKind::UNION}, 
+    {"interface", TokenKind::INTERFACE}, {"plex", TokenKind::PLEX},
+    
+    // Context-sensitive keywords
+    {"runtime", TokenKind::RUNTIME}, {"defer", TokenKind::DEFER},
     
     // Control flow
-    "if", "else", "while", "for", "case",
-    "break", "continue", "return",
+    {"if", TokenKind::IF}, {"else", TokenKind::ELSE}, {"while", TokenKind::WHILE}, 
+    {"for", TokenKind::FOR}, {"case", TokenKind::CASE}, {"switch", TokenKind::SWITCH}, {"default", TokenKind::DEFAULT},
+    {"break", TokenKind::BREAK}, {"continue", TokenKind::CONTINUE}, {"return", TokenKind::RETURN}, {"goto", TokenKind::GOTO},
     
     // Exception handling
-    "throw", "try", "catch",
+    {"throw", TokenKind::THROW}, {"try", TokenKind::TRY}, {"catch", TokenKind::CATCH},
     
-    // Types and modifiers
-    "auto", "void", "bool", "int", "float",
-    "const", "mut", "static", "extern",
-    "constexpr", "consteval", "constinit", "noexcept",
+    // Type system
+    {"auto", TokenKind::AUTO}, {"void", TokenKind::VOID}, {"bool", TokenKind::BOOL}, 
+    {"char", TokenKind::CHAR}, {"wchar_t", TokenKind::WCHAR_T},
+    {"int", TokenKind::INT}, {"short", TokenKind::SHORT}, {"long", TokenKind::LONG}, 
+    {"signed", TokenKind::SIGNED}, {"unsigned", TokenKind::UNSIGNED},
+    {"float", TokenKind::FLOAT}, {"double", TokenKind::DOUBLE},
+    {"int8_t", TokenKind::INT8_T}, {"int16_t", TokenKind::INT16_T}, {"int32_t", TokenKind::INT32_T}, {"int64_t", TokenKind::INT64_T},
+    {"uint8_t", TokenKind::UINT8_T}, {"uint16_t", TokenKind::UINT16_T}, {"uint32_t", TokenKind::UINT32_T}, {"uint64_t", TokenKind::UINT64_T},
+    {"char8_t", TokenKind::CHAR8_T}, {"char16_t", TokenKind::CHAR16_T}, {"char32_t", TokenKind::CHAR32_T},
     
-    // Special values
-    "true", "false", "nullptr",
+    // Type qualifiers and storage
+    {"const", TokenKind::CONST}, {"mut", TokenKind::MUT}, {"static", TokenKind::STATIC}, 
+    {"extern", TokenKind::EXTERN}, {"register", TokenKind::REGISTER}, {"thread_local", TokenKind::THREAD_LOCAL}, {"volatile", TokenKind::VOLATILE},
+    {"constexpr", TokenKind::CONSTEXPR}, {"consteval", TokenKind::CONSTEVAL}, {"constinit", TokenKind::CONSTINIT}, 
+    {"noexcept", TokenKind::NOEXCEPT}, {"inline", TokenKind::INLINE},
     
     // Memory management
-    "new", "delete", "danger",
+    {"new", TokenKind::NEW}, {"delete", TokenKind::DELETE}, {"danger", TokenKind::DANGER},
     
-    // Visibility
-    "public", "private",
+    // Access control
+    {"public", TokenKind::PUBLIC}, {"private", TokenKind::PRIVATE}, {"protected", TokenKind::PROTECTED}, {"friend", TokenKind::FRIEND},
     
     // Metaprogramming
-    "sizeof", "alignof", "decltype"
+    {"sizeof", TokenKind::SIZEOF}, {"alignof", TokenKind::ALIGNOF}, {"alignas", TokenKind::ALIGNAS}, 
+    {"decltype", TokenKind::DECLTYPE}, {"typeof", TokenKind::TYPEOF}, {"typeid", TokenKind::TYPEID},
+    {"template", TokenKind::TEMPLATE}, {"typename", TokenKind::TYPENAME}, {"using", TokenKind::USING}, {"namespace", TokenKind::NAMESPACE},
+    
+    // Boolean and null literals
+    {"true", TokenKind::TRUE_LITERAL}, {"false", TokenKind::FALSE_LITERAL}, {"nullptr", TokenKind::NULLPTR_LITERAL}
 };
 
-const std::unordered_set<std::string> RawTokenizer::symbols = {
-    // Arithmetic
-    "+", "-", "*", "/", "%",
-    "+=", "-=", "*=", "/=", "%=",
-    "++", "--", // Increment/decrement
+const std::unordered_map<std::string, TokenKind> RawTokenizer::symbols = {
+    // Arithmetic operators
+    {"+", TokenKind::PLUS}, {"-", TokenKind::MINUS}, {"*", TokenKind::MULTIPLY}, {"/", TokenKind::DIVIDE}, {"%", TokenKind::MODULO},
     
-    // Comparison
-    "==", "!=", "<", ">", "<=", ">=",
-    "<=>", // Three-way comparison
+    // Assignment operators
+    {"=", TokenKind::ASSIGN},
+    {"+=", TokenKind::PLUS_ASSIGN}, {"-=", TokenKind::MINUS_ASSIGN}, {"*=", TokenKind::MULTIPLY_ASSIGN}, 
+    {"/=", TokenKind::DIVIDE_ASSIGN}, {"%=", TokenKind::MODULO_ASSIGN},
     
-    // Logical
-    "&&", "||", "!", "^",
+    // Increment/decrement
+    {"++", TokenKind::INCREMENT}, {"--", TokenKind::DECREMENT},
     
-    // Bitwise
-    "&", "|", "<<", ">>", "~",
-    "&=", "|=", "^=", "<<=", ">>=",
+    // Comparison operators
+    {"==", TokenKind::EQUAL_EQUAL}, {"!=", TokenKind::NOT_EQUAL}, 
+    {"<", TokenKind::LESS_THAN}, {">", TokenKind::GREATER_THAN},
+    {"<=", TokenKind::LESS_EQUAL}, {">=", TokenKind::GREATER_EQUAL},
+    {"<=>", TokenKind::SPACESHIP}, // Three-way comparison
     
-    // Pointer and member access
-    ".", "->", "::",
-    "->*", ".*", // C++ pointer-to-member operators
+    // Logical operators
+    {"&&", TokenKind::LOGICAL_AND}, {"||", TokenKind::LOGICAL_OR}, {"!", TokenKind::LOGICAL_NOT},
     
-    // Assignment
-    "=",
+    // Bitwise operators
+    {"&", TokenKind::BIT_AND}, {"|", TokenKind::BIT_OR}, {"^", TokenKind::BIT_XOR}, {"~", TokenKind::BIT_NOT},
+    {"<<", TokenKind::LEFT_SHIFT}, {">>", TokenKind::RIGHT_SHIFT},
+    {"&=", TokenKind::BIT_AND_ASSIGN}, {"|=", TokenKind::BIT_OR_ASSIGN}, {"^=", TokenKind::BIT_XOR_ASSIGN},
+    {"<<=", TokenKind::LEFT_SHIFT_ASSIGN}, {">>=", TokenKind::RIGHT_SHIFT_ASSIGN},
     
-    // Structural punctuation
-    "{", "}", "(", ")", "[", "]",
-    ";", ",", ":", "?",
+    // Member access
+    {".", TokenKind::DOT}, {"->", TokenKind::ARROW}, {"::", TokenKind::SCOPE_RESOLUTION},
+    {".*", TokenKind::DOT_STAR}, {"->*", TokenKind::ARROW_STAR}, // Pointer-to-member operators
     
-    // Note: Quote characters (', ") handled specially in string literal parsing
+    // Punctuation
+    {"(", TokenKind::LEFT_PAREN}, {")", TokenKind::RIGHT_PAREN},
+    {"{", TokenKind::LEFT_BRACE}, {"}", TokenKind::RIGHT_BRACE},
+    {"[", TokenKind::LEFT_BRACKET}, {"]", TokenKind::RIGHT_BRACKET},
+    {";", TokenKind::SEMICOLON}, {",", TokenKind::COMMA}, {":", TokenKind::COLON},
+    {"?", TokenKind::QUESTION}, {"...", TokenKind::ELLIPSIS}
 };
 
 const std::unordered_set<std::string> RawTokenizer::multi_char_symbols = {
@@ -78,25 +105,25 @@ const std::unordered_set<std::string> RawTokenizer::multi_char_symbols = {
     "&=", "|=", "^=", "<<=", ">>=",
     "++", "--", // Increment/decrement
     "->", "::",
-    "->*", ".*" // C++ pointer-to-member operators
+    "->*", ".*", // C++ pointer-to-member operators
+    "..."
 };
 
 // RawToken implementation
-std::string RawToken::to_string() const {
+std::string RawToken::to_string(const StringTable& string_table) const {
     std::stringstream ss;
     ss << "RawToken(";
     
-    switch (type) {
-        case RawTokenType::KEYWORD: ss << "KEYWORD"; break;
-        case RawTokenType::IDENTIFIER: ss << "IDENTIFIER"; break;
-        case RawTokenType::SYMBOL: ss << "SYMBOL"; break;
-        case RawTokenType::LITERAL: ss << "LITERAL"; break;
-        case RawTokenType::WHITESPACE: ss << "WHITESPACE"; break;
-        case RawTokenType::COMMENT: ss << "COMMENT"; break;
-        case RawTokenType::EOF_TOKEN: ss << "EOF"; break;
+    // Convert TokenKind to string
+    ss << static_cast<int>(kind);
+    
+    if (has_string_value() && has_valid_string_index()) {
+        ss << ", \"" << string_table.get_string(string_index) << "\"";
+    } else if (has_literal_value()) {
+        ss << ", literal_value";
     }
     
-    ss << ", \"" << value << "\", " << line << ":" << column << ")";
+    ss << ", " << line << ":" << column << ")";
     return ss.str();
 }
 
@@ -113,7 +140,7 @@ const RawToken& RawTokenStream::peek(size_t offset) const {
     size_t peek_pos = pos + offset;
     if (peek_pos >= tokens.size()) {
         // Return EOF token if peeking beyond end
-        static const RawToken eof_token(RawTokenType::EOF_TOKEN, "", 0, 0, 0);
+        static const RawToken eof_token(TokenKind::EOF_TOKEN, 0, 0, 0);
         return eof_token;
     }
     return tokens[peek_pos];
@@ -139,7 +166,7 @@ void RawTokenStream::rewind() {
 }
 
 bool RawTokenStream::is_at_end() const {
-    return pos >= tokens.size() || tokens[pos].type == RawTokenType::EOF_TOKEN;
+    return pos >= tokens.size() || tokens[pos].kind == TokenKind::EOF_TOKEN;
 }
 
 void RawTokenStream::set_position(size_t new_pos) {
@@ -156,8 +183,8 @@ void RawTokenStream::ensure_valid_position() const {
 }
 
 // RawTokenizer implementation
-RawTokenizer::RawTokenizer(const std::string& source)
-    : source(source), pos(0), line(1), column(1) {
+RawTokenizer::RawTokenizer(const std::string& source, StringTable& string_table)
+    : source(source), pos(0), line(1), column(1), string_table_(string_table) {
     // Initialize trace logger for detailed debugging
     trace_logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_TOKENIZER);
     trace_logger->set_level(spdlog::level::trace);
@@ -196,15 +223,25 @@ std::vector<RawToken> RawTokenizer::tokenize() {
             continue;
         }
         
-        // Handle string literals
-        if (c == '"' || c == '\'') {
+        // Handle string and character literals  
+        if (c == '"') {
             tokens.push_back(read_string_literal());
+            continue;
+        }
+        
+        if (c == '\'') {
+            tokens.push_back(read_character_literal());
             continue;
         }
         
         // Handle numeric literals
         if (is_numeric(c)) {
-            tokens.push_back(read_number_literal());
+            // Check if it looks like a floating point number
+            if (peek_for_float_literal()) {
+                tokens.push_back(read_float_literal());
+            } else {
+                tokens.push_back(read_integer_literal());
+            }
             continue;
         }
         
@@ -225,7 +262,8 @@ std::vector<RawToken> RawTokenizer::tokenize() {
             trace_logger->trace("Checking 3-char symbol: '{}'", three_char_symbol);
             if (multi_char_symbols.count(three_char_symbol)) {
                 trace_logger->trace("Found 3-char symbol: '{}'", three_char_symbol);
-                tokens.emplace_back(RawTokenType::SYMBOL, three_char_symbol, line, column, current_position());
+                auto symbol_kind = symbols.at(three_char_symbol);
+                tokens.emplace_back(symbol_kind, string_table_.intern(three_char_symbol), line, column, current_position());
                 advance(); // First character
                 advance(); // Second character  
                 advance(); // Third character
@@ -239,7 +277,8 @@ std::vector<RawToken> RawTokenizer::tokenize() {
             trace_logger->trace("Checking 2-char symbol: '{}'", potential_symbol);
             if (multi_char_symbols.count(potential_symbol)) {
                 trace_logger->trace("Found 2-char symbol: '{}'", potential_symbol);
-                tokens.emplace_back(RawTokenType::SYMBOL, potential_symbol, line, column, current_position());
+                auto symbol_kind = symbols.at(potential_symbol);
+                tokens.emplace_back(symbol_kind, string_table_.intern(potential_symbol), line, column, current_position());
                 advance(); // First character
                 advance(); // Second character
                 continue;
@@ -250,7 +289,8 @@ std::vector<RawToken> RawTokenizer::tokenize() {
         trace_logger->trace("Checking single-char symbol: '{}'", c);
         if (symbols.count(std::string(1, c))) {
             trace_logger->trace("Found single-char symbol: '{}'", c);
-            tokens.emplace_back(RawTokenType::SYMBOL, std::string(1, c), line, column, current_position());
+            auto symbol_kind = symbols.at(std::string(1, c));
+            tokens.emplace_back(symbol_kind, string_table_.intern(std::string(1, c)), line, column, current_position());
             advance();
             continue;
         }
@@ -260,7 +300,7 @@ std::vector<RawToken> RawTokenizer::tokenize() {
     }
     
     // Add EOF token
-    tokens.emplace_back(RawTokenType::EOF_TOKEN, "", line, column, current_position());
+    tokens.emplace_back(TokenKind::EOF_TOKEN, line, column, current_position());
     
     // Success - clear trace buffer and return
     trace_logger->trace("=== TOKENIZATION SUCCESS ===");
@@ -336,7 +376,8 @@ RawToken RawTokenizer::read_line_comment() {
         advance();
     }
     
-    return RawToken(RawTokenType::COMMENT, "//" + comment_text, start_line, start_column, start_pos);
+    std::string full_comment = "//" + comment_text;
+    return RawToken(TokenKind::COMMENT, string_table_.intern(full_comment), start_line, start_column, start_pos);
 }
 
 RawToken RawTokenizer::read_block_comment() {
@@ -361,7 +402,8 @@ RawToken RawTokenizer::read_block_comment() {
         advance();
     }
     
-    return RawToken(RawTokenType::COMMENT, "/*" + comment_text + "*/", start_line, start_column, start_pos);
+    std::string full_comment = "/*" + comment_text + "*/";
+    return RawToken(TokenKind::COMMENT, string_table_.intern(full_comment), start_line, start_column, start_pos);
 }
 
 RawToken RawTokenizer::read_identifier_or_keyword() {
@@ -376,10 +418,21 @@ RawToken RawTokenizer::read_identifier_or_keyword() {
         advance();
     }
     
-    // Check if it's a keyword
-    RawTokenType type = keywords.count(text) ? RawTokenType::KEYWORD : RawTokenType::IDENTIFIER;
+    // Check if it's a keyword first
+    auto keyword_it = keywords.find(text);
+    if (keyword_it != keywords.end()) {
+        // Handle special literal keywords
+        if (keyword_it->second == TokenKind::TRUE_LITERAL) {
+            return RawToken(TokenKind::TRUE_LITERAL, true, start_line, start_column, start_pos);
+        } else if (keyword_it->second == TokenKind::FALSE_LITERAL) {
+            return RawToken(TokenKind::FALSE_LITERAL, false, start_line, start_column, start_pos);
+        } else {
+            return RawToken(keyword_it->second, string_table_.intern(text), start_line, start_column, start_pos);
+        }
+    }
     
-    return RawToken(type, text, start_line, start_column, start_pos);
+    // Otherwise it's an identifier
+    return RawToken(TokenKind::IDENTIFIER, string_table_.intern(text), start_line, start_column, start_pos);
 }
 
 RawToken RawTokenizer::read_string_literal() {
@@ -387,13 +440,28 @@ RawToken RawTokenizer::read_string_literal() {
     size_t start_column = column;
     size_t start_pos = current_position();
     
-    char quote_char = peek();
-    std::string text = "";
-    text += quote_char;
+    // Check for string prefixes (L, u, U, u8, R)
+    std::string prefix = "";
     
+    // Back up to check for prefixes
+    if (pos > 0) {
+        size_t check_pos = pos - 1;
+        // Look for single character prefixes (L, u, U)
+        if (check_pos < source.length() && 
+            (source[check_pos] == 'L' || source[check_pos] == 'u' || source[check_pos] == 'U')) {
+            prefix = source[check_pos];
+        }
+        // Look for u8 prefix
+        else if (check_pos >= 1 && check_pos < source.length() - 1 && 
+                 source[check_pos-1] == 'u' && source[check_pos] == '8') {
+            prefix = "u8";
+        }
+    }
+    
+    std::string text = "";
     advance(); // Skip opening quote
     
-    while (!is_at_end() && peek() != quote_char) {
+    while (!is_at_end() && peek() != '"') {
         if (peek() == '\\') {
             text += peek();
             advance();
@@ -408,16 +476,19 @@ RawToken RawTokenizer::read_string_literal() {
     }
     
     if (!is_at_end()) {
-        text += peek(); // Closing quote
-        advance();
+        advance(); // Skip closing quote
     } else {
         error("Unterminated string literal");
     }
     
-    return RawToken(RawTokenType::LITERAL, text, start_line, start_column, start_pos);
+    // Determine string literal type based on prefix
+    TokenKind kind = determine_string_prefix(prefix);
+    std::string full_text = prefix + "\"" + text + "\"";
+    
+    return RawToken(kind, string_table_.intern(full_text), start_line, start_column, start_pos);
 }
 
-RawToken RawTokenizer::read_number_literal() {
+RawToken RawTokenizer::read_integer_literal() {
     size_t start_line = line;
     size_t start_column = column;
     size_t start_pos = current_position();
@@ -430,12 +501,57 @@ RawToken RawTokenizer::read_number_literal() {
         advance();
     }
     
-    // Check for decimal point
-    if (!is_at_end() && peek() == '.' && pos + 1 < source.length() && is_numeric(source[pos + 1])) {
+    // Read suffix (u, l, ll, ul, ull, etc.)
+    std::string suffix = "";
+    while (!is_at_end() && (peek() == 'u' || peek() == 'U' || peek() == 'l' || peek() == 'L')) {
+        suffix += peek();
+        advance();
+    }
+    
+    // Determine integer literal type based on suffix
+    TokenKind kind = determine_integer_suffix(suffix);
+    std::string full_text = text + suffix;
+    
+    // Parse the actual integer value
+    try {
+        if (kind == TokenKind::UINT_LITERAL) {
+            uint32_t value = static_cast<uint32_t>(std::stoull(text));
+            return RawToken(kind, value, start_line, start_column, start_pos);
+        } else if (kind == TokenKind::LONG_LITERAL || kind == TokenKind::LONG_LONG_LITERAL) {
+            int64_t value = std::stoll(text);
+            return RawToken(kind, value, start_line, start_column, start_pos);
+        } else if (kind == TokenKind::ULONG_LITERAL || kind == TokenKind::ULONG_LONG_LITERAL) {
+            uint64_t value = std::stoull(text);
+            return RawToken(kind, value, start_line, start_column, start_pos);
+        } else {
+            // Default to int32_t
+            int32_t value = std::stoi(text);
+            return RawToken(TokenKind::INT_LITERAL, value, start_line, start_column, start_pos);
+        }
+    } catch (const std::exception&) {
+        error("Invalid integer literal: " + full_text);
+        return RawToken(TokenKind::INT_LITERAL, 0, start_line, start_column, start_pos);
+    }
+}
+
+RawToken RawTokenizer::read_float_literal() {
+    size_t start_line = line;
+    size_t start_column = column;
+    size_t start_pos = current_position();
+    
+    std::string text = "";
+    
+    // Read integer part
+    while (!is_at_end() && is_numeric(peek())) {
+        text += peek();
+        advance();
+    }
+    
+    // Read decimal point and fractional part
+    if (!is_at_end() && peek() == '.') {
         text += peek();
         advance();
         
-        // Read fractional part
         while (!is_at_end() && is_numeric(peek())) {
             text += peek();
             advance();
@@ -458,7 +574,100 @@ RawToken RawTokenizer::read_number_literal() {
         }
     }
     
-    return RawToken(RawTokenType::LITERAL, text, start_line, start_column, start_pos);
+    // Read suffix (f, F, l, L)
+    std::string suffix = "";
+    if (!is_at_end() && (peek() == 'f' || peek() == 'F' || peek() == 'l' || peek() == 'L')) {
+        suffix += peek();
+        advance();
+    }
+    
+    // Determine float literal type based on suffix
+    TokenKind kind = determine_float_suffix(suffix);
+    
+    // Parse the actual float value
+    try {
+        if (kind == TokenKind::FLOAT_LITERAL) {
+            float value = std::stof(text);
+            return RawToken(kind, value, start_line, start_column, start_pos);
+        } else if (kind == TokenKind::LONG_DOUBLE_LITERAL) {
+            long double value = std::stold(text);
+            return RawToken(kind, value, start_line, start_column, start_pos);
+        } else {
+            // Default to double
+            double value = std::stod(text);
+            return RawToken(TokenKind::DOUBLE_LITERAL, value, start_line, start_column, start_pos);
+        }
+    } catch (const std::exception&) {
+        error("Invalid float literal: " + text + suffix);
+        return RawToken(TokenKind::DOUBLE_LITERAL, 0.0, start_line, start_column, start_pos);
+    }
+}
+
+RawToken RawTokenizer::read_character_literal() {
+    size_t start_line = line;
+    size_t start_column = column;
+    size_t start_pos = current_position();
+    
+    // Check for character prefixes (L, u, U, u8)
+    std::string prefix = "";
+    if (pos > 0) {
+        size_t check_pos = pos - 1;
+        if (check_pos < source.length() && 
+            (source[check_pos] == 'L' || source[check_pos] == 'u' || source[check_pos] == 'U')) {
+            prefix = source[check_pos];
+        }
+        // Check for u8 prefix
+        else if (check_pos >= 1 && source[check_pos-1] == 'u' && source[check_pos] == '8') {
+            prefix = "u8";
+        }
+    }
+    
+    advance(); // Skip opening single quote
+    
+    char character_value = 0;
+    if (!is_at_end()) {
+        if (peek() == '\\') {
+            // Handle escape sequences
+            advance();
+            if (!is_at_end()) {
+                char escape_char = peek();
+                switch (escape_char) {
+                    case 'n': character_value = '\n'; break;
+                    case 't': character_value = '\t'; break;
+                    case 'r': character_value = '\r'; break;
+                    case '\\': character_value = '\\'; break;
+                    case '\'': character_value = '\''; break;
+                    case '"': character_value = '"'; break;
+                    case '0': character_value = '\0'; break;
+                    default: character_value = escape_char; break;
+                }
+                advance();
+            }
+        } else {
+            character_value = peek();
+            advance();
+        }
+    }
+    
+    if (!is_at_end() && peek() == '\'') {
+        advance(); // Skip closing single quote
+    } else {
+        error("Unterminated character literal");
+    }
+    
+    // Determine character literal type based on prefix
+    TokenKind kind = determine_character_prefix(prefix);
+    
+    // Return appropriate character type
+    if (kind == TokenKind::WCHAR_LITERAL) {
+        return RawToken(kind, static_cast<wchar_t>(character_value), start_line, start_column, start_pos);
+    } else if (kind == TokenKind::CHAR16_LITERAL) {
+        return RawToken(kind, static_cast<char16_t>(character_value), start_line, start_column, start_pos);
+    } else if (kind == TokenKind::CHAR32_LITERAL) {
+        return RawToken(kind, static_cast<char32_t>(character_value), start_line, start_column, start_pos);
+    } else {
+        return RawToken(TokenKind::CHAR_LITERAL, character_value, start_line, start_column, start_pos);
+    }
 }
 
 bool RawTokenizer::is_alpha(char c) const {
@@ -475,6 +684,126 @@ bool RawTokenizer::is_alphanumeric(char c) const {
 
 bool RawTokenizer::is_whitespace(char c) const {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+bool RawTokenizer::peek_for_float_literal() const {
+    // Look ahead to see if this looks like a floating point number
+    size_t check_pos = pos;
+    
+    // Skip initial digits
+    while (check_pos < source.length() && is_numeric(source[check_pos])) {
+        check_pos++;
+    }
+    
+    // Check for decimal point followed by digit
+    if (check_pos < source.length() - 1 && source[check_pos] == '.' && 
+        is_numeric(source[check_pos + 1])) {
+        return true;
+    }
+    
+    // Check for scientific notation (e/E)
+    if (check_pos < source.length() && 
+        (source[check_pos] == 'e' || source[check_pos] == 'E')) {
+        return true;
+    }
+    
+    return false;
+}
+
+TokenKind RawTokenizer::determine_integer_suffix(const std::string& suffix) const {
+    if (suffix.empty()) {
+        return TokenKind::INT_LITERAL;
+    }
+    
+    // Convert to lowercase for comparison
+    std::string lower_suffix = suffix;
+    std::transform(lower_suffix.begin(), lower_suffix.end(), lower_suffix.begin(), ::tolower);
+    
+    if (lower_suffix == "u") {
+        return TokenKind::UINT_LITERAL;
+    } else if (lower_suffix == "l") {
+        return TokenKind::LONG_LITERAL;
+    } else if (lower_suffix == "ll") {
+        return TokenKind::LONG_LONG_LITERAL;
+    } else if (lower_suffix == "ul" || lower_suffix == "lu") {
+        return TokenKind::ULONG_LITERAL;
+    } else if (lower_suffix == "ull" || lower_suffix == "llu") {
+        return TokenKind::ULONG_LONG_LITERAL;
+    }
+    
+    return TokenKind::INT_LITERAL;
+}
+
+TokenKind RawTokenizer::determine_float_suffix(const std::string& suffix) const {
+    if (suffix.empty()) {
+        return TokenKind::DOUBLE_LITERAL;
+    }
+    
+    if (suffix == "f" || suffix == "F") {
+        return TokenKind::FLOAT_LITERAL;
+    } else if (suffix == "l" || suffix == "L") {
+        return TokenKind::LONG_DOUBLE_LITERAL;
+    }
+    
+    return TokenKind::DOUBLE_LITERAL;
+}
+
+TokenKind RawTokenizer::determine_string_prefix(const std::string& prefix) const {
+    if (prefix.empty()) {
+        return TokenKind::STRING_LITERAL;
+    }
+    
+    if (prefix == "L") {
+        return TokenKind::WSTRING_LITERAL;
+    } else if (prefix == "u") {
+        return TokenKind::STRING16_LITERAL;
+    } else if (prefix == "U") {
+        return TokenKind::STRING32_LITERAL;
+    } else if (prefix == "u8") {
+        return TokenKind::STRING8_LITERAL;
+    } else if (prefix == "R") {
+        return TokenKind::RAW_STRING_LITERAL;
+    }
+    
+    return TokenKind::STRING_LITERAL;
+}
+
+TokenKind RawTokenizer::determine_character_prefix(const std::string& prefix) const {
+    if (prefix.empty()) {
+        return TokenKind::CHAR_LITERAL;
+    }
+    
+    if (prefix == "L") {
+        return TokenKind::WCHAR_LITERAL;
+    } else if (prefix == "u") {
+        return TokenKind::CHAR16_LITERAL;
+    } else if (prefix == "U") {
+        return TokenKind::CHAR32_LITERAL;
+    } else if (prefix == "u8") {
+        // u8 character literals require C++20, treat as regular char for C++17
+        return TokenKind::CHAR_LITERAL;
+    }
+    
+    return TokenKind::CHAR_LITERAL;
+}
+
+bool RawTokenizer::ends_with_ci(const std::string& str, const std::string& suffix) const {
+    if (str.length() < suffix.length()) {
+        return false;
+    }
+    
+    std::string str_end = str.substr(str.length() - suffix.length());
+    std::transform(str_end.begin(), str_end.end(), str_end.begin(), ::tolower);
+    
+    std::string suffix_lower = suffix;
+    std::transform(suffix_lower.begin(), suffix_lower.end(), suffix_lower.begin(), ::tolower);
+    
+    return str_end == suffix_lower;
+}
+
+bool RawTokenizer::starts_with(const std::string& str, const std::string& prefix) const {
+    return str.length() >= prefix.length() && 
+           str.substr(0, prefix.length()) == prefix;
 }
 
 void RawTokenizer::error(const std::string& message) const {

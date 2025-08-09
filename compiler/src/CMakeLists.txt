@@ -11,6 +11,8 @@ add_library(cprime_common
     common/component_buffer_manager.cpp
     common/selective_buffer_sink.h
     common/logger_components.h
+    common/string_table.h
+    common/string_table.cpp
 )
 
 # Common library is header-only, but we need to link spdlog
@@ -31,6 +33,7 @@ add_library(cprime_layer2
     layer2/semantic_token.cpp
     layer2/semantic_translator.cpp
     layer2/contextual_token.cpp
+    layer2/contextual_token_kind.cpp
 )
 
 add_library(cprime_layer2validation

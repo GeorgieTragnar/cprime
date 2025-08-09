@@ -1,8 +1,10 @@
 #pragma once
 
 #include "../layer1/raw_token.h"
-#include "semantic_token.h"
+#include "contextual_token.h"
+#include "contextual_token_kind.h"
 #include "../layer1/context_stack.h"
+#include "../common/string_table.h"
 #include <functional>
 #include <unordered_map>
 #include <memory>
@@ -11,17 +13,18 @@ namespace cprime {
 
 /**
  * Semantic translator - Layer 2 of the three-layer architecture.
- * Converts raw tokens into semantic tokens with context-sensitive keyword resolution.
+ * Converts raw tokens into contextual tokens using pure enum transformations.
+ * NO STRING OPERATIONS OR OWNERSHIP - only enum mappings and string table indices.
  */
 class SemanticTranslator {
 public:
-    explicit SemanticTranslator(RawTokenStream raw_tokens);
+    explicit SemanticTranslator(RawTokenStream raw_tokens, StringTable& string_table);
     
-    // Main translation method
-    std::vector<SemanticToken> translate();
+    // Main translation method - returns ContextualTokens with enum-based resolution
+    std::vector<ContextualToken> translate();
     
     // Get result as stream for convenient processing
-    SemanticTokenStream translate_to_stream();
+    ContextualTokenStream translate_to_stream();
     
     // Error handling
     struct TranslationError {
@@ -45,47 +48,44 @@ private:
     std::vector<TranslationError> errors;
     
     // Translation state
-    std::vector<SemanticToken> semantic_tokens;
+    std::vector<ContextualToken> contextual_tokens;
+    StringTable& string_table_;  // Reference to string table for index-only operations
     size_t position;
     
-    // Main translation loop
-    SemanticToken translate_next_token();
+    // Main translation loop - pure enum transformations
+    ContextualToken translate_next_token();
     
-    // Context-sensitive keyword resolvers
-    SemanticToken resolve_runtime_keyword();
-    SemanticToken resolve_defer_keyword();
-    SemanticToken resolve_exposes_keyword();
-    SemanticToken resolve_class_keyword();
-    SemanticToken resolve_union_keyword();
-    SemanticToken resolve_interface_keyword();
-    SemanticToken resolve_function_keyword();
+    // Context-sensitive enum transformers (TokenKind -> ContextualTokenKind)
+    ContextualTokenKind resolve_runtime_context(const RawToken& token);
+    ContextualTokenKind resolve_defer_context(const RawToken& token);
+    ContextualTokenKind resolve_exposes_context(const RawToken& token);
+    ContextualTokenKind resolve_class_context(const RawToken& token);
+    ContextualTokenKind resolve_union_context(const RawToken& token);
+    ContextualTokenKind resolve_interface_context(const RawToken& token);
+    ContextualTokenKind resolve_function_context(const RawToken& token);
     
-    // Context-sensitive phrase resolvers (multi-token constructs)
-    SemanticToken resolve_access_rights_declaration();
-    SemanticToken resolve_union_declaration();
-    SemanticToken resolve_class_declaration();
-    SemanticToken resolve_type_expression();
-    SemanticToken resolve_defer_statement();
+    // Direct enum mapping for non-context-sensitive tokens
+    ContextualTokenKind map_token_kind_to_contextual(TokenKind kind);
     
-    // Pass-through token handlers
-    SemanticToken handle_identifier();
-    SemanticToken handle_literal();
-    SemanticToken handle_symbol();
-    SemanticToken handle_comment();
+    // Context management using enum state only
+    void update_parse_context(TokenKind kind, ContextualTokenKind contextual_kind);
+    bool is_in_runtime_context() const;
+    bool is_in_type_expression_context() const;
+    bool is_in_class_declaration_context() const;
     
-    // Context management helpers
-    void update_context_from_token(const RawToken& token);
-    void enter_context_from_semantic_token(const SemanticToken& token);
+    // Context management helpers - enum-based only
+    void enter_context_from_contextual_token(const ContextualToken& token);
     void exit_context_on_block_end();
     
-    // Lookahead and parsing helpers
-    bool peek_for_sequence(const std::vector<std::string>& sequence);
+    // Lookahead helpers - enum-based pattern matching
+    bool peek_for_token_sequence(const std::vector<TokenKind>& sequence);
     bool peek_for_runtime_modifier();
-    std::vector<std::string> parse_field_list();
-    std::vector<std::string> parse_parameter_list();
-    std::vector<std::string> parse_union_variants();
-    std::string parse_function_call();
-    std::string parse_expression_until(const std::string& terminator);
+    
+    // Multi-token construct detection using enum patterns
+    bool is_start_of_access_rights_declaration() const;
+    bool is_start_of_union_declaration() const;
+    bool is_start_of_class_declaration() const;
+    bool is_start_of_function_declaration() const;
     
     // Token stream navigation
     const RawToken& current_raw_token() const;
@@ -99,110 +99,94 @@ private:
     
     // Debug helpers
     void debug_print_context() const;
-    void debug_print_translation_step(const RawToken& raw, const SemanticToken& semantic) const;
+    void debug_print_translation_step(const RawToken& raw, const ContextualToken& contextual) const;
 };
 
 /**
- * Keyword resolver registry - maps keywords to their resolution strategies.
+ * Pure enum-based token transformation registry.
+ * Maps TokenKind -> ContextualTokenKind based on parsing context.
+ * NO STRING OPERATIONS - only enum transformations.
  */
-class KeywordResolverRegistry {
+class ContextualTokenMapper {
 public:
-    using ResolverFunction = std::function<SemanticToken(SemanticTranslator&, const RawToken&)>;
+    using ContextTransformer = std::function<ContextualTokenKind(const SemanticTranslator&, TokenKind)>;
     
-    KeywordResolverRegistry();
+    ContextualTokenMapper();
     
-    // Register keyword resolvers
-    void register_resolver(const std::string& keyword, ResolverFunction resolver);
+    // Register contextual transformations for specific TokenKinds
+    void register_context_transformer(TokenKind kind, ContextTransformer transformer);
     
-    // Resolve keyword based on context
-    bool can_resolve(const std::string& keyword) const;
-    SemanticToken resolve(const std::string& keyword, SemanticTranslator& translator, const RawToken& token);
+    // Transform TokenKind to ContextualTokenKind based on current context
+    ContextualTokenKind transform(const SemanticTranslator& translator, TokenKind kind) const;
     
-    // Query available keywords
-    std::vector<std::string> get_registered_keywords() const;
+    // Check if a TokenKind has contextual transformations
+    bool has_contextual_mapping(TokenKind kind) const;
+    
+    // Direct 1:1 mapping for non-contextual tokens
+    ContextualTokenKind get_direct_mapping(TokenKind kind) const;
     
 private:
-    std::unordered_map<std::string, ResolverFunction> resolvers;
+    std::unordered_map<TokenKind, ContextTransformer> context_transformers;
+    std::unordered_map<TokenKind, ContextualTokenKind> direct_mappings;
     
-    void initialize_default_resolvers();
+    void initialize_direct_mappings();
+    void initialize_context_transformers();
 };
 
 /**
- * Context-sensitive phrase parser for multi-token constructs.
- * Handles complex language constructs that span multiple tokens.
+ * Multi-token construct detector using pure enum patterns.
+ * Identifies complex constructs through TokenKind sequences without string operations.
  */
-class PhraseParser {
+class ConstructDetector {
 public:
-    explicit PhraseParser(SemanticTranslator& translator);
+    explicit ConstructDetector(const SemanticTranslator& translator);
     
-    // Parse complex constructs
-    SemanticToken parse_access_rights_declaration();
-    SemanticToken parse_union_declaration(); 
-    SemanticToken parse_class_declaration();
-    SemanticToken parse_function_declaration();
-    SemanticToken parse_defer_statement();
-    SemanticToken parse_type_expression();
+    // Pattern-based construct detection using TokenKind sequences
+    ContextualTokenKind detect_construct_start(const RawToken& token) const;
     
-    // Helper methods for parsing sub-components
-    struct AccessRightInfo {
-        std::string access_right_name;
-        std::vector<std::string> granted_fields;
-        bool is_runtime;
-    };
-    
-    struct UnionInfo {
-        std::string union_name;
-        std::vector<std::string> variants;
-        bool is_runtime;
-    };
-    
-    struct ClassInfo {
-        std::string class_name;
-        std::vector<std::string> fields;
-        std::string class_type; // "data", "functional", "danger"
-    };
-    
-    AccessRightInfo parse_access_right_info();
-    UnionInfo parse_union_info();
-    ClassInfo parse_class_info();
+    // Specific construct detectors
+    bool is_access_rights_pattern(const RawToken& current) const;
+    bool is_union_declaration_pattern(const RawToken& current) const;
+    bool is_class_declaration_pattern(const RawToken& current) const;
+    bool is_function_declaration_pattern(const RawToken& current) const;
+    bool is_defer_statement_pattern(const RawToken& current) const;
+    bool is_type_expression_pattern(const RawToken& current) const;
     
 private:
-    SemanticTranslator& translator;
+    const SemanticTranslator& translator;
     
-    // Helper methods
-    std::vector<std::string> parse_identifier_list();
-    std::string parse_qualified_identifier();
-    bool consume_keyword(const std::string& keyword);
-    bool consume_punctuation(const std::string& punct);
-    std::string expect_identifier();
+    // Pattern matching helpers using TokenKind sequences
+    bool matches_token_sequence(const std::vector<TokenKind>& pattern, size_t start_offset = 0) const;
+    bool is_runtime_modified_construct(const RawToken& current) const;
+    bool is_async_modified_construct(const RawToken& current) const;
 };
 
 /**
- * Semantic validation for translated tokens.
- * Ensures semantic tokens are valid in their context.
+ * Contextual token validation using pure enum-based logic.
+ * Ensures contextual tokens are valid in their parsing context.
  */
-class SemanticValidator {
+class ContextualTokenValidator {
 public:
-    explicit SemanticValidator(const ContextStack& context_stack);
+    explicit ContextualTokenValidator(const ContextStack& context_stack);
     
-    // Validation methods
-    bool validate(const SemanticToken& token);
+    // Validation methods using enum-based logic
+    bool validate(const ContextualToken& token);
     std::vector<std::string> get_validation_errors() const { return validation_errors; }
     
-    // Specific validations
-    bool validate_access_rights_declaration(const SemanticToken& token);
-    bool validate_union_declaration(const SemanticToken& token);
-    bool validate_class_declaration(const SemanticToken& token);
-    bool validate_defer_statement(const SemanticToken& token);
-    bool validate_type_parameter(const SemanticToken& token);
+    // Specific validations based on ContextualTokenKind
+    bool validate_access_rights_declaration(ContextualTokenKind kind);
+    bool validate_union_declaration(ContextualTokenKind kind);
+    bool validate_class_declaration(ContextualTokenKind kind);
+    bool validate_defer_statement(ContextualTokenKind kind);
+    bool validate_type_parameter(ContextualTokenKind kind);
     
 private:
     const ContextStack& context_stack;
     std::vector<std::string> validation_errors;
     
     void add_error(const std::string& error);
-    bool is_valid_identifier(const std::string& identifier);
-    bool is_valid_in_current_context(SemanticTokenType type);
+    bool is_valid_in_current_context(ContextualTokenKind kind);
+    bool is_contextually_consistent(ContextualTokenKind kind, ParseContextType context);
 };
 
 /**
@@ -210,12 +194,12 @@ private:
  */
 struct TranslationStats {
     size_t total_raw_tokens;
-    size_t total_semantic_tokens;
+    size_t total_contextual_tokens;
     size_t context_sensitive_resolutions;
     size_t errors;
     
-    std::unordered_map<std::string, size_t> keyword_resolution_counts;
-    std::unordered_map<SemanticTokenType, size_t> semantic_token_counts;
+    std::unordered_map<TokenKind, size_t> token_kind_counts;
+    std::unordered_map<ContextualTokenKind, size_t> contextual_token_counts;
     
     double translation_time_ms;
     
@@ -224,14 +208,14 @@ struct TranslationStats {
 };
 
 /**
- * Semantic translator with full debugging and statistics support.
+ * Contextual translator with full debugging and statistics support.
  */
 class DebugSemanticTranslator : public SemanticTranslator {
 public:
-    explicit DebugSemanticTranslator(RawTokenStream raw_tokens);
+    explicit DebugSemanticTranslator(RawTokenStream raw_tokens, StringTable& string_table);
     
     // Enhanced translation with debugging
-    std::vector<SemanticToken> translate_with_debug();
+    std::vector<ContextualToken> translate_with_debug();
     
     // Get translation statistics
     const TranslationStats& get_stats() const { return stats; }
@@ -247,9 +231,9 @@ private:
     bool context_tracing_enabled = false;
     bool token_tracing_enabled = false;
     
-    void update_stats(const RawToken& raw_token, const SemanticToken& semantic_token);
+    void update_stats(const RawToken& raw_token, const ContextualToken& contextual_token);
     void trace_context_change(const std::string& action, const ParseContext& context);
-    void trace_token_translation(const RawToken& raw_token, const SemanticToken& semantic_token);
+    void trace_token_translation(const RawToken& raw_token, const ContextualToken& contextual_token);
 };
 
 } // namespace cprime
