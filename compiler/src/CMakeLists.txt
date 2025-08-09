@@ -7,6 +7,10 @@ add_library(cprime_common
     common/logger.h
     common/validation_types.h
     common/common_types.h
+    common/component_buffer_manager.h
+    common/component_buffer_manager.cpp
+    common/selective_buffer_sink.h
+    common/logger_components.h
 )
 
 # Common library is header-only, but we need to link spdlog

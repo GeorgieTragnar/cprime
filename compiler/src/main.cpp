@@ -11,6 +11,7 @@
 #include <filesystem>
 
 #include "common/logger.h"
+#include "common/logger_components.h"
 #include "common/common_types.h"
 #include "layer1/raw_token.h"
 #include "layer1/context_stack.h"
@@ -109,10 +110,18 @@ bool compile(const cprime::CompilerOptions& options) {
     using namespace cprime;
     
     // Initialize logger for the compiler
-    auto logger = CPRIME_LOGGER("compiler");
+    auto logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_COMPILER);
     
     if (options.verbose) {
         logger->set_level(spdlog::level::debug);
+        
+        // Test buffer functionality in verbose mode
+        std::cout << "\n=== TESTING BUFFER FUNCTIONALITY ===\n";
+        
+        // Start buffering debug messages for tokenizer
+        CPRIME_BUFFER_BEGIN_DEBUG(CPRIME_COMPONENT_TOKENIZER);
+        
+        std::cout << "Tokenizer buffer active: " << CPRIME_BUFFER_IS_ACTIVE(CPRIME_COMPONENT_TOKENIZER) << "\n";
     } else {
         logger->set_level(spdlog::level::warn);
     }
@@ -124,23 +133,40 @@ bool compile(const cprime::CompilerOptions& options) {
     std::string source = read_file(options.input_file);
     
     // Layer 1: Tokenization
+    // Use tokenizer component logger for this section
+    auto tokenizer_logger = CPRIME_COMPONENT_LOGGER(CPRIME_COMPONENT_TOKENIZER);
+    if (options.verbose) {
+        tokenizer_logger->set_level(spdlog::level::debug);
+    }
+    
     CPRIME_LOG_DEBUG("Layer 1: Starting tokenization");
     
     RawTokenizer tokenizer(source);
     auto tokens = tokenizer.tokenize();
     
-    CPRIME_LOG_DEBUG("Tokenization complete, {} tokens generated", tokens.size());
+    // This will be logged with tokenizer logger
+    tokenizer_logger->debug("Tokenization complete, {} tokens generated", tokens.size());
     
     if (options.verbose) {
-        CPRIME_LOG_DEBUG("=== Tokens ===");
+        tokenizer_logger->debug("=== Tokens ===");
         for (const auto& token : tokens) {
-            CPRIME_LOG_DEBUG("  {}", token.to_string());
+            tokenizer_logger->debug("  {}", token.to_string());
         }
-        CPRIME_LOG_DEBUG("=== End Tokens ===");
+        tokenizer_logger->debug("=== End Tokens ===");
+        
+        // Test buffer functionality
+        std::cout << "Buffer count after tokenization: " << CPRIME_BUFFER_COUNT(CPRIME_COMPONENT_TOKENIZER) << " messages\n";
     }
     
     if (tokens.empty()) {
         CPRIME_LOG_ERROR("No tokens found in source file");
+        
+        // Demo error case - dump tokenizer buffer
+        if (options.verbose && CPRIME_BUFFER_IS_ACTIVE(CPRIME_COMPONENT_TOKENIZER)) {
+            std::cout << "\n=== ERROR CONDITION - DUMPING TOKENIZER BUFFER ===\n";
+            CPRIME_BUFFER_DUMP(CPRIME_COMPONENT_TOKENIZER);
+        }
+        
         return false;
     }
     
@@ -225,6 +251,14 @@ bool compile(const cprime::CompilerOptions& options) {
     }
     
     CPRIME_LOG_INFO("Compilation successful: {}", options.output_file);
+    
+    // Clean up buffer at end of compilation
+    if (options.verbose && CPRIME_BUFFER_IS_ACTIVE(CPRIME_COMPONENT_TOKENIZER)) {
+        std::cout << "\n=== CLEANING UP BUFFERS ===\n";
+        CPRIME_BUFFER_END(CPRIME_COMPONENT_TOKENIZER);
+        CPRIME_BUFFER_CLEAR(CPRIME_COMPONENT_TOKENIZER);
+        std::cout << "Tokenizer buffer cleared. Final buffer count: " << CPRIME_BUFFER_COUNT(CPRIME_COMPONENT_TOKENIZER) << "\n";
+    }
     
     return true;
 }
