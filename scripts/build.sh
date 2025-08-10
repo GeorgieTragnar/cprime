@@ -2,35 +2,45 @@
 
 # CPrime Compiler Build Script
 # Clean, minimal output with conditional test building
+# Uses hybrid helper architecture: pipe-through for verbose/normal, capture for quiet
 
 set -e  # Exit on any error
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
-# Get the project root directory (parent of scripts/)
+# Source common utilities
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-SOURCE_DIR="$PROJECT_ROOT/compiler"
-BUILD_DIR="$PROJECT_ROOT/build"
+source "$SCRIPT_DIR/other/build_common.sh"
 
-# Verify source directory exists
-if [ ! -d "$SOURCE_DIR" ]; then
-    echo -e "${RED}Error: Source directory not found at $SOURCE_DIR${NC}"
-    exit 1
-fi
+# Initialize paths
+get_project_paths
 
-# Parse command line arguments
+# Default values
 BUILD_TYPE="Debug"
 CLEAN_BUILD=false
 BUILD_TESTS=false
-VERBOSE=true
+VERBOSE=false
 
-# Use getopts for proper short option parsing
+# Usage function
+show_help() {
+    echo "CPrime Compiler Build Script"
+    echo "Usage: $0 [OPTIONS]"
+    echo ""
+    echo "Options:"
+    echo "  -c, --clean     Clean build directory before building"
+    echo "  -t, --tests     Build Google Test suite"
+    echo "  -r, --release   Build in Release mode (default: Debug)"
+    echo "  -v, --verbose   Enable verbose build output"
+    echo "  -h, --help      Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  $0              # Build compiler only"
+    echo "  $0 -t           # Build compiler with tests"
+    echo "  $0 -ct          # Clean build with tests"
+    echo "  $0 -ctr         # Clean Release build with tests"
+    echo "  $0 -cv          # Clean build with verbose output"
+    echo "  $0 --clean --tests --release  # Long form options"
+}
+
+# Parse command line arguments using getopts
 while getopts "ctvhrs-:" opt; do
     case $opt in
         c)
@@ -46,24 +56,11 @@ while getopts "ctvhrs-:" opt; do
             BUILD_TYPE="Release"
             ;;
         h)
-            echo "CPrime Compiler Build Script"
-            echo "Usage: $0 [OPTIONS]"
-            echo ""
-            echo "Options:"
-            echo "  -c, --clean     Clean build directory before building"
-            echo "  -t, --tests     Build Google Test suite"
-            echo "  -r, --release   Build in Release mode (default: Debug)"
-            echo "  -v, --verbose   Enable verbose build output"
-            echo "  -h, --help      Show this help message"
-            echo ""
-            echo "Examples:"
-            echo "  $0              # Build compiler only"
-            echo "  $0 -t           # Build compiler with tests"
-            echo "  $0 -ct          # Clean build with tests"
-            echo "  $0 -ctr         # Clean Release build with tests"
-            echo "  $0 -cv          # Clean build with verbose output"
-            echo "  $0 --clean --tests --release  # Long form options"
+            show_help
             exit 0
+            ;;
+        s)
+            # Handle short options that might be combined
             ;;
         -)
             # Handle long options
@@ -81,23 +78,7 @@ while getopts "ctvhrs-:" opt; do
                     VERBOSE=true
                     ;;
                 help)
-                    echo "CPrime Compiler Build Script"
-                    echo "Usage: $0 [OPTIONS]"
-                    echo ""
-                    echo "Options:"
-                    echo "  -c, --clean     Clean build directory before building"
-                    echo "  -t, --tests     Build Google Test suite"
-                    echo "  -r, --release   Build in Release mode (default: Debug)"
-                    echo "  -v, --verbose   Enable verbose build output"
-                    echo "  -h, --help      Show this help message"
-                    echo ""
-                    echo "Examples:"
-                    echo "  $0              # Build compiler only"
-                    echo "  $0 -t           # Build compiler with tests"
-                    echo "  $0 -ct          # Clean build with tests"
-                    echo "  $0 -ctr         # Clean Release build with tests"
-                    echo "  $0 -cv          # Clean build with verbose output"
-                    echo "  $0 --clean --tests --release  # Long form options"
+                    show_help
                     exit 0
                     ;;
                 *)
@@ -117,95 +98,51 @@ done
 # Shift processed options
 shift $((OPTIND-1))
 
+# Verify prerequisites
+if ! verify_source_directory; then
+    exit 1
+fi
+
+if ! check_build_tools; then
+    exit 1
+fi
+
 # Clean build if requested
 if [ "$CLEAN_BUILD" = true ]; then
-    echo -e "${YELLOW}Cleaning build directory...${NC}"
-    rm -rf "$BUILD_DIR"
+    clean_build_directory "$BUILD_DIR" false
 fi
 
-# Create build directory and navigate to it
-mkdir -p "$BUILD_DIR"
-cd "$BUILD_DIR"
+# Create build directory
+create_build_directory "$BUILD_DIR"
 
-# Check for required tools
-if ! command -v cmake &> /dev/null; then
-    echo -e "${RED}Error: cmake is required but not installed${NC}"
-    exit 1
-fi
+# Show build information
+echo -e "${BLUE}Configuring build...${NC}"
 
-if ! command -v make &> /dev/null; then
-    echo -e "${RED}Error: make is required but not installed${NC}"
-    exit 1
-fi
-
-if ! command -v g++ &> /dev/null && ! command -v clang++ &> /dev/null; then
-    echo -e "${RED}Error: C++17 compatible compiler is required${NC}"
-    exit 1
-fi
-
-# Configure with CMake
-CMAKE_ARGS="-DCMAKE_BUILD_TYPE=$BUILD_TYPE"
-
-# Set test building based on flag
+# Prepare helper script arguments
+HELPER_ARGS="--build-type $BUILD_TYPE --cores $(get_core_count)"
 if [ "$BUILD_TESTS" = true ]; then
-    CMAKE_ARGS="$CMAKE_ARGS -DBUILD_TESTS=ON"
-else
-    CMAKE_ARGS="$CMAKE_ARGS -DBUILD_TESTS=OFF"
+    HELPER_ARGS="$HELPER_ARGS --build-tests"
 fi
 
+# Execute build using helper script
 if [ "$VERBOSE" = true ]; then
-    CMAKE_ARGS="$CMAKE_ARGS -DCMAKE_VERBOSE_MAKEFILE=ON"
-    echo "Configuring with: cmake $SOURCE_DIR $CMAKE_ARGS"
-fi
-
-# CMake configuration
-if [ "$VERBOSE" = true ]; then
-    cmake "$SOURCE_DIR" $CMAKE_ARGS
+    # VERBOSE MODE: Direct pipe-through with full details
+    "$SCRIPT_DIR/other/build_helper.sh" $HELPER_ARGS --verbose
+    HELPER_EXIT_CODE=$?
 else
-    cmake "$SOURCE_DIR" $CMAKE_ARGS > /dev/null 2>&1
+    # NORMAL MODE: Direct pipe-through with clean filtered output
+    "$SCRIPT_DIR/other/build_helper.sh" $HELPER_ARGS --normal
+    HELPER_EXIT_CODE=$?
 fi
 
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: CMake configuration failed${NC}"
-    exit 1
-fi
-
-# Build
-# Get number of CPU cores for parallel build
-if command -v nproc &> /dev/null; then
-    CORES=$(nproc)
-elif command -v sysctl &> /dev/null; then
-    CORES=$(sysctl -n hw.ncpu)
-else
-    CORES=4  # fallback
-fi
-
-if [ "$VERBOSE" = true ]; then
-    make -j$CORES VERBOSE=1
-else
-    make -j$CORES
-fi
-
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Error: Build failed${NC}"
-    exit 1
-fi
-
-# Build completion - check for main executable and core libraries
-if [ -f "bin/cprime" ] && [ -f "src/libcprime_commons.a" ] && [ -f "src/libcprime_layer0.a" ] && [ -f "src/libcprime_orchestrator.a" ]; then
-    echo -e "${GREEN}✓ CPrime compiler built successfully${NC}"
-    echo -e "${GREEN}  - Main executable: bin/cprime${NC}"
-    echo -e "${GREEN}  - Core libraries: commons, layer0, orchestrator${NC}"
-else
-    echo -e "${RED}Error: Compiler build failed - missing components${NC}"
-    echo -e "${RED}  Expected: bin/cprime, libcprime_commons.a, libcprime_layer0.a, libcprime_orchestrator.a${NC}"
-    exit 1
-fi
-
-if [ "$BUILD_TESTS" = true ]; then
-    if [ -f "tests/cprime_tests" ]; then
+# Handle test build completion message
+if [ "$BUILD_TESTS" = true ] && [ $HELPER_EXIT_CODE -eq 0 ]; then
+    if [ -f "$BUILD_DIR/tests/cprime_tests" ]; then
         echo -e "${GREEN}✓ Test suite built successfully${NC}"
     else
         echo -e "${YELLOW}⚠ Test suite build failed${NC}"
     fi
 fi
+
+# Exit with the same code as the helper script
+exit $HELPER_EXIT_CODE
