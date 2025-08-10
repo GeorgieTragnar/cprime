@@ -191,11 +191,14 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Build completion
-if [ -f "src/libcprime_compiler.a" ]; then
+# Build completion - check for main executable and core libraries
+if [ -f "bin/cprime" ] && [ -f "src/libcprime_commons.a" ] && [ -f "src/libcprime_layer0.a" ] && [ -f "src/libcprime_orchestrator.a" ]; then
     echo -e "${GREEN}✓ CPrime compiler built successfully${NC}"
+    echo -e "${GREEN}  - Main executable: bin/cprime${NC}"
+    echo -e "${GREEN}  - Core libraries: commons, layer0, orchestrator${NC}"
 else
-    echo -e "${RED}Error: Compiler build failed - library not found${NC}"
+    echo -e "${RED}Error: Compiler build failed - missing components${NC}"
+    echo -e "${RED}  Expected: bin/cprime, libcprime_commons.a, libcprime_layer0.a, libcprime_orchestrator.a${NC}"
     exit 1
 fi
 

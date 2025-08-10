@@ -1,8 +1,6 @@
 #pragma once
 
 #include "compilation_parameters.h"
-#include "../commons/compilation_context.h"
-#include "../commons/common_types.h"
 #include <filesystem>
 #include <map>
 #include <sstream>
@@ -18,36 +16,36 @@ namespace cprime {
  * - Convert file contents to stringstreams
  * - Generate unique stream IDs for each input
  * - Handle file reading errors gracefully
- * - Populate CompilationContext.input_streams
+ * - Return named stringstream map for Layer 1
  * 
  * Design:
  * - Static methods (stateless processing)
  * - Takes file paths, returns stream map
  * - Stream ID generation based on file paths
- * - Comprehensive error reporting
+ * - Basic error reporting
  */
 class InputProcessor {
 public:
     /**
      * Process all input files specified in compilation parameters.
-     * Reads files and populates the compilation context with input streams.
+     * Reads files and returns input streams map.
      * 
      * @param params Compilation parameters containing input file paths
-     * @param context Compilation context to populate with input streams
-     * @return VoidResult indicating success or failure with error message
+     * @return Map of stream_id -> stringstream, or empty map on error
+     * TODO: Implement proper error handling with Result<T> type system
      */
-    static VoidResult process_input_files(
-        const CompilationParameters& params, 
-        CompilationContext& context
+    static std::map<std::string, std::stringstream> process_input_files(
+        const CompilationParameters& params
     );
     
     /**
      * Read a single file into a stringstream.
      * 
      * @param file_path Path to the file to read
-     * @return Result<std::stringstream> containing file contents or error
+     * @return stringstream with file contents, or empty stream on error
+     * TODO: Implement proper error handling with Result<T> type system
      */
-    static Result<std::stringstream> read_file(const std::filesystem::path& file_path);
+    static std::stringstream read_file(const std::filesystem::path& file_path);
     
     /**
      * Generate unique stream ID from file path.

@@ -3,12 +3,19 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <spdlog/spdlog.h>
+#include <memory>
+
+// Forward declare selective buffer classes
+namespace cprime {
+    class ComponentBufferManager;
+}
 
 namespace cprime {
 
 /**
- * Simple logging system for the compiler.
- * Simplified version for initial orchestrator implementation.
+ * Enhanced logging system for the compiler with selective buffering support.
+ * Integrates spdlog with our custom selective buffer sink for component-based buffering.
  */
 enum class LogLevel {
     Debug = 0,
@@ -19,105 +26,111 @@ enum class LogLevel {
 
 class Logger {
 private:
-    LogLevel current_level_ = LogLevel::Info;
+    std::shared_ptr<spdlog::logger> spdlog_logger_;
     std::string component_;
     
 public:
-    explicit Logger(const std::string& component) : component_(component) {}
+    // Convert our LogLevel to spdlog::level (made public for LoggerFactory access)
+    static spdlog::level::level_enum to_spdlog_level(LogLevel level) {
+        switch (level) {
+            case LogLevel::Debug: return spdlog::level::debug;
+            case LogLevel::Info: return spdlog::level::info;
+            case LogLevel::Warning: return spdlog::level::warn;
+            case LogLevel::Error: return spdlog::level::err;
+            default: return spdlog::level::info;
+        }
+    }
+
+private:
+    
+public:
+    explicit Logger(const std::string& component) : component_(component) {
+        // Create spdlog logger for this component
+        spdlog_logger_ = spdlog::get(component);
+        if (!spdlog_logger_) {
+            // Create with default sinks (which includes our selective buffer sink)
+            auto default_sinks = spdlog::default_logger()->sinks();
+            spdlog_logger_ = std::make_shared<spdlog::logger>(component, default_sinks.begin(), default_sinks.end());
+            spdlog::register_logger(spdlog_logger_);
+        }
+    }
     
     void set_level(LogLevel level) {
-        current_level_ = level;
+        spdlog_logger_->set_level(to_spdlog_level(level));
     }
     
     LogLevel get_level() const {
-        return current_level_;
+        // Convert spdlog level back to our LogLevel
+        switch (spdlog_logger_->level()) {
+            case spdlog::level::debug: return LogLevel::Debug;
+            case spdlog::level::info: return LogLevel::Info;
+            case spdlog::level::warn: return LogLevel::Warning;
+            case spdlog::level::err: return LogLevel::Error;
+            default: return LogLevel::Info;
+        }
     }
     
     template<typename... Args>
     void debug(const std::string& format, Args&&... args) {
-        if (current_level_ <= LogLevel::Debug) {
-            log(LogLevel::Debug, format, std::forward<Args>(args)...);
-        }
+        spdlog_logger_->debug(format, std::forward<Args>(args)...);
     }
     
     template<typename... Args>
     void info(const std::string& format, Args&&... args) {
-        if (current_level_ <= LogLevel::Info) {
-            log(LogLevel::Info, format, std::forward<Args>(args)...);
-        }
+        spdlog_logger_->info(format, std::forward<Args>(args)...);
     }
     
     template<typename... Args>
     void warning(const std::string& format, Args&&... args) {
-        if (current_level_ <= LogLevel::Warning) {
-            log(LogLevel::Warning, format, std::forward<Args>(args)...);
-        }
+        spdlog_logger_->warn(format, std::forward<Args>(args)...);
     }
     
     template<typename... Args>
     void error(const std::string& format, Args&&... args) {
-        if (current_level_ <= LogLevel::Error) {
-            log(LogLevel::Error, format, std::forward<Args>(args)...);
-        }
+        spdlog_logger_->error(format, std::forward<Args>(args)...);
     }
     
-private:
-    template<typename... Args>
-    void log(LogLevel level, const std::string& format, Args&&... args) {
-        std::string level_str;
-        switch (level) {
-            case LogLevel::Debug: level_str = "DEBUG"; break;
-            case LogLevel::Info: level_str = "INFO"; break;
-            case LogLevel::Warning: level_str = "WARN"; break;
-            case LogLevel::Error: level_str = "ERROR"; break;
-        }
-        
-        // Simple format replacement (just for basic cases)
-        std::string message = format;
-        replace_args(message, std::forward<Args>(args)...);
-        
-        std::cout << "[" << level_str << "][" << component_ << "] " << message << std::endl;
+    // Access to underlying spdlog logger for advanced usage
+    std::shared_ptr<spdlog::logger> get_spdlog_logger() const {
+        return spdlog_logger_;
     }
-    
-    // Simple string replacement for {} placeholders
-    template<typename T>
-    void replace_args(std::string& str, T&& arg) {
-        size_t pos = str.find("{}");
-        if (pos != std::string::npos) {
-            std::stringstream ss;
-            ss << arg;
-            str.replace(pos, 2, ss.str());
-        }
-    }
-    
-    template<typename T, typename... Args>
-    void replace_args(std::string& str, T&& first, Args&&... rest) {
-        replace_args(str, std::forward<T>(first));
-        replace_args(str, std::forward<Args>(rest)...);
-    }
-    
-    void replace_args(std::string&) {} // Base case
 };
 
 /**
- * Global logger factory for different components.
+ * Global logger factory for different components with selective buffering support.
  */
 class LoggerFactory {
 public:
     static Logger get_logger(const std::string& component) {
+        // Initialize selective buffering if not already done
+        initialize_selective_buffering();
         return Logger(component);
     }
     
     static void set_global_level(LogLevel level) {
-        global_level_ = level;
+        spdlog::set_level(Logger::to_spdlog_level(level));
     }
     
     static LogLevel get_global_level() {
-        return global_level_;
+        // Convert spdlog global level back to our LogLevel
+        switch (spdlog::get_level()) {
+            case spdlog::level::debug: return LogLevel::Debug;
+            case spdlog::level::info: return LogLevel::Info;
+            case spdlog::level::warn: return LogLevel::Warning;
+            case spdlog::level::err: return LogLevel::Error;
+            default: return LogLevel::Info;
+        }
     }
+    
+    // Access to buffer manager for advanced selective buffering control
+    static std::shared_ptr<ComponentBufferManager> get_buffer_manager();
+    
+    // Initialize selective buffering system (called automatically)
+    static void initialize_selective_buffering();
 
 private:
-    static LogLevel global_level_;
+    static std::shared_ptr<ComponentBufferManager> buffer_manager_;
+    static bool buffering_initialized_;
 };
 
 // Convenience macros

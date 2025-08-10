@@ -7,12 +7,12 @@
 
 #include "orchestrator.h"
 #include "layer0/compilation_parameters.h"
-#include "commons/common_types.h"
 
 namespace fs = std::filesystem;
 
 void print_usage(const char* program_name) {
-    std::cout << cprime::VersionInfo::get_full_version_string() << "\n";
+    // TODO: Implement VersionInfo system for version string display
+    std::cout << "CPrime Compiler v2.0.0" << "\n";
     std::cout << "Usage: " << program_name << " [options] <input_file>\n\n";
     std::cout << "Options:\n";
     std::cout << "  -o <file>        Output file name (default: a.out)\n";

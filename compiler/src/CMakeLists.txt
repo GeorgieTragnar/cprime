@@ -8,14 +8,25 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Create commons library (shared infrastructure)
 add_library(cprime_commons
-    commons/common_types.h
+    commons/context.h
+    commons/contextualToken.h
+    commons/instruction.h
+    commons/scope.h
+    commons/rawToken.h
+    commons/token.h
+    commons/enum/token.h
+    commons/enum/rawToken.h
+    commons/enum/contextualToken.h
     commons/logger.h
     commons/logger.cpp
-    commons/compilation_context.h
+    commons/dirty/selective_buffer_sink.h
+    commons/dirty/component_buffer_manager.h
+    commons/dirty/component_buffer_manager.cpp
 )
 
 target_include_directories(cprime_commons PUBLIC .)
 target_compile_features(cprime_commons PUBLIC cxx_std_17)
+target_link_libraries(cprime_commons PUBLIC spdlog::spdlog)
 
 # Create Layer 0 library (input processing)
 add_library(cprime_layer0

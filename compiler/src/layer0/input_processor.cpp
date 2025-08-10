@@ -1,57 +1,67 @@
 #include "input_processor.h"
 #include <fstream>
 #include <sstream>
+#include <iostream>
 
 namespace cprime {
 
-VoidResult InputProcessor::process_input_files(
-    const CompilationParameters& params, 
-    CompilationContext& context
+std::map<std::string, std::stringstream> InputProcessor::process_input_files(
+    const CompilationParameters& params
 ) {
-    // Clear any existing input streams
-    context.input_streams.clear();
+    std::map<std::string, std::stringstream> input_streams;
     
     // Process each input file
     for (const auto& file_path : params.input_files) {
         // Validate file
         if (!is_file_readable(file_path)) {
-            return failure<bool>("File not readable: " + file_path.string());
+            // TODO: Implement proper error handling with Result<T> type system
+            std::cerr << "Error: File not readable: " << file_path.string() << std::endl;
+            return {}; // Return empty map to signal error
         }
         
         if (!has_valid_extension(file_path)) {
-            return failure<bool>("Invalid file extension: " + file_path.string() + 
-                               " (expected .cp or .cprime)");
+            // TODO: Implement proper error handling with Result<T> type system
+            std::cerr << "Error: Invalid file extension: " << file_path.string() 
+                      << " (expected .cp or .cprime)" << std::endl;
+            return {}; // Return empty map to signal error
         }
         
         // Read file
-        auto file_result = read_file(file_path);
-        if (!file_result.success()) {
-            return failure<bool>("Failed to read file " + file_path.string() + 
-                               ": " + file_result.error());
+        std::stringstream file_stream = read_file(file_path);
+        if (file_stream.str().empty() && file_stream.fail()) {
+            // TODO: Implement proper error handling with Result<T> type system
+            std::cerr << "Error: Failed to read file " << file_path.string() << std::endl;
+            return {}; // Return empty map to signal error
         }
         
         // Generate stream ID and store
         std::string stream_id = generate_stream_id(file_path);
-        context.input_streams[stream_id] = std::move(file_result.value());
+        input_streams[stream_id] = std::move(file_stream);
     }
     
-    return success();
+    return input_streams;
 }
 
-Result<std::stringstream> InputProcessor::read_file(const std::filesystem::path& file_path) {
+std::stringstream InputProcessor::read_file(const std::filesystem::path& file_path) {
     std::ifstream file(file_path);
+    std::stringstream stream;
+    
     if (!file.is_open()) {
-        return failure<std::stringstream>("Cannot open file: " + file_path.string());
+        // TODO: Implement proper error handling with Result<T> type system
+        std::cerr << "Error: Cannot open file: " << file_path.string() << std::endl;
+        stream.setstate(std::ios::failbit);
+        return stream;
     }
     
-    std::stringstream stream;
     stream << file.rdbuf();
     
     if (file.bad()) {
-        return failure<std::stringstream>("Error reading file: " + file_path.string());
+        // TODO: Implement proper error handling with Result<T> type system
+        std::cerr << "Error: Error reading file: " << file_path.string() << std::endl;
+        stream.setstate(std::ios::failbit);
     }
     
-    return Result<std::stringstream>(std::move(stream));
+    return stream;
 }
 
 std::string InputProcessor::generate_stream_id(const std::filesystem::path& file_path) {
