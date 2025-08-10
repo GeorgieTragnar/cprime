@@ -149,11 +149,11 @@ private:
 // Neat-base style LOG macros with two-column layout
 // Usage: auto logger = CPRIME_LOGGER("component"); LOG_DEBUG("message with {}", arg);
 // Note: These expect a variable named 'logger' of type cprime::Logger in scope
-#define LOG_TRACE(...) do { logger.debug(fmt::format("{:<186} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
-#define LOG_DEBUG(...) do { logger.debug(fmt::format("{:<186} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
-#define LOG_INFO(...) do { logger.info(fmt::format("{:<186} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
-#define LOG_WARN(...) do { logger.warning(fmt::format("{:<186} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
-#define LOG_ERROR(...) do { logger.error(fmt::format("{:<186} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
-#define LOG_CRITICAL(...) do { logger.error(fmt::format("{:<186} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
+#define LOG_TRACE(...) do { logger.debug(fmt::format("{:<174} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
+#define LOG_DEBUG(...) do { logger.debug(fmt::format("{:<174} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
+#define LOG_INFO(...) do { logger.info(fmt::format("{:<174} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
+#define LOG_WARN(...) do { logger.warning(fmt::format("{:<174} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
+#define LOG_ERROR(...) do { logger.error(fmt::format("{:<174} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
+#define LOG_CRITICAL(...) do { logger.error(fmt::format("{:<174} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
 
 } // namespace cprime

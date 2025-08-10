@@ -6,6 +6,11 @@
 #include <sstream>
 #include <string>
 
+// Forward declaration for friend access
+namespace cprime::layer0validation {
+    class InputDebug;
+}
+
 namespace cprime {
 
 /**
@@ -25,6 +30,8 @@ namespace cprime {
  * - Basic error reporting
  */
 class InputProcessor {
+    // Allow validation layer friend access for debugging
+    friend class cprime::layer0validation::InputDebug;
 public:
     /**
      * Process all input files specified in compilation parameters.

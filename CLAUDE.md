@@ -96,27 +96,43 @@ CPrime is a systems programming language designed to achieve everything that C++
 - **Explicit Overrides**: `--l1v`, `--l2v`, etc. for specific validation layers
 - **Backward Compatible**: Supports old `-l1`, `-l2v` syntax
 
-### Debug/Analysis Script: `./scripts/cprime_analyze.sh`
+### Debug/Analysis Script: `./scripts/analyze.sh`
 **The ONLY way to debug and analyze code**
 
 ```bash
-# Analysis modes
-./scripts/cprime_analyze.sh tokens example.cp          # Raw token dump
-./scripts/cprime_analyze.sh context example.cp        # Context resolution
-./scripts/cprime_analyze.sh ast example.cp            # AST analysis
-./scripts/cprime_analyze.sh full example.cp           # Complete pipeline
+# Layer 0 analysis (CURRENTLY AVAILABLE)
+./scripts/analyze.sh input hello                    # Debug input processing for hello.cprime
+./scripts/analyze.sh streams simple                 # Analyze stringstreams for simple.cp
+./scripts/analyze.sh validation class_test          # Show file validation
+./scripts/analyze.sh layer0 hello                   # Complete Layer 0 analysis
 
-# Interactive debugging
-./scripts/cprime_analyze.sh interactive               # REPL-style analysis
+# With options
+./scripts/analyze.sh -v streams hello               # Verbose output
+./scripts/analyze.sh --quiet layer0 simple          # Minimal headers
+./scripts/analyze.sh layer0 hello -- --extra-flag   # Pass extra CLI flags
 
-# From stdin
-echo 'class Test {}' | ./scripts/cprime_analyze.sh tokens
+# Future layers (not yet implemented)
+./scripts/analyze.sh tokens hello                   # Layer 1: Raw token dump
+./scripts/analyze.sh context hello                  # Layer 2: Context resolution  
+./scripts/analyze.sh ast hello                      # Layer 3: AST analysis
+./scripts/analyze.sh full hello                     # Complete pipeline
+
+# Show available examples
+./scripts/analyze.sh --help                         # List all available examples
 ```
 
+**Key Features:**
+- **Smart File Resolution**: Looks for `.cprime` first, then `.cp` extension
+- **Built-in Example Discovery**: Automatically lists all available examples  
+- **Layer 0 Focus**: Currently supports input processing, stream analysis, and validation
+- **Verbose/Quiet Modes**: Control output detail level
+- **CLI Integration**: Uses `cprime_cli` binary for actual analysis
+
 **Purpose:** 
-- Layer-specific debug inspection through `cprime_cli` binary
-- **Future Vision**: Will evolve into GDB-like project debugger
-- **Current Focus**: Individual layer debug functionality for early development
+- **Primary Interface**: Main way to debug compiler layers with example files
+- **Development Testing**: Essential for Layer 0 debugging and validation
+- **Future Integration**: Will expand as more layers are implemented
+- **Layer-by-Layer**: Focused debugging capabilities for each compiler layer
 
 ### Compilation Script: `./scripts/compile.sh`
 **The ONLY way to compile example CPrime files**
@@ -231,8 +247,8 @@ echo 'class Test {}' | ./scripts/cprime_analyze.sh tokens
 # 2. Test with examples
 ./scripts/compile.sh class_test --debug
 
-# 3. Debug layer functionality  
-./scripts/cprime_analyze.sh context examples/test_sample.cp
+# 3. Debug layer functionality (when available)
+./scripts/analyze.sh context test_sample
 
 # 4. Run validation only
 ./scripts/test_runner.sh --l2v
@@ -258,13 +274,34 @@ echo 'class Test {}' | ./scripts/cprime_analyze.sh tokens
 ./scripts/compile.sh --help
 ```
 
+### Layer 0 Debugging
+```bash
+# 1. Debug input processing
+./scripts/analyze.sh input hello
+
+# 2. Analyze stream creation
+./scripts/analyze.sh streams simple
+
+# 3. Check file validation
+./scripts/analyze.sh validation class_test
+
+# 4. Complete Layer 0 analysis
+./scripts/analyze.sh layer0 hello
+
+# 5. Verbose debugging
+./scripts/analyze.sh -v layer0 simple
+
+# 6. See all available examples
+./scripts/analyze.sh --help
+```
+
 ### Debugging Failed Tests
 ```bash
 # 1. Run specific failing layer
 ./scripts/test_runner.sh -l 1  # Layer 1 without validation
 
-# 2. Analyze problematic code
-./scripts/cprime_analyze.sh tokens examples/problematic_code.cp
+# 2. Debug Layer 0 issues
+./scripts/analyze.sh layer0 problematic_example
 
 # 3. Check logs
 tail -f logs/cprime.log
@@ -286,21 +323,24 @@ tail -f logs/cprime.log
 ./scripts/compile.sh hello
 ./scripts/compile.sh class_test --debug
 
+# Debug Layer 0 (input processing)
+./scripts/analyze.sh layer0 hello
+./scripts/analyze.sh -v streams simple
+
 # Run all layers with validation (when available)
 ./scripts/test_runner.sh 1-4
 
-# Debug tokenization (when cli available)
-./scripts/cprime_analyze.sh tokens examples/hello.cprime
-
-# Interactive analysis (when cli available)
-./scripts/cprime_analyze.sh interactive
+# Future debugging (when layers implemented)
+./scripts/analyze.sh tokens hello
+./scripts/analyze.sh context simple
 ```
 
 ### When Things Go Wrong
 1. **Build Fails**: Check vcpkg dependencies, ensure CMake 3.16+
 2. **Tests Fail**: Use layer-specific testing with `./scripts/test_runner.sh [layer]`
-3. **Analysis Fails**: Ensure `cprime_cli` binary exists in `build/src/`
-4. **Scripts Need Enhancement**: Follow Script Enhancement Policy above
+3. **Analysis Fails**: Ensure `cprime_cli` binary exists in `build/bin/`
+4. **Layer 0 Issues**: Use `./scripts/analyze.sh layer0 [example]` for debugging
+5. **Scripts Need Enhancement**: Follow Script Enhancement Policy above
 
 ---
 

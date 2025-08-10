@@ -49,6 +49,18 @@ target_include_directories(cprime_orchestrator PUBLIC .)
 target_link_libraries(cprime_orchestrator PUBLIC cprime_commons cprime_layer0)
 target_compile_features(cprime_orchestrator PUBLIC cxx_std_17)
 
+# Create layer0validation library (debug support for Layer 0)
+add_library(cprime_layer0validation
+    layer0validation/input_debug.h
+    layer0validation/input_debug.cpp
+    layer0validation/stream_inspector.h
+    layer0validation/stream_inspector.cpp
+)
+
+target_include_directories(cprime_layer0validation PUBLIC .)
+target_link_libraries(cprime_layer0validation PUBLIC cprime_commons cprime_layer0)
+target_compile_features(cprime_layer0validation PUBLIC cxx_std_17)
+
 # Compiler flags for all libraries
 set(COMPILER_FLAGS 
     -Wall -Wextra -Wpedantic
@@ -57,7 +69,7 @@ set(COMPILER_FLAGS
 )
 
 # Apply flags to all libraries
-foreach(lib IN ITEMS cprime_commons cprime_layer0 cprime_orchestrator)
+foreach(lib IN ITEMS cprime_commons cprime_layer0 cprime_orchestrator cprime_layer0validation)
     target_compile_options(${lib} PRIVATE ${COMPILER_FLAGS})
 endforeach()
 
@@ -68,5 +80,19 @@ target_compile_features(cprime PUBLIC cxx_std_17)
 target_compile_options(cprime PRIVATE ${COMPILER_FLAGS})
 
 set_target_properties(cprime PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+)
+
+# CLI development tool executable
+add_executable(cprime_cli 
+    cli/cprime_cli.cpp
+    cli/cli_options.cpp
+    cli/cli_options.h
+)
+target_link_libraries(cprime_cli cprime_layer0validation cprime_orchestrator)
+target_compile_features(cprime_cli PUBLIC cxx_std_17)
+target_compile_options(cprime_cli PRIVATE ${COMPILER_FLAGS})
+
+set_target_properties(cprime_cli PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
