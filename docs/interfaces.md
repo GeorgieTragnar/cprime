@@ -1052,3 +1052,47 @@ CPrime's interface system has evolved to support increasingly sophisticated comp
 This evolution maintains backward compatibility while enabling new architectural patterns that were previously impossible or costly.
 
 Interfaces provide a clean, type-safe way to define both common operations and memory access patterns across different types, complementing CPrime's functional classes system by avoiding the need for frequent casting while enabling powerful N:M composition patterns and maintaining compile-time safety and performance.
+
+## Interface Openness Control
+
+### Symbol-Based ODR Enforcement
+
+Interface openness in CPrime is controlled by **symbols in precompiled libraries**, not header declarations. This provides compile-time safety through ODR (One Definition Rule) compliance while preventing developer accidents.
+
+#### Default Closed Behavior
+```cpp
+// Interface declared in header
+interface Serializable {
+    fn serialize(&self) -> Vec<u8>;
+}
+
+// Library compiled WITHOUT explicit openness -> automatically closed
+// Attempting unauthorized implementation:
+impl Serializable for MyCustomType { ... }  // ❌ Link error
+```
+
+#### Explicit Openness Control
+```cpp
+// Library compilation creates openness symbols:
+// _cprime_interface_Serializable_openness_closed      (default)
+// _cprime_interface_Display_openness_data_open        (explicit)
+// _cprime_interface_Plugin_openness_fully_open        (explicit)
+```
+
+#### Link-Time Enforcement
+```bash
+# Developer accident caught at link time:
+Link Error: Interface 'Serializable' does not allow implementation by 'MyCustomType'
+Library: libserialization.so
+Interface openness: closed
+Suggestion: Check library documentation for extension points
+```
+
+#### Benefits of Symbol-Based Approach
+1. **Single Source of Truth**: Library binary determines actual openness, not headers
+2. **Accident Prevention**: Mismatched headers/documentation caught at compile time  
+3. **Version Safety**: Interface contract evolution enforced by linker
+4. **ODR Compliance**: Exactly one interface definition per program
+5. **Security Equivalent**: Same trust model as C++ friend system
+
+This approach ensures that interface contracts are enforced by the compilation system rather than relying on developer discipline or header promises that cannot be verified.
