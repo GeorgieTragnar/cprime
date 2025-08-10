@@ -32,17 +32,18 @@ CPrime is a systems programming language designed to achieve everything that C++
 │   ├── layers/          # Individual layer documentation (see references below)
 │   └── commons/         # Shared component documentation
 ├── examples/            # Sample .cp and .cprime files for testing
-├── scripts/             # BUILD/TEST/DEBUG AUTOMATION (MANDATORY INTERFACE)
+├── scripts/             # BUILD/TEST/DEBUG/COMPILE AUTOMATION (MANDATORY INTERFACE)
 │   ├── build.sh         # ALL BUILDING MUST USE THIS
 │   ├── test_runner.sh   # ALL TESTING MUST USE THIS  
-│   └── cprime_analyze.sh # ALL DEBUGGING MUST USE THIS
+│   ├── cprime_analyze.sh # ALL DEBUGGING MUST USE THIS
+│   └── compile.sh       # ALL EXAMPLE COMPILATION MUST USE THIS
 └── logs/               # Compiler and test execution logs
 ```
 
 ## **MANDATORY WORKFLOW SCRIPTS**
 
 ### ⚠️ CRITICAL RULE: Use Scripts ONLY
-**ALL build, test, and debug operations MUST go through the official scripts. Never bypass these scripts - if they can't do something needed, enhance the scripts instead.**
+**ALL build, test, debug, and compilation operations MUST go through the official scripts. Never bypass these scripts - if they can't do something needed, enhance the scripts instead.**
 
 ### Build Script: `./scripts/build.sh`
 **The ONLY way to build the project**
@@ -117,6 +118,43 @@ echo 'class Test {}' | ./scripts/cprime_analyze.sh tokens
 - **Future Vision**: Will evolve into GDB-like project debugger
 - **Current Focus**: Individual layer debug functionality for early development
 
+### Compilation Script: `./scripts/compile.sh`
+**The ONLY way to compile example CPrime files**
+
+```bash
+# Basic compilation
+./scripts/compile.sh hello                    # Compile examples/hello.cprime
+./scripts/compile.sh simple                   # Compile examples/simple.cp
+./scripts/compile.sh class_test               # Compile examples/class_test.cprime
+
+# With options
+./scripts/compile.sh --debug hello            # Enable debug mode
+./scripts/compile.sh --quiet simple           # Minimal output headers
+./scripts/compile.sh hello -- --dump-ast      # Pass extra flags to compiler
+
+# Show available examples
+./scripts/compile.sh --help                   # List all available examples
+```
+
+**Key Features:**
+- **Smart File Resolution**: Looks for `.cprime` first, then `.cp` extension
+- **Built-in Example Discovery**: Automatically lists all available examples
+- **Clean Output Display**: Headers, compiler output, and success/failure status
+- **Flag Passing**: Use `--` to pass additional flags directly to compiler
+- **Error Handling**: Clear messages for missing files or build issues
+
+**Options:**
+- `--debug`: Enable debug mode in cprime compiler
+- `--quiet`: Suppress verbose headers and file information
+- `--help`: Show usage and list all available examples
+- `-- <flags>`: Pass remaining arguments directly to cprime compiler
+
+**Purpose:**
+- **Primary Interface**: Main way to test compiler with example files
+- **Development Testing**: Easy way to test Layer 0 input processing
+- **Future Integration**: Will expand as more layers are implemented
+- **User-Friendly**: Simple interface for exploring CPrime language examples
+
 ## N-Layer Architecture
 
 ### Current Layer Structure (Expandable)
@@ -150,14 +188,14 @@ echo 'class Test {}' | ./scripts/cprime_analyze.sh tokens
 5. **ONLY** automate when user explicitly requests it for a range of known problems
 
 ### Script Enhancement Policy
-**If the build/test/debug scripts cannot do something you need:**
+**If the build/test/debug/compile scripts cannot do something you need:**
 1. **DO NOT** bypass the scripts
 2. **DO** enhance the appropriate script to support the new functionality
 3. **DO** maintain backward compatibility
 4. **DO** update this documentation after script enhancements
 
 ### Script Maintenance
-- All three scripts (`build.sh`, `test_runner.sh`, `cprime_analyze.sh`) must be maintained throughout the project lifecycle
+- All four scripts (`build.sh`, `test_runner.sh`, `cprime_analyze.sh`, `compile.sh`) must be maintained throughout the project lifecycle
 - Scripts are the official interface - they will evolve into sophisticated tooling
 - Consistency is critical for development workflow
 
@@ -177,7 +215,10 @@ echo 'class Test {}' | ./scripts/cprime_analyze.sh tokens
 # 2. Run comprehensive tests
 ./scripts/test_runner.sh 1-4
 
-# 3. Debug specific functionality
+# 3. Test compiler with examples
+./scripts/compile.sh hello
+
+# 4. Debug specific functionality
 ./scripts/cprime_analyze.sh full examples/hello.cprime
 ```
 
@@ -187,11 +228,34 @@ echo 'class Test {}' | ./scripts/cprime_analyze.sh tokens
 ./scripts/build.sh -ct
 ./scripts/test_runner.sh 2  # Layer 2 with validation
 
-# 2. Debug layer functionality  
+# 2. Test with examples
+./scripts/compile.sh class_test --debug
+
+# 3. Debug layer functionality  
 ./scripts/cprime_analyze.sh context examples/test_sample.cp
 
-# 3. Run validation only
+# 4. Run validation only
 ./scripts/test_runner.sh --l2v
+```
+
+### Testing Current Compiler (Layer 0 Only)
+```bash
+# 1. Build compiler
+./scripts/build.sh
+
+# 2. Test with simple examples
+./scripts/compile.sh hello
+./scripts/compile.sh simple
+./scripts/compile.sh class_test
+
+# 3. Test with debug output
+./scripts/compile.sh --debug test_orchestrator
+
+# 4. Test quiet mode for minimal output
+./scripts/compile.sh --quiet variables_test
+
+# 5. See all available examples
+./scripts/compile.sh --help
 ```
 
 ### Debugging Failed Tests
@@ -215,16 +279,20 @@ tail -f logs/cprime.log
 
 ### Most Common Commands
 ```bash
-# Clean build with tests
-./scripts/build.sh -ct
+# Clean build compiler
+./scripts/build.sh -c
 
-# Run all layers with validation
+# Test with example files
+./scripts/compile.sh hello
+./scripts/compile.sh class_test --debug
+
+# Run all layers with validation (when available)
 ./scripts/test_runner.sh 1-4
 
-# Debug tokenization
+# Debug tokenization (when cli available)
 ./scripts/cprime_analyze.sh tokens examples/hello.cprime
 
-# Interactive analysis
+# Interactive analysis (when cli available)
 ./scripts/cprime_analyze.sh interactive
 ```
 
