@@ -28,8 +28,16 @@ void LoggerFactory::initialize_selective_buffering() {
     // Create console sink for normal output
     auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
     
-    // Set up default pattern for both sinks
-    std::string pattern = "[%Y-%m-%d %H:%M:%S.%e] [%n] [%^%l%$] %v";
+    // Force color output even when not connected to a TTY
+    // This helps when output is being processed by scripts
+    console_sink->set_color_mode(spdlog::color_mode::always);
+    
+    // Set up neat-base style pattern for both sinks
+    // %^ and %$ enable/disable automatic color formatting
+    // %L = single character log level (D/I/W/E/C)
+    // %m%d = month/day (MMDD format), %H%M = hour/minute (HHMM format)
+    // %v = message content
+    std::string pattern = "%^%L%m%d|%H%M| %v%$";
     console_sink->set_pattern(pattern);
     
     // Register both sinks as default for new loggers

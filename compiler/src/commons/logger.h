@@ -4,7 +4,13 @@
 #include <string>
 #include <sstream>
 #include <spdlog/spdlog.h>
+#include <spdlog/fmt/fmt.h>
 #include <memory>
+
+// Support for __FILE_NAME__ macro (for IntelliSense compatibility)
+#ifdef __INTELLISENSE__
+#define __FILE_NAME__ __FILE__
+#endif
 
 // Forward declare selective buffer classes
 namespace cprime {
@@ -133,11 +139,21 @@ private:
     static bool buffering_initialized_;
 };
 
-// Convenience macros
+// Convenience macros (legacy - prefer LOG_* macros below)
 #define CPRIME_LOGGER(component) cprime::LoggerFactory::get_logger(component)
 #define CPRIME_LOG_DEBUG(logger, msg, ...) logger.debug(msg, ##__VA_ARGS__)
 #define CPRIME_LOG_INFO(logger, msg, ...) logger.info(msg, ##__VA_ARGS__)
 #define CPRIME_LOG_WARN(logger, msg, ...) logger.warning(msg, ##__VA_ARGS__)
 #define CPRIME_LOG_ERROR(logger, msg, ...) logger.error(msg, ##__VA_ARGS__)
+
+// Neat-base style LOG macros with two-column layout
+// Usage: auto logger = CPRIME_LOGGER("component"); LOG_DEBUG("message with {}", arg);
+// Note: These expect a variable named 'logger' of type cprime::Logger in scope
+#define LOG_TRACE(...) do { logger.debug(fmt::format("{:<186} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
+#define LOG_DEBUG(...) do { logger.debug(fmt::format("{:<186} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
+#define LOG_INFO(...) do { logger.info(fmt::format("{:<186} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
+#define LOG_WARN(...) do { logger.warning(fmt::format("{:<186} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
+#define LOG_ERROR(...) do { logger.error(fmt::format("{:<186} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
+#define LOG_CRITICAL(...) do { logger.error(fmt::format("{:<186} | {:>30}", fmt::format(__VA_ARGS__), fmt::format("{}:{}", __FILE_NAME__, __LINE__))); } while(0)
 
 } // namespace cprime

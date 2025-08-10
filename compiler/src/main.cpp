@@ -12,21 +12,21 @@ namespace fs = std::filesystem;
 
 void print_usage(const char* program_name, cprime::Logger& logger) {
     // TODO: Implement VersionInfo system for version string display
-    logger.info("CPrime Compiler v2.0.0");
-    logger.info("Usage: {} [options] <input_file>", program_name);
-    logger.info("");
-    logger.info("Options:");
-    logger.info("  -o <file>        Output file name (default: a.out)");
-    logger.info("  --verbose        Enable verbose output");
-    logger.info("  --debug          Enable debug mode with detailed logging");
-    logger.info("  --dump-ast       Output AST structure");
-    logger.info("  --dump-ir        Output IR structure");
-    logger.info("  -h, --help       Show this help message");
-    logger.info("");
-    logger.info("Examples:");
-    logger.info("  {} hello.cprime", program_name);
-    logger.info("  {} -o myprogram hello.cprime", program_name);
-    logger.info("  {} --debug --dump-ast test.cprime", program_name);
+    LOG_INFO("CPrime Compiler v2.0.0");
+    LOG_INFO("Usage: {} [options] <input_file>", program_name);
+    LOG_INFO("");
+    LOG_INFO("Options:");
+    LOG_INFO("  -o <file>        Output file name (default: a.out)");
+    LOG_INFO("  --verbose        Enable verbose output");
+    LOG_INFO("  --debug          Enable debug mode with detailed logging");
+    LOG_INFO("  --dump-ast       Output AST structure");
+    LOG_INFO("  --dump-ir        Output IR structure");
+    LOG_INFO("  -h, --help       Show this help message");
+    LOG_INFO("");
+    LOG_INFO("Examples:");
+    LOG_INFO("  {} hello.cprime", program_name);
+    LOG_INFO("  {} -o myprogram hello.cprime", program_name);
+    LOG_INFO("  {} --debug --dump-ast test.cprime", program_name);
 }
 
 cprime::CompilationParameters parse_arguments(int argc, char* argv[], cprime::Logger& logger) {
@@ -47,7 +47,7 @@ cprime::CompilationParameters parse_arguments(int argc, char* argv[], cprime::Lo
             if (i + 1 < argc) {
                 params.output_file = argv[++i];
             } else {
-                logger.error("Error: -o requires an argument");
+                LOG_ERROR("Error: -o requires an argument");
                 exit(1);
             }
         } else if (arg == "--verbose") {
@@ -63,13 +63,13 @@ cprime::CompilationParameters parse_arguments(int argc, char* argv[], cprime::Lo
             // Input file
             params.input_files.emplace_back(arg);
         } else {
-            logger.error("Error: Unknown option: {}", arg);
+            LOG_ERROR("Error: Unknown option: {}", arg);
             exit(1);
         }
     }
     
     if (params.input_files.empty()) {
-        logger.error("Error: No input file specified");
+        LOG_ERROR("Error: No input file specified");
         print_usage(argv[0], logger);
         exit(1);
     }
@@ -97,15 +97,15 @@ int main(int argc, char* argv[]) {
         // Set global log level based on compilation parameters
         if (params.debug_mode) {
             cprime::LoggerFactory::set_global_level(cprime::LogLevel::Debug);
-            logger.debug("Debug mode enabled - setting log level to Debug");
+            LOG_DEBUG("Debug mode enabled - setting log level to Debug");
         } else if (params.verbose) {
             cprime::LoggerFactory::set_global_level(cprime::LogLevel::Info);
-            logger.debug("Verbose mode enabled - setting log level to Info");
+            LOG_DEBUG("Verbose mode enabled - setting log level to Info");
         } else {
             cprime::LoggerFactory::set_global_level(cprime::LogLevel::Warning);
         }
         
-        logger.debug("CPrime compiler starting with {} input files", params.input_files.size());
+        LOG_DEBUG("CPrime compiler starting with {} input files", params.input_files.size());
         
         // Create orchestrator with parameters
         cprime::CompilerOrchestrator orchestrator(params);
@@ -113,20 +113,20 @@ int main(int argc, char* argv[]) {
         // Run compilation process
         bool success = orchestrator.run();
         
-        logger.debug("Compilation {} with exit code {}", 
+        LOG_DEBUG("Compilation {} with exit code {}", 
                     success ? "succeeded" : "failed", success ? 0 : 1);
         
         return success ? 0 : 1;
         
     } catch (const std::exception& e) {
         // Create emergency logger for fatal errors
-        cprime::Logger emergency_logger = cprime::LoggerFactory::get_logger("main");
-        emergency_logger.error("Fatal error: {}", e.what());
+        auto logger = cprime::LoggerFactory::get_logger("main");
+        LOG_ERROR("Fatal error: {}", e.what());
         return 2;
     } catch (...) {
         // Create emergency logger for unknown errors
-        cprime::Logger emergency_logger = cprime::LoggerFactory::get_logger("main");
-        emergency_logger.error("Unknown fatal error occurred");
+        auto logger = cprime::LoggerFactory::get_logger("main");
+        LOG_ERROR("Unknown fatal error occurred");
         return 2;
     }
 }

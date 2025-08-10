@@ -168,23 +168,20 @@ if [ "$QUIET_MODE" = false ]; then
     echo ""
 fi
 
-# Execute compilation and capture output
+# Execute compilation with proper color forwarding
 if [ "$QUIET_MODE" = false ]; then
     echo -e "${BOLD}${YELLOW}=== CPrime Compiler Output ===${NC}"
 fi
 
-# Run the compiler and capture exit status
+# Run the compiler directly to terminal to preserve colors
 set +e  # Temporarily disable exit on error
-COMPILER_OUTPUT_FILE=$(mktemp)
-"$CPRIME_BINARY" $COMPILER_FLAGS "$EXAMPLE_FILE" > "$COMPILER_OUTPUT_FILE" 2>&1
+
+# Force color output by setting FORCE_COLOR environment variable and ensure TTY
+# Most modern applications respect these environment hints for color output
+FORCE_COLOR=1 NO_COLOR= "$CPRIME_BINARY" $COMPILER_FLAGS "$EXAMPLE_FILE"
 COMPILER_EXIT_CODE=$?
+
 set -e  # Re-enable exit on error
-
-# Display the output
-cat "$COMPILER_OUTPUT_FILE"
-
-# Clean up temporary file
-rm -f "$COMPILER_OUTPUT_FILE"
 
 # Display result
 if [ "$QUIET_MODE" = false ]; then

@@ -7,7 +7,7 @@ bool ErrorHandler::process_all_errors() {
     // Create errorhandler logger for error processing operations
     auto logger = cprime::LoggerFactory::get_logger("errorhandler");
     
-    logger.info("=== ErrorHandler Processing Started ===");
+    LOG_INFO("=== ErrorHandler Processing Started ===");
     
     // TODO: Implement error collection from CompilationContext
     // TODO: Validate error references before processing
@@ -16,8 +16,8 @@ bool ErrorHandler::process_all_errors() {
     // TODO: Generate final statistics
     // TODO: Determine compilation result based on error severity
     
-    logger.info("ErrorHandler completed - No errors to process (placeholder implementation)");
-    logger.debug("ErrorHandler returning success (placeholder mode)");
+    LOG_INFO("ErrorHandler completed - No errors to process (placeholder implementation)");
+    LOG_DEBUG("ErrorHandler returning success (placeholder mode)");
     
     // For now, always return success since we have no error collection system
     return true;

@@ -11,9 +11,10 @@ CompilerOrchestrator::CompilerOrchestrator(CompilationParameters params)
         throw std::runtime_error("Invalid compilation parameters provided to orchestrator");
     }
     
-    logger_.debug("CompilerOrchestrator initialized with {} input files", params_.input_files.size());
-    logger_.debug("Output file: {}", params_.output_file.string());
-    logger_.debug("Verbose: {}, Debug: {}", params_.verbose, params_.debug_mode);
+    auto& logger = logger_; // Alias for LOG macros
+    LOG_DEBUG("CompilerOrchestrator initialized with {} input files", params_.input_files.size());
+    LOG_DEBUG("Output file: {}", params_.output_file.string());
+    LOG_DEBUG("Verbose: {}, Debug: {}", params_.verbose, params_.debug_mode);
 }
 
 bool CompilerOrchestrator::run() {
@@ -39,7 +40,8 @@ bool CompilerOrchestrator::run_layer0() {
     auto input_streams = InputProcessor::process_input_files(params_);
     
     if (input_streams.empty()) {
-        logger_.error("Layer 0 failed: No input streams processed");
+        auto& logger = logger_; // Alias for LOG macros
+        LOG_ERROR("Layer 0 failed: No input streams processed");
         log_layer_end("Layer 0", false);
         return false;
     }
@@ -49,10 +51,11 @@ bool CompilerOrchestrator::run_layer0() {
     // TODO: Initialize error handling system
     
     // Success logging with stream details
-    logger_.info("Layer 0 completed: {} input streams processed", input_streams.size());
+    auto& logger = logger_; // Alias for LOG macros
+    LOG_INFO("Layer 0 completed: {} input streams processed", input_streams.size());
     
     for (const auto& [stream_id, stream] : input_streams) {
-        logger_.debug("  Stream '{}': {} characters", stream_id, stream.str().length());
+        LOG_DEBUG("  Stream '{}': {} characters", stream_id, stream.str().length());
     }
     
     log_layer_end("Layer 0", true);
@@ -69,25 +72,26 @@ bool CompilerOrchestrator::run_layer0() {
 // bool CompilerOrchestrator::run_error_handler() { ... }
 
 bool CompilerOrchestrator::validate_parameters() {
+    auto& logger = logger_; // Alias for LOG macros
     if (!params_.validate()) {
-        logger_.error("Error: Compilation parameters validation failed");
+        LOG_ERROR("Error: Compilation parameters validation failed");
         return false;
     }
     
     // Additional orchestrator-specific validation
     for (const auto& file : params_.input_files) {
         if (file.empty()) {
-            logger_.error("Error: Empty file path in input files");
+            LOG_ERROR("Error: Empty file path in input files");
             return false;
         }
     }
     
     if (params_.output_file.empty()) {
-        logger_.error("Error: Output file path is empty");
+        LOG_ERROR("Error: Output file path is empty");
         return false;
     }
     
-    logger_.debug("Compilation parameters validated successfully");
+    LOG_DEBUG("Compilation parameters validated successfully");
     return true;
 }
 
@@ -95,39 +99,43 @@ bool CompilerOrchestrator::validate_parameters() {
 // void CompilerOrchestrator::setup_logging() { ... }
 
 void CompilerOrchestrator::log_compilation_start() {
-    logger_.info("=== CPrime Compilation Started ===");
-    logger_.info("Input files: {}", params_.input_files.size());
+    auto& logger = logger_; // Alias for LOG macros
+    LOG_INFO("=== CPrime Compilation Started ===");
+    LOG_INFO("Input files: {}", params_.input_files.size());
     
     for (const auto& file : params_.input_files) {
-        logger_.info("  - {}", file.string());
+        LOG_INFO("  - {}", file.string());
     }
     
-    logger_.info("Output file: {}", params_.output_file.string());
+    LOG_INFO("Output file: {}", params_.output_file.string());
     if (params_.verbose) {
-        logger_.debug("Verbose: {}", params_.verbose ? "true" : "false");
-        logger_.debug("Debug mode: {}", params_.debug_mode ? "true" : "false");
+        LOG_DEBUG("Verbose: {}", params_.verbose ? "true" : "false");
+        LOG_DEBUG("Debug mode: {}", params_.debug_mode ? "true" : "false");
     }
 }
 
 void CompilerOrchestrator::log_compilation_end(bool success) {
+    auto& logger = logger_; // Alias for LOG macros
     if (success) {
-        logger_.info("=== CPrime Compilation Completed Successfully ===");
+        LOG_INFO("=== CPrime Compilation Completed Successfully ===");
     } else {
-        logger_.error("=== CPrime Compilation Failed ===");
+        LOG_ERROR("=== CPrime Compilation Failed ===");
     }
     
     // TODO: Log final context state when CompilationContext is implemented
 }
 
 void CompilerOrchestrator::log_layer_start(const std::string& layer_name) {
-    logger_.debug("--- Starting {} ---", layer_name);
+    auto& logger = logger_; // Alias for LOG macros
+    LOG_DEBUG("--- Starting {} ---", layer_name);
 }
 
 void CompilerOrchestrator::log_layer_end(const std::string& layer_name, bool success) {
+    auto& logger = logger_; // Alias for LOG macros
     if (success) {
-        logger_.debug("--- {} Completed Successfully ---", layer_name);
+        LOG_DEBUG("--- {} Completed Successfully ---", layer_name);
     } else {
-        logger_.error("--- {} Failed ---", layer_name);
+        LOG_ERROR("--- {} Failed ---", layer_name);
     }
 }
 
