@@ -57,8 +57,6 @@ enum class EToken : uint16_t {
     INLINE,         // Forces inlining
     VOLATILE,       // Prevents optimization
     DANGER,         // Marks unsafe operations/code boundaries
-    SUSPEND,        // Suspend function modifier (for coroutines)
-    SPAWN,          // Task/coroutine spawning
     IMPLEMENTS,     // Interface implementation
     EXTERN,         // External template declaration
     MODULE,         // Module declaration
@@ -79,7 +77,9 @@ enum class EToken : uint16_t {
     CATCH,
     RECOVER,        // Signal/exception recovery
     FINALLY,
-    CO_AWAIT,       // Coroutine await keyword
+    SIGNAL,         // Signal definition
+    EXCEPT,         // Function signal annotations
+    RAISE,          // Raise/emit signals
     
     // Casting Keywords
     CAST,           // Type inspection for control flow (switch/if only)
