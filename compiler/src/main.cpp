@@ -1,37 +1,39 @@
 // CPrime Compiler - Main Entry Point  
 // Uses orchestrator-based architecture for coordinated compilation pipeline
 
-#include <iostream>
 #include <filesystem>
 #include <exception>
 
 #include "orchestrator.h"
 #include "layer0/compilation_parameters.h"
+#include "commons/logger.h"
 
 namespace fs = std::filesystem;
 
-void print_usage(const char* program_name) {
+void print_usage(const char* program_name, cprime::Logger& logger) {
     // TODO: Implement VersionInfo system for version string display
-    std::cout << "CPrime Compiler v2.0.0" << "\n";
-    std::cout << "Usage: " << program_name << " [options] <input_file>\n\n";
-    std::cout << "Options:\n";
-    std::cout << "  -o <file>        Output file name (default: a.out)\n";
-    std::cout << "  --verbose        Enable verbose output\n";
-    std::cout << "  --debug          Enable debug mode with detailed logging\n";
-    std::cout << "  --dump-ast       Output AST structure\n";
-    std::cout << "  --dump-ir        Output IR structure\n";
-    std::cout << "  -h, --help       Show this help message\n";
-    std::cout << "\nExamples:\n";
-    std::cout << "  " << program_name << " hello.cprime\n";
-    std::cout << "  " << program_name << " -o myprogram hello.cprime\n";
-    std::cout << "  " << program_name << " --debug --dump-ast test.cprime\n";
+    logger.info("CPrime Compiler v2.0.0");
+    logger.info("Usage: {} [options] <input_file>", program_name);
+    logger.info("");
+    logger.info("Options:");
+    logger.info("  -o <file>        Output file name (default: a.out)");
+    logger.info("  --verbose        Enable verbose output");
+    logger.info("  --debug          Enable debug mode with detailed logging");
+    logger.info("  --dump-ast       Output AST structure");
+    logger.info("  --dump-ir        Output IR structure");
+    logger.info("  -h, --help       Show this help message");
+    logger.info("");
+    logger.info("Examples:");
+    logger.info("  {} hello.cprime", program_name);
+    logger.info("  {} -o myprogram hello.cprime", program_name);
+    logger.info("  {} --debug --dump-ast test.cprime", program_name);
 }
 
-cprime::CompilationParameters parse_arguments(int argc, char* argv[]) {
+cprime::CompilationParameters parse_arguments(int argc, char* argv[], cprime::Logger& logger) {
     cprime::CompilationParameters params;
     
     if (argc < 2) {
-        print_usage(argv[0]);
+        print_usage(argv[0], logger);
         exit(1);
     }
     
@@ -39,13 +41,13 @@ cprime::CompilationParameters parse_arguments(int argc, char* argv[]) {
         std::string arg = argv[i];
         
         if (arg == "-h" || arg == "--help") {
-            print_usage(argv[0]);
+            print_usage(argv[0], logger);
             exit(0);
         } else if (arg == "-o") {
             if (i + 1 < argc) {
                 params.output_file = argv[++i];
             } else {
-                std::cerr << "Error: -o requires an argument\n";
+                logger.error("Error: -o requires an argument");
                 exit(1);
             }
         } else if (arg == "--verbose") {
@@ -61,14 +63,14 @@ cprime::CompilationParameters parse_arguments(int argc, char* argv[]) {
             // Input file
             params.input_files.emplace_back(arg);
         } else {
-            std::cerr << "Error: Unknown option: " << arg << "\n";
+            logger.error("Error: Unknown option: {}", arg);
             exit(1);
         }
     }
     
     if (params.input_files.empty()) {
-        std::cerr << "Error: No input file specified\n";
-        print_usage(argv[0]);
+        logger.error("Error: No input file specified");
+        print_usage(argv[0], logger);
         exit(1);
     }
     
@@ -85,8 +87,25 @@ int main(int argc, char* argv[]) {
         // Create logs directory if it doesn't exist
         fs::create_directories("logs");
         
+        // Initialize logger factory early (before parsing to handle errors)
+        cprime::LoggerFactory::initialize_selective_buffering();
+        cprime::Logger logger = cprime::LoggerFactory::get_logger("main");
+        
         // Parse command line arguments into compilation parameters
-        cprime::CompilationParameters params = parse_arguments(argc, argv);
+        cprime::CompilationParameters params = parse_arguments(argc, argv, logger);
+        
+        // Set global log level based on compilation parameters
+        if (params.debug_mode) {
+            cprime::LoggerFactory::set_global_level(cprime::LogLevel::Debug);
+            logger.debug("Debug mode enabled - setting log level to Debug");
+        } else if (params.verbose) {
+            cprime::LoggerFactory::set_global_level(cprime::LogLevel::Info);
+            logger.debug("Verbose mode enabled - setting log level to Info");
+        } else {
+            cprime::LoggerFactory::set_global_level(cprime::LogLevel::Warning);
+        }
+        
+        logger.debug("CPrime compiler starting with {} input files", params.input_files.size());
         
         // Create orchestrator with parameters
         cprime::CompilerOrchestrator orchestrator(params);
@@ -94,13 +113,20 @@ int main(int argc, char* argv[]) {
         // Run compilation process
         bool success = orchestrator.run();
         
+        logger.debug("Compilation {} with exit code {}", 
+                    success ? "succeeded" : "failed", success ? 0 : 1);
+        
         return success ? 0 : 1;
         
     } catch (const std::exception& e) {
-        std::cerr << "Fatal error: " << e.what() << std::endl;
+        // Create emergency logger for fatal errors
+        cprime::Logger emergency_logger = cprime::LoggerFactory::get_logger("main");
+        emergency_logger.error("Fatal error: {}", e.what());
         return 2;
     } catch (...) {
-        std::cerr << "Unknown fatal error occurred" << std::endl;
+        // Create emergency logger for unknown errors
+        cprime::Logger emergency_logger = cprime::LoggerFactory::get_logger("main");
+        emergency_logger.error("Unknown fatal error occurred");
         return 2;
     }
 }

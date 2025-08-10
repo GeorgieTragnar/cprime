@@ -40,6 +40,9 @@ private:
     // Configuration
     CompilationParameters params_;
     
+    // Logger for orchestrator component
+    cprime::Logger logger_;
+    
     // TODO: Add CompilationContext ownership and management
     // TODO: Add proper error handling system
     
