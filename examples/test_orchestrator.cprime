@@ -1,0 +1,14 @@
+// Simple CPrime test file for orchestrator testing
+class TestClass {
+    value: i32,
+    name: String,
+}
+
+fn main() -> i32 {
+    runtime var test = TestClass{
+        value: 42,
+        name: "Hello World"
+    };
+    
+    return test.value;
+}

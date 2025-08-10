@@ -1,154 +1,42 @@
-# CPrime Compiler - Multi-Layer Architecture
+# CPrime Compiler - Orchestrator-Based Architecture
 cmake_minimum_required(VERSION 3.16)
-project(cprime_compiler VERSION 1.0.0 LANGUAGES CXX)
+project(cprime_compiler VERSION 3.0.0 LANGUAGES CXX)
 
-# Create common library first (contains logger and shared types)
-add_library(cprime_common
-    common/logger.h
-    common/validation_types.h
-    common/common_types.h
-    common/component_buffer_manager.h
-    common/component_buffer_manager.cpp
-    common/selective_buffer_sink.h
-    common/logger_components.h
-    common/string_table.h
-    common/string_table.cpp
-    common/token_types.h
-    common/parse_context.h
-    common/tokens.h
-    common/token_utils.h
-    common/token_utils.cpp
-    common/structural_types.h
-    common/structural_types.cpp
-    common/debug_utils.h
-    common/debug_utils.cpp
+# Set C++17 as the standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Create commons library (shared infrastructure)
+add_library(cprime_commons
+    commons/common_types.h
+    commons/logger.h
+    commons/logger.cpp
+    commons/compilation_context.h
 )
 
-# Common library is header-only, but we need to link spdlog
-target_include_directories(cprime_common PUBLIC .)
-target_link_libraries(cprime_common PUBLIC spdlog::spdlog)
+target_include_directories(cprime_commons PUBLIC .)
+target_compile_features(cprime_commons PUBLIC cxx_std_17)
 
-# Create libraries for each layer with validation
-add_library(cprime_layer1
-    layer1/raw_token.cpp
-    layer1/context_stack.cpp
+# Create Layer 0 library (input processing)
+add_library(cprime_layer0
+    layer0/compilation_parameters.h
+    layer0/input_processor.h
+    layer0/input_processor.cpp
 )
 
-add_library(cprime_layer1validation
-    layer1validation/token_sequence_validator.cpp
+target_include_directories(cprime_layer0 PUBLIC .)
+target_link_libraries(cprime_layer0 PUBLIC cprime_commons)
+target_compile_features(cprime_layer0 PUBLIC cxx_std_17)
+
+# Create orchestrator library (main coordination)
+add_library(cprime_orchestrator
+    orchestrator.h
+    orchestrator.cpp
 )
 
-add_library(cprime_layer2
-    layer2/semantic_translator.cpp
-)
-
-add_library(cprime_layer2validation
-    layer2validation/context_validator.cpp
-)
-
-add_library(cprime_layer3
-    layer3/contextualizer.cpp
-)
-
-add_library(cprime_layer3validation
-    layer3validation/contextualization_validator.cpp
-)
-
-add_library(cprime_layer4
-    layer4/destruction_order_tracker.cpp
-    layer4/scope_destructor_tracker.cpp
-    layer4/defer_validation.cpp
-    layer4/raii_flow_analyzer.cpp
-)
-
-add_library(cprime_layer4validation
-    layer4validation/raii_flow_validator.cpp
-)
-
-add_library(cprime_layer5
-    layer5/ast.cpp
-    layer5/symbol_table.cpp
-    layer5/ast_builder.cpp
-)
-
-add_library(cprime_layer5validation
-    layer5validation/ast_structure_validator.cpp
-)
-
-add_library(cprime_layer6
-    layer6/raii_injector.cpp
-)
-
-add_library(cprime_layer6validation
-    layer6validation/raii_constraint_validator.cpp
-)
-
-# Main compiler library combining all layers
-add_library(cprime_compiler
-    validation_common.h
-    validation_pipeline.cpp
-)
-
-# Set include directories and link common library for all layers
-target_include_directories(cprime_layer1 PUBLIC .)
-target_link_libraries(cprime_layer1 PUBLIC cprime_common)
-
-target_include_directories(cprime_layer1validation PUBLIC .)
-target_link_libraries(cprime_layer1validation PUBLIC cprime_common cprime_layer1)
-
-target_include_directories(cprime_layer2 PUBLIC .)
-target_link_libraries(cprime_layer2 PUBLIC cprime_common)
-
-target_include_directories(cprime_layer2validation PUBLIC .)
-target_link_libraries(cprime_layer2validation PUBLIC cprime_common cprime_layer2)
-
-target_include_directories(cprime_layer3 PUBLIC .)
-target_link_libraries(cprime_layer3 PUBLIC cprime_common)
-
-target_include_directories(cprime_layer3validation PUBLIC .)
-target_link_libraries(cprime_layer3validation PUBLIC cprime_common cprime_layer3)
-
-target_include_directories(cprime_layer4 PUBLIC .)
-target_link_libraries(cprime_layer4 PUBLIC cprime_common)
-
-target_include_directories(cprime_layer4validation PUBLIC .)
-target_link_libraries(cprime_layer4validation PUBLIC cprime_common cprime_layer4)
-
-target_include_directories(cprime_layer5 PUBLIC .)
-target_link_libraries(cprime_layer5 PUBLIC cprime_common)
-
-target_include_directories(cprime_layer5validation PUBLIC .)
-target_link_libraries(cprime_layer5validation PUBLIC cprime_common cprime_layer5)
-
-target_include_directories(cprime_layer6 PUBLIC .)
-target_link_libraries(cprime_layer6 PUBLIC cprime_common)
-
-target_include_directories(cprime_layer6validation PUBLIC .)
-target_link_libraries(cprime_layer6validation PUBLIC cprime_common cprime_layer6)
-
-# Layer 2 depends on Layer 1 for ContextStack and ContextResolver
-target_link_libraries(cprime_layer2 PUBLIC cprime_layer1)
-# Layer 3 depends on Layer 2 for structured tokens
-target_link_libraries(cprime_layer3 PUBLIC cprime_layer2)
-# Layer 4 depends on Layer 3 for contextualized tokens
-target_link_libraries(cprime_layer4 PUBLIC cprime_layer3)
-# Layer 5 depends on Layer 4 for RAII-processed tokens
-target_link_libraries(cprime_layer5 PUBLIC cprime_layer4)
-# Layer 6 depends on Layer 5 for AST
-target_link_libraries(cprime_layer6 PUBLIC cprime_layer5)
-
-# Link all layers and validation libraries
-target_link_libraries(cprime_compiler
-    cprime_common
-    cprime_layer1 cprime_layer1validation
-    cprime_layer2 cprime_layer2validation
-    cprime_layer3 cprime_layer3validation
-    cprime_layer4 cprime_layer4validation
-    cprime_layer5 cprime_layer5validation
-    cprime_layer6 cprime_layer6validation
-)
-
-target_include_directories(cprime_compiler PUBLIC .)
+target_include_directories(cprime_orchestrator PUBLIC .)
+target_link_libraries(cprime_orchestrator PUBLIC cprime_commons cprime_layer0)
+target_compile_features(cprime_orchestrator PUBLIC cxx_std_17)
 
 # Compiler flags for all libraries
 set(COMPILER_FLAGS 
@@ -157,41 +45,17 @@ set(COMPILER_FLAGS
     $<$<CONFIG:Release>:-O3 -DNDEBUG>
 )
 
-# Apply flags to all layer libraries (including common)
-foreach(lib IN ITEMS cprime_common cprime_layer1 cprime_layer1validation cprime_layer2 cprime_layer2validation 
-                     cprime_layer3 cprime_layer3validation cprime_layer4 cprime_layer4validation 
-                     cprime_layer5 cprime_layer5validation cprime_layer6 cprime_layer6validation cprime_compiler)
-    target_compile_features(${lib} PUBLIC cxx_std_17)
+# Apply flags to all libraries
+foreach(lib IN ITEMS cprime_commons cprime_layer0 cprime_orchestrator)
     target_compile_options(${lib} PRIVATE ${COMPILER_FLAGS})
 endforeach()
 
 # Main compiler executable
 add_executable(cprime main.cpp)
-target_link_libraries(cprime cprime_compiler)
+target_link_libraries(cprime cprime_orchestrator)
+target_compile_features(cprime PUBLIC cxx_std_17)
+target_compile_options(cprime PRIVATE ${COMPILER_FLAGS})
+
 set_target_properties(cprime PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
-
-# CLI executable for layer testing
-add_executable(cprime_cli cli/cprime_cli.cpp)
-target_link_libraries(cprime_cli cprime_compiler)
-
-# NOTE: Individual test executables have been migrated to Google Test
-# Tests are now located in ../tests/ and built as cprime_tests
-# 
-# To run tests:
-#   make cprime_tests && ./cprime_tests
-# Or:
-#   make run_tests
-
-# Optional: Add to parent project if called from main CMakeLists.txt
-if(NOT CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
-    # We're being included from the main project
-    set_target_properties(cprime_compiler PROPERTIES 
-        FOLDER "compiler"
-    )
-    set_target_properties(cprime_cli PROPERTIES 
-        FOLDER "compiler"
-    )
-    # Note: Individual test executables removed - now using Google Test
-endif()
