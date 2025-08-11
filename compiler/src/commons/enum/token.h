@@ -10,16 +10,39 @@ namespace cprime {
  */
 enum class EToken : uint16_t {
     INVALID = 0,
-    // Literals
-    INT_LITERAL,
+    
+    // Literals - Reserved range: 10-49
+    INT_LITERAL = 10,
     UINT_LITERAL,
     LONG_LITERAL,
     ULONG_LITERAL,
+    LONG_LONG_LITERAL,
+    ULONG_LONG_LITERAL,
+    
+    // Floating point literals
     FLOAT_LITERAL,
     DOUBLE_LITERAL,
-    STRING_LITERAL,
+    LONG_DOUBLE_LITERAL,
+    
+    // Character literals
     CHAR_LITERAL,
-    BOOL_LITERAL,
+    WCHAR_LITERAL,
+    CHAR16_LITERAL,
+    CHAR32_LITERAL,
+    
+    // String literals
+    STRING_LITERAL,
+    WSTRING_LITERAL,
+    STRING16_LITERAL,
+    STRING32_LITERAL,
+    STRING8_LITERAL,
+    RAW_STRING_LITERAL,
+    
+    // Boolean and null literals
+    TRUE_LITERAL,
+    FALSE_LITERAL,
+    NULLPTR_LITERAL,
+    // Reserved space for future literals: 33-49
     
     // Primitive Types
     INT8_T = 50,
