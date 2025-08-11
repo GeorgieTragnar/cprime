@@ -41,8 +41,8 @@ protected:
         buffer_manager_->begin_buffering("layer1", spdlog::level::debug);
         
         // Get test case paths (adjust for running from build directory)
-        test_cases_dir_ = std::filesystem::current_path() / ".." / "compiler" / "tests" / "integration" / "test_cases";
-        tmp_dir_ = std::filesystem::current_path() / ".." / "compiler" / "tests" / "integration" / "tmp";
+        test_cases_dir_ = std::filesystem::current_path() / ".." / "test_cases";
+        tmp_dir_ = std::filesystem::current_path() / ".." / "tmp";
         
         // Ensure tmp directory exists
         std::filesystem::create_directories(tmp_dir_);
@@ -249,8 +249,8 @@ TEST_P(Layer1IntegrationTest, TokenizationIntegration) {
  * This automatically finds all valid test cases without hardcoded names.
  */
 std::vector<TestCase> discover_integration_test_cases() {
-    // When running from build directory, we need to navigate to compiler/tests/integration/test_cases
-    auto test_cases_dir = std::filesystem::current_path() / ".." / "compiler" / "tests" / "integration" / "test_cases";
+    // When running from build directory, we need to navigate to test_cases
+    auto test_cases_dir = std::filesystem::current_path() / ".." / "test_cases";
     return TestCaseDiscovery::discover_layer1_test_cases(test_cases_dir);
 }
 
@@ -281,7 +281,7 @@ INSTANTIATE_TEST_SUITE_P(
 class TestDiscoveryTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        test_cases_dir_ = std::filesystem::current_path() / ".." / "compiler" / "tests" / "integration" / "test_cases";
+        test_cases_dir_ = std::filesystem::current_path() / ".." / "test_cases";
     }
 
 protected:

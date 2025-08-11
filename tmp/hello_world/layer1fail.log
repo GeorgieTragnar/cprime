@@ -1,8 +1,8 @@
 === LAYER 1 INTEGRATION TEST FAILURE ===
 Test Case: hello_world
-Input File: "/home/jirka/repositories/cprime/build/../compiler/tests/integration/test_cases/hello_world/layer1"
-Expected File: "/home/jirka/repositories/cprime/build/../compiler/tests/integration/test_cases/hello_world/layer2"
-Timestamp: 1754931149301200113
+Input File: "/home/jirka/repositories/cprime/build/../test_cases/hello_world/layer1"
+Expected File: "/home/jirka/repositories/cprime/build/../test_cases/hello_world/layer2"
+Timestamp: 1754931539587982138
 
 === FAILURE REASON ===
 Token count mismatch: expected 12, got 21

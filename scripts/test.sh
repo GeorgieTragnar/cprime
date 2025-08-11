@@ -61,7 +61,7 @@ show_help() {
     echo "  $0 -duv             # Discovery + unit tests + verbose"
     echo ""
     echo "Test Structure:"
-    echo "  - Integration tests: Auto-discovered from tests/integration/test_cases/"
+    echo "  - Integration tests: Auto-discovered from test_cases/"
     echo "  - Layer 1 tests: Comprehensive tokenization validation"
     echo "  - Future layers: Will be added as they are implemented"
 }
@@ -147,7 +147,7 @@ check_build_system() {
 show_test_discovery() {
     echo -e "${CYAN}=== Test Case Discovery ===${NC}"
     
-    local test_cases_dir="$PROJECT_ROOT/compiler/tests/integration/test_cases"
+    local test_cases_dir="$PROJECT_ROOT/test_cases"
     if [ -d "$test_cases_dir" ]; then
         local case_count=$(find "$test_cases_dir" -maxdepth 1 -type d ! -path "$test_cases_dir" | wc -l)
         echo -e "${BLUE}Integration test cases directory: ${test_cases_dir}${NC}"
@@ -271,7 +271,7 @@ run_tests() {
         echo -e "${RED}✗ Some tests failed${NC}"
         
         # Show information about failure logs for integration tests
-        local tmp_dir="$PROJECT_ROOT/compiler/tests/integration/tmp"
+        local tmp_dir="$PROJECT_ROOT/tmp"
         if [ -d "$tmp_dir" ]; then
             local failure_logs=$(find "$tmp_dir" -name "*.log" -type f 2>/dev/null | wc -l)
             if [ $failure_logs -gt 0 ]; then

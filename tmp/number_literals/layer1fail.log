@@ -1,8 +1,8 @@
 === LAYER 1 INTEGRATION TEST FAILURE ===
 Test Case: number_literals
-Input File: "/home/jirka/repositories/cprime/build/../compiler/tests/integration/test_cases/number_literals/layer1"
-Expected File: "/home/jirka/repositories/cprime/build/../compiler/tests/integration/test_cases/number_literals/layer2"
-Timestamp: 1754931149319007100
+Input File: "/home/jirka/repositories/cprime/build/../test_cases/number_literals/layer1"
+Expected File: "/home/jirka/repositories/cprime/build/../test_cases/number_literals/layer2"
+Timestamp: 1754931539600153458
 
 === FAILURE REASON ===
 Token count mismatch: expected 15, got 27
