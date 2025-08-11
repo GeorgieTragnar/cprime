@@ -1,0 +1,78 @@
+=== LAYER 1 INTEGRATION TEST FAILURE ===
+Test Case: string_literals
+Input File: "/home/jirka/repositories/cprime/build/../compiler/tests/integration/test_cases/string_literals/layer1"
+Expected File: "/home/jirka/repositories/cprime/build/../compiler/tests/integration/test_cases/string_literals/layer2"
+Timestamp: 1754931149339651036
+
+=== FAILURE REASON ===
+Token count mismatch: expected 15, got 27
+
+=== INPUT CONTENT ===
+string msg = "Hello";
+string escaped = "Line 1\nLine 2";
+char c = 'A';
+
+=== EXPECTED OUTPUT ===
+# Expected Layer 1 tokenization output
+# String literal test case
+
+TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=0, line=1, col=1, value=StringIndex[0]:"string"
+TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=7, line=1, col=8, value=StringIndex[1]:"msg"
+TOKEN: raw=PUNCTUATION, token=ASSIGN, pos=11, line=1, col=12, value=none
+TOKEN: raw=LITERAL, token=STRING_LITERAL, pos=13, line=1, col=14, value=StringIndex[2]:"Hello"
+TOKEN: raw=PUNCTUATION, token=SEMICOLON, pos=20, line=1, col=21, value=none
+TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=22, line=2, col=1, value=StringIndex[0]:"string"
+TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=29, line=2, col=8, value=StringIndex[3]:"escaped"
+TOKEN: raw=PUNCTUATION, token=ASSIGN, pos=37, line=2, col=16, value=none
+TOKEN: raw=LITERAL, token=STRING_LITERAL, pos=39, line=2, col=18, value=StringIndex[4]:"Line 1\nLine 2"
+TOKEN: raw=PUNCTUATION, token=SEMICOLON, pos=55, line=2, col=34, value=none
+TOKEN: raw=KEYWORD, token=CHAR, pos=57, line=3, col=1, value=none
+TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=62, line=3, col=6, value=StringIndex[5]:"c"
+TOKEN: raw=PUNCTUATION, token=ASSIGN, pos=64, line=3, col=8, value=none
+TOKEN: raw=LITERAL, token=CHAR_LITERAL, pos=66, line=3, col=10, value=char:'A'
+TOKEN: raw=PUNCTUATION, token=SEMICOLON, pos=69, line=3, col=13, value=none
+
+=== ACTUAL OUTPUT ===
+TOKEN: raw=IDENTIFIER, token=, pos=0, line=1, col=1, value=StringIndex[3]:"string"
+TOKEN: raw=WHITESPACE, token=, pos=6, line=1, col=7, value=none
+TOKEN: raw=IDENTIFIER, token=, pos=6, line=1, col=7, value=StringIndex[4]:"msg"
+TOKEN: raw=WHITESPACE, token=, pos=10, line=1, col=11, value=none
+TOKEN: raw=KEYWORD, token=, pos=10, line=1, col=11, value=none
+TOKEN: raw=WHITESPACE, token=, pos=12, line=1, col=13, value=none
+TOKEN: raw=LITERAL, token=STRING_LITERAL, pos=12, line=1, col=13, value=StringIndex[0]:"\"Hello\""
+TOKEN: raw=SEMICOLON, token=, pos=20, line=1, col=21, value=none
+TOKEN: raw=NEWLINE, token=, pos=21, line=1, col=22, value=none
+TOKEN: raw=IDENTIFIER, token=, pos=21, line=1, col=22, value=StringIndex[3]:"string"
+TOKEN: raw=WHITESPACE, token=, pos=28, line=2, col=7, value=none
+TOKEN: raw=IDENTIFIER, token=, pos=28, line=2, col=7, value=StringIndex[5]:"escaped"
+TOKEN: raw=WHITESPACE, token=, pos=36, line=2, col=15, value=none
+TOKEN: raw=KEYWORD, token=, pos=36, line=2, col=15, value=none
+TOKEN: raw=WHITESPACE, token=, pos=38, line=2, col=17, value=none
+TOKEN: raw=LITERAL, token=STRING_LITERAL, pos=38, line=2, col=17, value=StringIndex[1]:"\"Line 1\\nLine 2\""
+TOKEN: raw=SEMICOLON, token=, pos=55, line=2, col=34, value=none
+TOKEN: raw=NEWLINE, token=, pos=56, line=2, col=35, value=none
+TOKEN: raw=KEYWORD, token=CHAR, pos=56, line=2, col=35, value=none
+TOKEN: raw=WHITESPACE, token=, pos=61, line=3, col=5, value=none
+TOKEN: raw=IDENTIFIER, token=, pos=61, line=3, col=5, value=StringIndex[6]:"c"
+TOKEN: raw=WHITESPACE, token=, pos=63, line=3, col=7, value=none
+TOKEN: raw=KEYWORD, token=, pos=63, line=3, col=7, value=none
+TOKEN: raw=WHITESPACE, token=, pos=65, line=3, col=9, value=none
+TOKEN: raw=LITERAL, token=CHAR_LITERAL, pos=65, line=3, col=9, value=char:'A'
+TOKEN: raw=SEMICOLON, token=, pos=69, line=3, col=13, value=none
+TOKEN: raw=EOF_TOKEN, token=, pos=70, line=3, col=14, value=none
+
+=== STRING TABLE STATE ===
+Unique strings: 7
+Total characters: 43
+Average length: 6
+[0]: ""Hello""
+[1]: ""Line 1\nLine 2""
+[2]: "'A'"
+[3]: "string"
+[4]: "msg"
+[5]: "escaped"
+[6]: "c"
+
+=== SELECTIVE BUFFER TRACE ===
+(Buffer trace temporarily disabled - needs spdlog log_msg_buffer implementation)
+

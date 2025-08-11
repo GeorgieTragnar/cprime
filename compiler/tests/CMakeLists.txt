@@ -19,7 +19,12 @@ target_include_directories(cprime_tests PRIVATE
 
 # Link libraries
 target_link_libraries(cprime_tests
-    cprime_compiler  # The compiler library from src/
+    cprime_commons
+    cprime_layer0 
+    cprime_layer1
+    cprime_layer1validation
+    cprime_layer0validation
+    cprime_orchestrator
     GTest::gtest
     GTest::gtest_main
 )

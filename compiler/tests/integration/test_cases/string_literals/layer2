@@ -1,0 +1,18 @@
+# Expected Layer 1 tokenization output
+# String literal test case
+
+TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=0, line=1, col=1, value=StringIndex[0]:"string"
+TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=7, line=1, col=8, value=StringIndex[1]:"msg"
+TOKEN: raw=PUNCTUATION, token=ASSIGN, pos=11, line=1, col=12, value=none
+TOKEN: raw=LITERAL, token=STRING_LITERAL, pos=13, line=1, col=14, value=StringIndex[2]:"Hello"
+TOKEN: raw=PUNCTUATION, token=SEMICOLON, pos=20, line=1, col=21, value=none
+TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=22, line=2, col=1, value=StringIndex[0]:"string"
+TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=29, line=2, col=8, value=StringIndex[3]:"escaped"
+TOKEN: raw=PUNCTUATION, token=ASSIGN, pos=37, line=2, col=16, value=none
+TOKEN: raw=LITERAL, token=STRING_LITERAL, pos=39, line=2, col=18, value=StringIndex[4]:"Line 1\nLine 2"
+TOKEN: raw=PUNCTUATION, token=SEMICOLON, pos=55, line=2, col=34, value=none
+TOKEN: raw=KEYWORD, token=CHAR, pos=57, line=3, col=1, value=none
+TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=62, line=3, col=6, value=StringIndex[5]:"c"
+TOKEN: raw=PUNCTUATION, token=ASSIGN, pos=64, line=3, col=8, value=none
+TOKEN: raw=LITERAL, token=CHAR_LITERAL, pos=66, line=3, col=10, value=char:'A'
+TOKEN: raw=PUNCTUATION, token=SEMICOLON, pos=69, line=3, col=13, value=none

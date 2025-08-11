@@ -1,0 +1,18 @@
+# Expected Layer 1 tokenization output  
+# Number literal test case
+
+TOKEN: raw=KEYWORD, token=INT, pos=0, line=1, col=1, value=none
+TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=4, line=1, col=5, value=StringIndex[0]:"x"
+TOKEN: raw=PUNCTUATION, token=ASSIGN, pos=6, line=1, col=7, value=none
+TOKEN: raw=LITERAL, token=INT_LITERAL, pos=8, line=1, col=9, value=int32:42
+TOKEN: raw=PUNCTUATION, token=SEMICOLON, pos=10, line=1, col=11, value=none
+TOKEN: raw=KEYWORD, token=FLOAT, pos=12, line=2, col=1, value=none
+TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=18, line=2, col=7, value=StringIndex[1]:"pi"
+TOKEN: raw=PUNCTUATION, token=ASSIGN, pos=21, line=2, col=10, value=none
+TOKEN: raw=LITERAL, token=FLOAT_LITERAL, pos=23, line=2, col=12, value=float:3.14
+TOKEN: raw=PUNCTUATION, token=SEMICOLON, pos=28, line=2, col=17, value=none
+TOKEN: raw=KEYWORD, token=DOUBLE, pos=30, line=3, col=1, value=none
+TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=37, line=3, col=8, value=StringIndex[2]:"d"
+TOKEN: raw=PUNCTUATION, token=ASSIGN, pos=39, line=3, col=10, value=none
+TOKEN: raw=LITERAL, token=DOUBLE_LITERAL, pos=41, line=3, col=12, value=double:2.718
+TOKEN: raw=PUNCTUATION, token=SEMICOLON, pos=46, line=3, col=17, value=none
