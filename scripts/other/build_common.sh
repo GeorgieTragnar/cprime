@@ -14,8 +14,10 @@ export NC='\033[0m' # No Color
 
 # Get the project root directory (parent of scripts/)
 get_project_paths() {
-    local script_dir="$( cd "$( dirname "${BASH_SOURCE[1]}" )" &> /dev/null && pwd )"
-    export PROJECT_ROOT="$(dirname "$script_dir")"
+    # Find the project root by going up from this script's directory
+    local this_file_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+    local scripts_dir="$(dirname "$this_file_dir")"
+    export PROJECT_ROOT="$(dirname "$scripts_dir")"
     export SOURCE_DIR="$PROJECT_ROOT/compiler"
     export BUILD_DIR="$PROJECT_ROOT/build"
 }
