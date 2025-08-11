@@ -22,6 +22,8 @@ add_library(cprime_commons
     commons/dirty/selective_buffer_sink.h
     commons/dirty/component_buffer_manager.h
     commons/dirty/component_buffer_manager.cpp
+    commons/dirty/string_table.h
+    commons/dirty/string_table.cpp
 )
 
 target_include_directories(cprime_commons PUBLIC .)
@@ -39,6 +41,16 @@ target_include_directories(cprime_layer0 PUBLIC .)
 target_link_libraries(cprime_layer0 PUBLIC cprime_commons)
 target_compile_features(cprime_layer0 PUBLIC cxx_std_17)
 
+# Create Layer 1 library (tokenization)
+add_library(cprime_layer1
+    layer1/tokenizer.h
+    layer1/tokenizer.cpp
+)
+
+target_include_directories(cprime_layer1 PUBLIC .)
+target_link_libraries(cprime_layer1 PUBLIC cprime_commons)
+target_compile_features(cprime_layer1 PUBLIC cxx_std_17)
+
 # Create orchestrator library (main coordination)
 add_library(cprime_orchestrator
     orchestrator.h
@@ -46,7 +58,7 @@ add_library(cprime_orchestrator
 )
 
 target_include_directories(cprime_orchestrator PUBLIC .)
-target_link_libraries(cprime_orchestrator PUBLIC cprime_commons cprime_layer0)
+target_link_libraries(cprime_orchestrator PUBLIC cprime_commons cprime_layer0 cprime_layer1)
 target_compile_features(cprime_orchestrator PUBLIC cxx_std_17)
 
 # Create layer0validation library (debug support for Layer 0)
@@ -69,7 +81,7 @@ set(COMPILER_FLAGS
 )
 
 # Apply flags to all libraries
-foreach(lib IN ITEMS cprime_commons cprime_layer0 cprime_orchestrator cprime_layer0validation)
+foreach(lib IN ITEMS cprime_commons cprime_layer0 cprime_layer1 cprime_orchestrator cprime_layer0validation)
     target_compile_options(${lib} PRIVATE ${COMPILER_FLAGS})
 endforeach()
 

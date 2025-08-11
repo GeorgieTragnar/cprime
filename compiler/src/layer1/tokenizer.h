@@ -1,108 +1,79 @@
 #pragma once
 
-#include "../commons/compilation_context.h"
-#include "../commons/common_types.h"
+#include "../commons/rawToken.h"
+#include "../commons/dirty/common_types.h"
+#include "../commons/dirty/string_table.h"
 #include "../commons/logger.h"
-#include <map>
+#include <variant>
+#include <vector>
 #include <string>
 #include <sstream>
 
 namespace cprime {
 
 /**
- * Layer 1: Tokenization
+ * Processing chunk for multi-pass tokenization.
+ * Contains either a processed token or unprocessed string content.
+ */
+struct ProcessingChunk {
+    std::variant<RawToken, std::string> content;
+    uint32_t start_pos;
+    uint32_t end_pos;
+    uint32_t line;
+    uint32_t column;
+    
+    ProcessingChunk(RawToken token, uint32_t start, uint32_t end, uint32_t ln, uint32_t col)
+        : content(std::move(token)), start_pos(start), end_pos(end), line(ln), column(col) {}
+        
+    ProcessingChunk(std::string str, uint32_t start, uint32_t end, uint32_t ln, uint32_t col)
+        : content(std::move(str)), start_pos(start), end_pos(end), line(ln), column(col) {}
+    
+    bool is_processed() const { return std::holds_alternative<RawToken>(content); }
+    bool is_unprocessed() const { return std::holds_alternative<std::string>(content); }
+    
+    const RawToken& get_token() const { return std::get<RawToken>(content); }
+    const std::string& get_string() const { return std::get<std::string>(content); }
+};
+
+/**
+ * Layer 1: Multi-Pass Tokenization
  * 
- * Responsibilities:
- * - Read input streams from CompilationContext
- * - Convert raw text to token streams  
- * - Map token streams by stream ID
- * - Populate token_streams field in root scope
- * - Mark Layer 1 as completed
- * 
- * API Design:
- * - Static methods (stateless processing)
- * - Takes CompilationContext, modifies it in-place
- * - Returns VoidResult for error handling
- * - Fills token_streams in scopes[0] (root scope)
+ * Clean pipeline approach:
+ * - Master function calls sub-layers in sequence
+ * - Each layer processes chunks and returns refined chunks
+ * - Progressive reduction of unprocessed strings to final tokens
  */
 class Tokenizer {
 public:
     /**
-     * Main Layer 1 entry point.
-     * Tokenizes all input streams and populates context.scopes[0].token_streams
+     * Master tokenization function - clean pipeline
      * 
-     * @param context Compilation context with input_streams populated
-     * @return VoidResult indicating success or failure with error message
+     * @param stream The stringstream containing source code
+     * @param string_table Reference to string table for interning strings
+     * @return const std::vector<RawToken> with all tokens
      */
-    static VoidResult tokenize_all_streams(CompilationContext& context);
-    
-    /**
-     * Tokenize a single input stream.
-     * 
-     * @param stream_id Identifier for the stream (filename)
-     * @param input_stream The stringstream containing source code
-     * @return Result<std::vector<Token>> containing tokens or error
-     */
-    static Result<std::vector<Token>> tokenize_stream(
-        const std::string& stream_id,
-        std::stringstream& input_stream
-    );
+    static const std::vector<RawToken> tokenize_stream(std::stringstream& stream, StringTable& string_table);
 
 private:
-    /**
-     * Core tokenization logic for a single source string.
-     */
-    static Result<std::vector<Token>> tokenize_source(
-        const std::string& source_code,
-        const std::string& source_file
-    );
+    // Layer 1A: Extract unambiguous single-character tokens + state machine
+    static std::vector<ProcessingChunk> layer_1a_unambiguous_tokens(std::stringstream& stream);
     
-    /**
-     * Character-level tokenization state.
-     */
-    struct TokenizerState {
-        const std::string& source;
-        const std::string& source_file;
-        size_t position;
-        uint32_t line;
-        uint32_t column;
-        std::vector<Token> tokens;
-        
-        TokenizerState(const std::string& src, const std::string& file)
-            : source(src), source_file(file), position(0), line(1), column(1) {}
-    };
+    // Layer 1B: Extract string and character literals (prefix-aware)
+    static std::vector<ProcessingChunk> layer_1b_string_literals(const std::vector<ProcessingChunk>& input, StringTable& string_table);
     
-    // Character inspection
-    static char peek(const TokenizerState& state);
-    static char peek_next(const TokenizerState& state);
-    static void advance(TokenizerState& state);
-    static bool is_at_end(const TokenizerState& state);
+    // Layer 1C: Extract operators that can never be part of identifiers
+    static std::vector<ProcessingChunk> layer_1c_operators(const std::vector<ProcessingChunk>& input);
     
-    // Token reading methods
-    static bool skip_whitespace(TokenizerState& state);
-    static bool read_comment(TokenizerState& state);
-    static bool read_identifier_or_keyword(TokenizerState& state);
-    static bool read_string_literal(TokenizerState& state);
-    static bool read_number_literal(TokenizerState& state);
-    static bool read_operator_or_punctuation(TokenizerState& state);
+    // Layer 1D: Extract number literals (suffix-aware)
+    static std::vector<ProcessingChunk> layer_1d_number_literals(const std::vector<ProcessingChunk>& input);
     
-    // Utility methods
-    static bool is_alpha(char c);
-    static bool is_digit(char c);
-    static bool is_alphanumeric(char c);
-    static bool is_whitespace(char c);
-    static TokenKind classify_identifier(const std::string& identifier);
-    static TokenKind classify_operator(const std::string& op_text);
+    // Layer 1E: Extract keywords and convert remaining strings to identifiers
+    static std::vector<RawToken> layer_1e_keywords_and_identifiers(const std::vector<ProcessingChunk>& input, StringTable& string_table);
     
-    // Token creation helpers
-    static void add_token(TokenizerState& state, TokenKind kind);
-    static void add_token(TokenizerState& state, TokenKind kind, const std::string& value);
-    
+    // Helper functions
+    static RawToken create_raw_token(EToken token, ERawToken raw_token, uint32_t line, uint32_t column, uint32_t position);
     template<typename T>
-    static void add_token(TokenizerState& state, TokenKind kind, T literal_value);
-    
-    // Error handling
-    static void handle_unknown_character(TokenizerState& state);
+    static RawToken create_raw_token_with_value(EToken token, ERawToken raw_token, uint32_t line, uint32_t column, uint32_t position, T value);
 };
 
 } // namespace cprime

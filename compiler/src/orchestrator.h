@@ -1,7 +1,10 @@
 #pragma once
 
 #include "layer0/compilation_parameters.h"
+#include "commons/dirty/string_table.h"
 #include "commons/logger.h"
+#include <map>
+#include <sstream>
 
 namespace cprime {
 
@@ -43,11 +46,18 @@ private:
     // Logger for orchestrator component
     cprime::Logger logger_;
     
+    // String table for interning strings across all layers
+    StringTable string_table_;
+    
+    // Input streams from Layer 0 (passed to Layer 1)
+    std::map<std::string, std::stringstream> input_streams_;
+    
     // TODO: Add CompilationContext ownership and management
     // TODO: Add proper error handling system
     
     // Layer execution methods (private - called by run())
     bool run_layer0();  // Input processing
+    bool run_layer1();  // Tokenization
     
     // TODO: Add future layer methods
     // bool run_layer1();  // Tokenization

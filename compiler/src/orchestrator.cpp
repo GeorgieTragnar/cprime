@@ -1,5 +1,6 @@
 #include "orchestrator.h"
 #include "layer0/input_processor.h"
+#include "layer1/tokenizer.h"
 #include "commons/logger.h"
 
 namespace cprime {
@@ -23,7 +24,11 @@ bool CompilerOrchestrator::run() {
     // Layer 0: Input Processing
     bool success = run_layer0();
     
-    // TODO: Add Layer 1 (Tokenization)
+    // Layer 1: Tokenization
+    if (success) {
+        success = run_layer1();
+    }
+    
     // TODO: Add Layer 2 (Structure Building)
     // TODO: Add Layer 3 (Contextualization)
     // TODO: Add Layer 4 (RAII injection)
@@ -46,15 +51,14 @@ bool CompilerOrchestrator::run_layer0() {
         return false;
     }
     
-    // TODO: Store input_streams in CompilationContext
-    // TODO: Initialize scope vector after Layer 0 completes
-    // TODO: Initialize error handling system
+    // Store input streams for Layer 1
+    input_streams_ = std::move(input_streams);
     
     // Success logging with stream details
     auto& logger = logger_; // Alias for LOG macros
-    LOG_INFO("Layer 0 completed: {} input streams processed", input_streams.size());
+    LOG_INFO("Layer 0 completed: {} input streams processed", input_streams_.size());
     
-    for (const auto& [stream_id, stream] : input_streams) {
+    for (const auto& [stream_id, stream] : input_streams_) {
         LOG_DEBUG("  Stream '{}': {} characters", stream_id, stream.str().length());
     }
     
@@ -62,8 +66,57 @@ bool CompilerOrchestrator::run_layer0() {
     return true;
 }
 
-// TODO: Implement Layer 1 tokenization
-// bool CompilerOrchestrator::run_layer1() { ... }
+bool CompilerOrchestrator::run_layer1() {
+    log_layer_start("Layer 1 (Tokenization)");
+    
+    if (input_streams_.empty()) {
+        auto& logger = logger_; // Alias for LOG macros
+        LOG_ERROR("Layer 1 failed: No input streams from Layer 0");
+        log_layer_end("Layer 1", false);
+        return false;
+    }
+    
+    auto& logger = logger_; // Alias for LOG macros
+    LOG_DEBUG("Starting tokenization of {} input streams", input_streams_.size());
+    
+    // Tokenize each input stream
+    for (auto& [stream_id, stream] : input_streams_) {
+        LOG_DEBUG("Tokenizing stream: {}", stream_id);
+        
+        try {
+            // Call the tokenizer with string table
+            auto tokens = Tokenizer::tokenize_stream(stream, string_table_);
+            
+            LOG_INFO("Stream '{}' tokenized: {} tokens generated", stream_id, tokens.size());
+            
+            // TODO: Store tokens in CompilationContext or pass to next layer
+            // For now, just log some statistics
+            size_t literal_count = 0, identifier_count = 0, keyword_count = 0;
+            for (const auto& token : tokens) {
+                switch (token._raw_token) {
+                    case ERawToken::LITERAL: literal_count++; break;
+                    case ERawToken::IDENTIFIER: identifier_count++; break;
+                    case ERawToken::KEYWORD: keyword_count++; break;
+                    default: break;
+                }
+            }
+            
+            LOG_DEBUG("  Literals: {}, Identifiers: {}, Keywords: {}", 
+                     literal_count, identifier_count, keyword_count);
+            
+        } catch (const std::exception& e) {
+            LOG_ERROR("Tokenization failed for stream '{}': {}", stream_id, e.what());
+            log_layer_end("Layer 1", false);
+            return false;
+        }
+    }
+    
+    LOG_INFO("Layer 1 completed: All streams tokenized successfully");
+    LOG_DEBUG("String table now contains {} unique strings", string_table_.size());
+    
+    log_layer_end("Layer 1", true);
+    return true;
+}
 
 // TODO: Implement Layer 2 structure building
 // bool CompilerOrchestrator::run_layer2() { ... }

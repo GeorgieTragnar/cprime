@@ -149,9 +149,15 @@ enum class EToken : uint16_t {
     SINGLE_QUOTE,   // ' (lifetime/character literal delimiter)
     HASH,           // # (attribute prefix)
     
+    // Whitespace Types - Reserved range: 400-410
+    SPACE = 400,         // ' ' (0x20)
+    TAB,                 // '\t' (0x09)
+    CARRIAGE_RETURN,     // '\r' (0x0D)
+    VERTICAL_TAB,        // '\v' (0x0B)  
+    FORM_FEED,           // '\f' (0x0C)
+    
     // Special
-    IDENTIFIER = 400,
-    WHITESPACE,
+    IDENTIFIER = 420,
     COMMENT,
     NEWLINE,
     EOF_TOKEN
