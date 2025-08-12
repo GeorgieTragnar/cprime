@@ -147,12 +147,11 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
             string(FIND "${CODE_BLOCK}" "return " HAS_RETURN)
             
             if(HAS_RETURN GREATER -1)
-                # This block contains the return statement - replace it
+                # This block contains the return statement - no instrumentation needed
                 message(STATUS "      Found return statement in block ${BLOCK_INDEX}")
                 
                 string(APPEND CURRENT_CONTENT "\n    // --- Code Block ${BLOCK_INDEX} (Final) ---\n")
                 string(APPEND CURRENT_CONTENT "${CODE_BLOCK}")
-                string(APPEND CURRENT_CONTENT "\n    log_intermediate_state(\"final_result\", cprime::layer${LAYER_NUM}_sublayers::validation::serialize(retVal));\n")
             else()
                 # Regular block - extract variable name from the sublayer call line itself
                 string(APPEND CURRENT_CONTENT "\n    // --- Code Block ${BLOCK_INDEX} ---\n")
@@ -170,7 +169,6 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
         endforeach()
         
         string(APPEND CURRENT_CONTENT "\n    // === END INSTRUMENTED FUNCTION ===\n")
-        string(APPEND CURRENT_CONTENT "    return retVal;\n")
         string(APPEND CURRENT_CONTENT "}\n\n")
     else()
         message(WARNING "Could not extract function body for layer${LAYER_NUM}")
