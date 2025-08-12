@@ -12,6 +12,7 @@
 
 **Functional Classes**: RAII state modifiers
 - Stateless operations that modify data class state
+- Can only contain `memoize` fields for optimization (semantically invisible)
 - Gain access rights to data classes through interface contracts at instantiation
 - Enable inheritance-like polymorphism with explicit memory costs
 - Can be templated through interface contracts
@@ -79,6 +80,7 @@
 - Construction control prevents invalid states
 - Reference counting prevents use-after-free
 - No hidden complexity or surprising behaviors
+- Memoize fields provide performance without compromising correctness
 
 ### Composability
 - Interface contracts enable generic programming

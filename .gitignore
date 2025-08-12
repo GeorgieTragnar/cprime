@@ -5,6 +5,9 @@ compiler/build/
 # Log files
 logs/
 
+# Test temporary files
+tmp/
+
 # Temporary files
 *.tmp
 .DS_Store

@@ -236,14 +236,19 @@ For comprehensive union documentation, see [unions.md](unions.md).
 
 ### 2. Functional Classes - RAII State Modifiers
 
-Functional classes are RAII state modifiers that contain only stateless operations. They cannot have member variables and serve as the exclusive means to modify data class state while maintaining RAII safety. They act as namespaces for related state modification functionality.
+Functional classes are RAII state modifiers that contain only stateless operations and optimization storage. They can only have `memoize` fields (for performance optimization) and serve as the exclusive means to modify data class state while maintaining RAII safety. They act as namespaces for related state modification functionality while allowing performance caching.
 
 #### Syntax and Structure
 
 ```cpp
 functional class FileStream {
-    // ❌ COMPILE ERROR: No state allowed
-    // cache: HashMap<String, Data>  
+    // ✓ Only memoize fields allowed for optimization
+    memoize open_file_cache: HashMap<PathBuf, FileHandle>,
+    memoize read_buffers: Vec<Buffer>,
+    
+    // ❌ COMPILE ERROR: No regular state allowed
+    // connection_count: u32,
+    // current_directory: PathBuf,
     
     // Constructor creates paired data class
     fn construct(path: &str) -> Result<StreamData> {
@@ -333,12 +338,13 @@ functional class StringOps {
 
 #### Key Rules for Functional Classes
 
-1. **No member variables**: Enforced at compile time
+1. **Only memoize fields allowed**: No regular member variables - only `memoize` fields for optimization
 2. **Optional constructor/destructor**: For managing paired data classes or objects in union constructs
 3. **Without constructor = module**: Pure utility functions
 4. **All operations are static**: No `self` parameter except in constructor/destructor
-5. **Stateless by design**: Cannot maintain state between calls
+5. **Semantically stateless**: Cannot maintain semantic state - only optimization cache
 6. **Can operate on union constructs**: Pattern matching on objects in union space is allowed
+7. **Memoize field semantics**: Optimization storage that cannot affect program correctness
 
 #### Constructor/Destructor Semantics
 
@@ -346,6 +352,59 @@ functional class StringOps {
 - **Destructor**: Cleans up data class/object instance (called automatically) 
 - **Pairing**: One functional class can manage one data class or objects in union construct
 - **No constructor**: Functional class becomes a pure module
+
+#### Memoize Fields in Functional Classes
+
+Functional classes can contain `memoize` fields - optimization-only storage that cannot affect program correctness. These fields enable performance improvements while maintaining semantic statelessness.
+
+```cpp
+functional class ComputeOps {
+    // Optimization storage - semantically invisible
+    memoize fibonacci_cache: HashMap<u32, u128>,
+    memoize workspace_buffers: Vec<Buffer>,
+    
+    fn fibonacci(n: u32) -> u128 {
+        // Check memoize cache for performance
+        if let Some(cached) = self.fibonacci_cache.get(&n) {
+            return *cached;
+        }
+        
+        // Compute result (semantics unchanged)
+        let result = match n {
+            0 | 1 => n as u128,
+            _ => ComputeOps::fibonacci(n - 1) + ComputeOps::fibonacci(n - 2),
+        };
+        
+        // Store in memoize cache
+        self.fibonacci_cache.insert(n, result);
+        result
+    }
+    
+    fn process_data(data: &ProcessingData, input: &[u8]) -> Vec<u8> {
+        // Reuse workspace buffers to avoid allocation
+        let mut buffer = self.workspace_buffers.pop()
+            .unwrap_or_else(|| Buffer::with_capacity(4096));
+        
+        // Process using buffer
+        let result = buffer.transform(input);
+        
+        // Return buffer to pool
+        buffer.clear();
+        self.workspace_buffers.push(buffer);
+        
+        result
+    }
+}
+```
+
+**Memoize Field Properties:**
+- **Thread-local by default**: Each thread gets its own cache instance
+- **RAII managed**: Automatically allocated/deallocated with functional class
+- **Semantically invisible**: Program behavior identical with or without cache
+- **Compiler optimized**: Extensive optimization opportunities
+- **Performance only**: Exists solely for optimization, never affects correctness
+
+For comprehensive documentation on memoize fields, see [memoize.md](memoize.md).
 
 ### 3. Danger Classes - Full C++ Semantics
 
@@ -559,6 +618,10 @@ All coroutine operations are implemented as stateless functional classes:
 
 ```cpp
 functional class HttpCoroManager {
+    // Memoize fields for coroutine pool optimization
+    memoize size_class_pools: HashMap<CoroSizeTag, CoroutinePool>,
+    memoize metadata_cache: LRUCache<FunctionId, CoroMetadata>,
+    
     // Constructor allocates coroutine with compiler-guided size analysis
     fn construct(request: HttpRequest) -> HttpHandlerCoro {
         let size_hint = compiler_analyze_size::<HttpHandlerCoro>();

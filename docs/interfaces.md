@@ -13,7 +13,7 @@ They offer two distinct variants based on CPrime's cost-signaling keywords:
 
 > **Cost Signaling**: The `runtime` keyword explicitly signals performance overhead. See [Runtime/Comptime Keywords](runtime-comptime-keywords.md) for complete cost-signaling reference.
 
-While functional classes provide inheritance-like polymorphism (gaining access rights to data classes with explicit memory costs), interfaces serve as constructs in CPrime's polymorphism system: functional classes (inheritance-like), traditional interfaces (shared operations via constructs), interface memory contracts (N:M composition via constructs), and unions (pattern matching via constructs).
+While functional classes provide inheritance-like polymorphism (gaining access rights to data classes with explicit memory costs) and can contain memoize fields for optimization, interfaces serve as constructs in CPrime's polymorphism system: functional classes (inheritance-like), traditional interfaces (shared operations via constructs), interface memory contracts (N:M composition via constructs), and unions (pattern matching via constructs).
 
 ## Core Concepts
 

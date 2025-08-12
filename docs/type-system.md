@@ -89,6 +89,10 @@ class Vec<T> {
 }
 
 functional class VecOps<T> {
+    // Memoize fields for optimization (only fields allowed in functional classes)
+    memoize allocation_cache: Vec<*mut T>,
+    memoize size_hints: HashMap<TypeId, usize>,
+    
     fn construct() -> Vec<T> { ... }
     fn with_capacity(cap: usize) -> Vec<T> { ... }
     fn push(vec: &mut Vec<T>, item: T) { ... }

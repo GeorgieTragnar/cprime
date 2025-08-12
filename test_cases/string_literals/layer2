@@ -1,18 +1,34 @@
-# Expected Layer 1 tokenization output
-# String literal test case
+# Expected Layer 1 tokenization output for string_literals
+# Complete individual token sequence according to CPrime specification
+# Input: string msg = "Hello";
+#        string escaped = "Line 1\nLine 2";
+#        char c = 'A';
 
 TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=0, line=1, col=1, value=StringIndex[0]:"string"
+TOKEN: raw=WHITESPACE, token=SPACE, pos=6, line=1, col=7, value=none
 TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=7, line=1, col=8, value=StringIndex[1]:"msg"
-TOKEN: raw=PUNCTUATION, token=ASSIGN, pos=11, line=1, col=12, value=none
+TOKEN: raw=WHITESPACE, token=SPACE, pos=10, line=1, col=11, value=none
+TOKEN: raw=KEYWORD, token=ASSIGN, pos=11, line=1, col=12, value=none
+TOKEN: raw=WHITESPACE, token=SPACE, pos=12, line=1, col=13, value=none
 TOKEN: raw=LITERAL, token=STRING_LITERAL, pos=13, line=1, col=14, value=StringIndex[2]:"Hello"
-TOKEN: raw=PUNCTUATION, token=SEMICOLON, pos=20, line=1, col=21, value=none
+TOKEN: raw=SEMICOLON, token=SEMICOLON, pos=20, line=1, col=21, value=none
+TOKEN: raw=NEWLINE, token=NEWLINE, pos=21, line=1, col=22, value=none
 TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=22, line=2, col=1, value=StringIndex[0]:"string"
+TOKEN: raw=WHITESPACE, token=SPACE, pos=28, line=2, col=7, value=none
 TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=29, line=2, col=8, value=StringIndex[3]:"escaped"
-TOKEN: raw=PUNCTUATION, token=ASSIGN, pos=37, line=2, col=16, value=none
+TOKEN: raw=WHITESPACE, token=SPACE, pos=36, line=2, col=15, value=none
+TOKEN: raw=KEYWORD, token=ASSIGN, pos=37, line=2, col=16, value=none
+TOKEN: raw=WHITESPACE, token=SPACE, pos=38, line=2, col=17, value=none
 TOKEN: raw=LITERAL, token=STRING_LITERAL, pos=39, line=2, col=18, value=StringIndex[4]:"Line 1\nLine 2"
-TOKEN: raw=PUNCTUATION, token=SEMICOLON, pos=55, line=2, col=34, value=none
+TOKEN: raw=SEMICOLON, token=SEMICOLON, pos=55, line=2, col=34, value=none
+TOKEN: raw=NEWLINE, token=NEWLINE, pos=56, line=2, col=35, value=none
 TOKEN: raw=KEYWORD, token=CHAR, pos=57, line=3, col=1, value=none
+TOKEN: raw=WHITESPACE, token=SPACE, pos=61, line=3, col=5, value=none
 TOKEN: raw=IDENTIFIER, token=IDENTIFIER, pos=62, line=3, col=6, value=StringIndex[5]:"c"
-TOKEN: raw=PUNCTUATION, token=ASSIGN, pos=64, line=3, col=8, value=none
-TOKEN: raw=LITERAL, token=CHAR_LITERAL, pos=66, line=3, col=10, value=char:'A'
-TOKEN: raw=PUNCTUATION, token=SEMICOLON, pos=69, line=3, col=13, value=none
+TOKEN: raw=WHITESPACE, token=SPACE, pos=63, line=3, col=7, value=none
+TOKEN: raw=KEYWORD, token=ASSIGN, pos=64, line=3, col=8, value=none
+TOKEN: raw=WHITESPACE, token=SPACE, pos=65, line=3, col=9, value=none
+TOKEN: raw=LITERAL, token=CHAR_LITERAL, pos=66, line=3, col=10, value='A'
+TOKEN: raw=SEMICOLON, token=SEMICOLON, pos=69, line=3, col=13, value=none
+TOKEN: raw=NEWLINE, token=NEWLINE, pos=70, line=3, col=14, value=none
+TOKEN: raw=EOF_TOKEN, token=EOF_TOKEN, pos=71, line=4, col=1, value=none

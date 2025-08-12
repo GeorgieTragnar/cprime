@@ -35,14 +35,15 @@ CPrime is a systems programming language designed to achieve everything that C++
 ### 1. Three-Class System
 **Separation of concerns at the language level:**
 - **Data classes**: Pure state, no behavior
-- **Functional classes**: Pure operations, no state  
+- **Functional classes**: Pure operations with memoize-only optimization storage
 - **Danger classes**: Full C++ semantics for interop and legacy code
 
 **Benefits:**
 - Enforces good architectural patterns
-- Makes code intentions explicit
+- Makes code intentions explicit  
 - Enables powerful compiler optimizations
 - Provides clear boundaries for different programming paradigms
+- Allows performance optimization without compromising architectural purity through memoize fields
 
 ### 2. No Inheritance
 **Replace class hierarchies with composition and access rights:**

@@ -13,7 +13,7 @@ CPrime is a systems programming language designed to achieve everything that C++
 
 ### Three-Class System
 1. **Data Classes**: Pure state and memory operations only
-2. **Functional Classes**: Stateless operations only  
+2. **Functional Classes**: Stateless operations with memoize-only optimization storage
 3. **Danger Classes**: Traditional OOP for C++ interop and unsafe operations
 
 ## Directory Structure
