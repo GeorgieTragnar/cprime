@@ -127,11 +127,60 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
     extract_complete_function_body("layer${LAYER_NUM}" "${SOURCE_FILE}" FUNCTION_BODY)
     
     if(FUNCTION_BODY)
-        # Generate TEST_F case with copied function body
+        # Split function body into code blocks separated by sublayer calls
+        split_function_body_at_sublayers("${FUNCTION_BODY}" "${LAYER_NUM}" CODE_BLOCKS)
+        
+        # Generate TEST_F case with separated code blocks
         string(APPEND CURRENT_CONTENT "TEST_F(LayerTestFixture, Layer${LAYER_NUM}_BasicTest) {\n")
-        string(APPEND CURRENT_CONTENT "    // === COPIED FROM layer${LAYER_NUM} FUNCTION ===\n")
-        string(APPEND CURRENT_CONTENT "${FUNCTION_BODY}")
-        string(APPEND CURRENT_CONTENT "    // === END COPIED FUNCTION ===\n")
+        string(APPEND CURRENT_CONTENT "    // === INSTRUMENTED layer${LAYER_NUM} FUNCTION ===\n")
+        
+        # Insert each code block with instrumentation
+        list(LENGTH CODE_BLOCKS BLOCK_COUNT)
+        math(EXPR LAST_BLOCK "${BLOCK_COUNT} - 1")
+        
+        foreach(BLOCK_INDEX RANGE ${LAST_BLOCK})
+            list(GET CODE_BLOCKS ${BLOCK_INDEX} CODE_BLOCK)
+            
+            # Check if this block contains a return statement
+            string(FIND "${CODE_BLOCK}" "return " HAS_RETURN)
+            
+            if(HAS_RETURN GREATER -1)
+                # This block contains the return statement - replace it
+                message(STATUS "      Found return statement in block ${BLOCK_INDEX}")
+                
+                # Split the block into lines and process each line
+                string(REPLACE "\n" ";" BLOCK_LINES "${CODE_BLOCK}")
+                set(PROCESSED_LINES "")
+                
+                foreach(LINE ${BLOCK_LINES})
+                    if(LINE MATCHES ".*return\\s+.*")
+                        string(REGEX REPLACE "return\\s+" "auto retVal = " PROCESSED_LINE "${LINE}")
+                        message(STATUS "        Replacing line: '${LINE}' -> '${PROCESSED_LINE}'")
+                        list(APPEND PROCESSED_LINES "${PROCESSED_LINE};")
+                    else()
+                        list(APPEND PROCESSED_LINES "${LINE}")
+                    endif()
+                endforeach()
+                
+                string(REPLACE ";" "\n" PROCESSED_BLOCK "${PROCESSED_LINES}")
+                
+                string(APPEND CURRENT_CONTENT "\n    // --- Code Block ${BLOCK_INDEX} (Final) ---\n")
+                string(APPEND CURRENT_CONTENT "${PROCESSED_BLOCK}")
+                string(APPEND CURRENT_CONTENT "\n    // TODO: Add final instrumentation logging here\n")
+            else()
+                # Regular block
+                string(APPEND CURRENT_CONTENT "\n    // --- Code Block ${BLOCK_INDEX} ---\n")
+                string(APPEND CURRENT_CONTENT "${CODE_BLOCK}")
+                if(BLOCK_INDEX LESS ${LAST_BLOCK})
+                    string(APPEND CURRENT_CONTENT "\n    // TODO: Add instrumentation logging here\n")
+                endif()
+            endif()
+        endforeach()
+        
+        # Final post-processing: replace any remaining return statements with auto retVal =
+        string(REGEX REPLACE "return layer" "auto retVal = layer" CURRENT_CONTENT "${CURRENT_CONTENT}")
+        
+        string(APPEND CURRENT_CONTENT "\n    // === END INSTRUMENTED FUNCTION ===\n")
         string(APPEND CURRENT_CONTENT "}\n\n")
     else()
         message(WARNING "Could not extract function body for layer${LAYER_NUM}")
@@ -139,6 +188,49 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
     endif()
     
     set(${OUTPUT_VAR} "${CURRENT_CONTENT}" PARENT_SCOPE)
+endfunction()
+
+# Function to split function body at sublayer calls
+function(split_function_body_at_sublayers FUNCTION_BODY LAYER_NUM OUTPUT_VAR)
+    message(STATUS "    Splitting function body at sublayer calls for layer${LAYER_NUM}")
+    
+    # Split the body by newlines to process line by line
+    string(REPLACE "\n" ";" BODY_LINES "${FUNCTION_BODY}")
+    
+    set(CODE_BLOCKS "")
+    set(CURRENT_BLOCK "")
+    set(BLOCK_COUNT 0)
+    
+    foreach(LINE ${BODY_LINES})
+        # Check if this line contains a sublayer call
+        if(LINE MATCHES "layer${LAYER_NUM}_sublayers::sublayer${LAYER_NUM}[a-z]+")
+            # Add the current line to the current block
+            string(APPEND CURRENT_BLOCK "${LINE}\n")
+            
+            # Close the current block and start a new one
+            list(APPEND CODE_BLOCKS "${CURRENT_BLOCK}")
+            set(CURRENT_BLOCK "")
+            math(EXPR BLOCK_COUNT "${BLOCK_COUNT} + 1")
+            
+            message(STATUS "      Found sublayer call in line: ${LINE}")
+            message(STATUS "      Created block ${BLOCK_COUNT}")
+        else()
+            # Add line to current block
+            string(APPEND CURRENT_BLOCK "${LINE}\n")
+        endif()
+    endforeach()
+    
+    # Add the final block if it has content
+    if(CURRENT_BLOCK)
+        list(APPEND CODE_BLOCKS "${CURRENT_BLOCK}")
+        math(EXPR BLOCK_COUNT "${BLOCK_COUNT} + 1")
+        message(STATUS "      Created final block ${BLOCK_COUNT}")
+    endif()
+    
+    list(LENGTH CODE_BLOCKS FINAL_BLOCK_COUNT)
+    message(STATUS "    Split into ${FINAL_BLOCK_COUNT} code blocks")
+    
+    set(${OUTPUT_VAR} "${CODE_BLOCKS}" PARENT_SCOPE)
 endfunction()
 
 # Extract complete function body with proper formatting
