@@ -15,7 +15,7 @@ std::vector<RawToken> layer2(std::stringstream& stream, StringTable& string_tabl
 // Layer 2 sublayer implementations in nested namespace
 namespace layer2_sublayers {
     // Layer 2A: Extract unambiguous single-character tokens + state machine
-    std::vector<ProcessingChunk> sublayer1a(std::stringstream& stream);
+    std::vector<ProcessingChunk> sublayer2a(std::stringstream& stream);
     
     // Layer 2B: Extract string and character literals (prefix-aware)
     std::vector<ProcessingChunk> sublayer2b(const std::vector<ProcessingChunk>& input, StringTable& string_table);

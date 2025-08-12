@@ -150,25 +150,8 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
                 # This block contains the return statement - replace it
                 message(STATUS "      Found return statement in block ${BLOCK_INDEX}")
                 
-                # Split the block into lines and process each line
-                string(REPLACE "\n" ";" BLOCK_LINES "${CODE_BLOCK}")
-                set(PROCESSED_LINES "")
-                
-                foreach(LINE ${BLOCK_LINES})
-                    if(LINE MATCHES ".*return\\s+.*")
-                        # Manually replace "return layer" with "auto retVal = cprime::layer"
-                        string(REPLACE "return layer" "auto retVal = cprime::layer" PROCESSED_LINE "${LINE}")
-                        message(STATUS "        Replacing line: '${LINE}' -> '${PROCESSED_LINE}'")
-                        list(APPEND PROCESSED_LINES "${PROCESSED_LINE};")
-                    else()
-                        list(APPEND PROCESSED_LINES "${LINE}")
-                    endif()
-                endforeach()
-                
-                string(REPLACE ";" "\n" PROCESSED_BLOCK "${PROCESSED_LINES}")
-                
                 string(APPEND CURRENT_CONTENT "\n    // --- Code Block ${BLOCK_INDEX} (Final) ---\n")
-                string(APPEND CURRENT_CONTENT "${PROCESSED_BLOCK}")
+                string(APPEND CURRENT_CONTENT "${CODE_BLOCK}")
                 string(APPEND CURRENT_CONTENT "\n    log_intermediate_state(\"final_result\", cprime::layer${LAYER_NUM}_sublayers::validation::serialize(retVal));\n")
             else()
                 # Regular block - extract variable name from the sublayer call line itself
@@ -213,7 +196,8 @@ function(split_function_body_at_sublayers FUNCTION_BODY LAYER_NUM OUTPUT_VAR)
         if(LINE MATCHES "layer${LAYER_NUM}_sublayers::sublayer${LAYER_NUM}[a-z]+")
             # Manually add cprime:: prefix to the line
             string(REPLACE "layer${LAYER_NUM}_sublayers::" "cprime::layer${LAYER_NUM}_sublayers::" PREFIXED_LINE "${LINE}")
-            string(APPEND CURRENT_BLOCK "${PREFIXED_LINE}\n")
+            # Ensure we preserve the original line structure exactly
+            string(APPEND CURRENT_BLOCK "    ${PREFIXED_LINE}\n")
             
             # Close the current block and start a new one
             list(APPEND CODE_BLOCKS "${CURRENT_BLOCK}")

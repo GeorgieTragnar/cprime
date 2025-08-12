@@ -5,7 +5,7 @@ namespace cprime {
 // Layer 2 main function - mirrors exactly tokenize_stream logic
 std::vector<RawToken> layer2(std::stringstream& stream, StringTable& string_table) {
     // Layer 2A: Extract unambiguous tokens + state machine
-    auto retVal1 = layer2_sublayers::sublayer1a(stream);
+    auto retVal1 = layer2_sublayers::sublayer2a(stream);
     
     // Layer 2B: Extract string/char literals (prefix-aware)
     auto retVal2 = layer2_sublayers::sublayer2b(retVal1, string_table);
@@ -15,7 +15,8 @@ std::vector<RawToken> layer2(std::stringstream& stream, StringTable& string_tabl
     
     
     // Layer 2E: Extract keywords and convert remaining to identifiers
-    return layer2_sublayers::sublayer2e(retVal3, string_table);
+    auto retVal4 = layer2_sublayers::sublayer2e(retVal3, string_table);
+    return retVal4;
 }
 
 // Sublayer implementations in layer2_sublayers namespace - all dummy for now
