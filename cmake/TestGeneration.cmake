@@ -39,8 +39,8 @@ function(generate_includes_file DISCOVERY_REGISTRY OUTPUT_FILE)
     
     # Generate include statements
     foreach(LAYER_NUM ${UNIQUE_LAYERS})
-        string(APPEND INCLUDES_CONTENT "#include \"../compiler/src/layer${LAYER_NUM}/layer${LAYER_NUM}.h\"\n")
-        string(APPEND INCLUDES_CONTENT "#include \"../compiler/src/layer${LAYER_NUM}validation/layer${LAYER_NUM}validation.h\"\n")
+        string(APPEND INCLUDES_CONTENT "#include \"../src/layer${LAYER_NUM}/layer${LAYER_NUM}.h\"\n")
+        string(APPEND INCLUDES_CONTENT "#include \"../src/layer${LAYER_NUM}validation/layer${LAYER_NUM}validation.h\"\n")
     endforeach()
     
     file(WRITE ${OUTPUT_FILE} "${INCLUDES_CONTENT}")
@@ -156,7 +156,8 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
                 
                 foreach(LINE ${BLOCK_LINES})
                     if(LINE MATCHES ".*return\\s+.*")
-                        string(REGEX REPLACE "return\\s+" "auto retVal = " PROCESSED_LINE "${LINE}")
+                        # Manually replace "return layer" with "auto retVal = cprime::layer"
+                        string(REPLACE "return layer" "auto retVal = cprime::layer" PROCESSED_LINE "${LINE}")
                         message(STATUS "        Replacing line: '${LINE}' -> '${PROCESSED_LINE}'")
                         list(APPEND PROCESSED_LINES "${PROCESSED_LINE};")
                     else()
@@ -185,9 +186,6 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
             endif()
         endforeach()
         
-        # Final post-processing: replace return statements with auto retVal =
-        string(REGEX REPLACE "return layer" "auto retVal = layer" CURRENT_CONTENT "${CURRENT_CONTENT}")
-        
         string(APPEND CURRENT_CONTENT "\n    // === END INSTRUMENTED FUNCTION ===\n")
         string(APPEND CURRENT_CONTENT "    return retVal;\n")
         string(APPEND CURRENT_CONTENT "}\n\n")
@@ -199,7 +197,7 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
     set(${OUTPUT_VAR} "${CURRENT_CONTENT}" PARENT_SCOPE)
 endfunction()
 
-# Function to split function body at sublayer calls
+# Function to split function body at sublayer calls and add cprime:: prefix
 function(split_function_body_at_sublayers FUNCTION_BODY LAYER_NUM OUTPUT_VAR)
     message(STATUS "    Splitting function body at sublayer calls for layer${LAYER_NUM}")
     
@@ -211,10 +209,11 @@ function(split_function_body_at_sublayers FUNCTION_BODY LAYER_NUM OUTPUT_VAR)
     set(BLOCK_COUNT 0)
     
     foreach(LINE ${BODY_LINES})
-        # Check if this line contains a sublayer call
+        # Check if this line contains a sublayer call and add cprime:: prefix
         if(LINE MATCHES "layer${LAYER_NUM}_sublayers::sublayer${LAYER_NUM}[a-z]+")
-            # Add the current line to the current block
-            string(APPEND CURRENT_BLOCK "${LINE}\n")
+            # Manually add cprime:: prefix to the line
+            string(REPLACE "layer${LAYER_NUM}_sublayers::" "cprime::layer${LAYER_NUM}_sublayers::" PREFIXED_LINE "${LINE}")
+            string(APPEND CURRENT_BLOCK "${PREFIXED_LINE}\n")
             
             # Close the current block and start a new one
             list(APPEND CODE_BLOCKS "${CURRENT_BLOCK}")
@@ -222,9 +221,10 @@ function(split_function_body_at_sublayers FUNCTION_BODY LAYER_NUM OUTPUT_VAR)
             math(EXPR BLOCK_COUNT "${BLOCK_COUNT} + 1")
             
             message(STATUS "      Found sublayer call in line: ${LINE}")
+            message(STATUS "      Added cprime:: prefix: ${PREFIXED_LINE}")
             message(STATUS "      Created block ${BLOCK_COUNT}")
         else()
-            # Add line to current block
+            # Add line to current block (no modification needed for non-sublayer lines)
             string(APPEND CURRENT_BLOCK "${LINE}\n")
         endif()
     endforeach()
@@ -408,10 +408,10 @@ function(generate_dynamic_tests_file DISCOVERY_REGISTRY OUTPUT_FILE)
         string(APPEND DYNAMIC_TESTS_CONTENT "            StringTable string_table;\n")
         string(APPEND DYNAMIC_TESTS_CONTENT "            \n")
         string(APPEND DYNAMIC_TESTS_CONTENT "            // Execute instrumented layer${LAYER_NUM} with deserialized input\n")
-        string(APPEND DYNAMIC_TESTS_CONTENT "            auto actual_result = instrumented_layers::execute_layer${LAYER_NUM}_instrumented(layer${LAYER_NUM}_sublayers::validation::deserialize(fresh_input), string_table);\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            auto actual_result = instrumented_layers::execute_layer${LAYER_NUM}_instrumented(cprime::layer${LAYER_NUM}_sublayers::validation::deserialize(fresh_input), string_table);\n")
         string(APPEND DYNAMIC_TESTS_CONTENT "            \n")
         string(APPEND DYNAMIC_TESTS_CONTENT "            // Validate result\n")
-        string(APPEND DYNAMIC_TESTS_CONTENT "            std::string actual_serialized = layer${LAYER_NUM}_sublayers::validation::serialize(actual_result);\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            std::string actual_serialized = cprime::layer${LAYER_NUM}_sublayers::validation::serialize(actual_result);\n")
         string(APPEND DYNAMIC_TESTS_CONTENT "            std::string expected = test_case.expected_outputs.at(${EXPECTED_LAYER});\n")
         string(APPEND DYNAMIC_TESTS_CONTENT "            \n")
         string(APPEND DYNAMIC_TESTS_CONTENT "            if (actual_serialized != expected) {\n")

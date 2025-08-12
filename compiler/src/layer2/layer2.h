@@ -2,7 +2,7 @@
 
 #include "../commons/rawToken.h"
 #include "../commons/dirty/string_table.h"
-#include "tokenizer.h" // For ProcessingChunk definition
+#include "../layer1/tokenizer.h" // For ProcessingChunk definition
 #include <vector>
 #include <string>
 #include <sstream>
