@@ -4,12 +4,24 @@
 #include <sstream>
 #include <vector>
 #include "../commons/rawToken.h"
+#include "../layer1/tokenizer.h"
 
 // Layer 2 validation interface for testing
 // This header provides validation and serialization functions for layer 2 testing
 
+namespace cprime {
 namespace layer2_sublayers {
 namespace validation {
+
+/**
+ * Serialize layer 2 intermediate output (ProcessingChunk vector) to string for testing
+ * This function converts intermediate processing chunks to a string representation for comparison
+ */
+inline std::string serialize(const std::vector<cprime::ProcessingChunk>& chunks) {
+    // TODO: Implement proper serialization
+    // For now, return a simple placeholder to avoid compilation errors
+    return "STUB_SERIALIZED_CHUNKS_COUNT_" + std::to_string(chunks.size());
+}
 
 /**
  * Serialize layer 2 output (RawToken vector) to string for testing
@@ -33,3 +45,4 @@ inline std::stringstream& deserialize(std::stringstream& input) {
 
 } // namespace validation
 } // namespace layer2_sublayers
+} // namespace cprime

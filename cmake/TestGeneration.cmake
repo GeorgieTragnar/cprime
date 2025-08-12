@@ -151,11 +151,15 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
                 message(STATUS "      Found return statement in block ${BLOCK_INDEX}")
                 
                 string(APPEND CURRENT_CONTENT "\n    // --- Code Block ${BLOCK_INDEX} (Final) ---\n")
-                string(APPEND CURRENT_CONTENT "${CODE_BLOCK}")
+                # Restore semicolons to lines that need them before adding to content
+                restore_semicolons_in_block("${CODE_BLOCK}" RESTORED_BLOCK)
+                string(APPEND CURRENT_CONTENT "${RESTORED_BLOCK}")
             else()
                 # Regular block - extract variable name from the sublayer call line itself
                 string(APPEND CURRENT_CONTENT "\n    // --- Code Block ${BLOCK_INDEX} ---\n")
-                string(APPEND CURRENT_CONTENT "${CODE_BLOCK}")
+                # Restore semicolons to lines that need them before adding to content
+                restore_semicolons_in_block("${CODE_BLOCK}" RESTORED_BLOCK)
+                string(APPEND CURRENT_CONTENT "${RESTORED_BLOCK}")
                 
                 if(BLOCK_INDEX LESS ${LAST_BLOCK})
                     # Use standardized retVal1, retVal2, retVal3, etc. naming pattern
@@ -453,4 +457,26 @@ function(display_discovery_summary DISCOVERY_REGISTRY)
         endif()
     endforeach()
     message(STATUS "=========================")
+endfunction()
+
+# Function to restore semicolons in a code block
+function(restore_semicolons_in_block CODE_BLOCK OUTPUT_VAR)
+    # Process the block line by line to restore semicolons
+    string(REPLACE "\n" ";" BLOCK_LINES "${CODE_BLOCK}")
+    
+    set(RESTORED_CONTENT "")
+    foreach(LINE ${BLOCK_LINES})
+        set(PROCESSED_LINE "${LINE}")
+        
+        # Restore semicolon if this line should have one (function calls, assignments, returns)
+        if(PROCESSED_LINE MATCHES ".*\\)$" OR PROCESSED_LINE MATCHES ".*auto.*=" OR PROCESSED_LINE MATCHES ".*return.*")
+            if(NOT PROCESSED_LINE MATCHES ".*;$")
+                string(APPEND PROCESSED_LINE ";")
+            endif()
+        endif()
+        
+        string(APPEND RESTORED_CONTENT "${PROCESSED_LINE}\n")
+    endforeach()
+    
+    set(${OUTPUT_VAR} "${RESTORED_CONTENT}" PARENT_SCOPE)
 endfunction()

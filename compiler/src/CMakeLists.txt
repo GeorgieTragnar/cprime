@@ -56,6 +56,16 @@ target_include_directories(cprime_layer1 PUBLIC .)
 target_link_libraries(cprime_layer1 PUBLIC cprime_commons)
 target_compile_features(cprime_layer1 PUBLIC cxx_std_17)
 
+# Create Layer 2 library (structure building)
+add_library(cprime_layer2
+    layer2/layer2.h
+    layer2/layer2.cpp
+)
+
+target_include_directories(cprime_layer2 PUBLIC .)
+target_link_libraries(cprime_layer2 PUBLIC cprime_commons cprime_layer1)
+target_compile_features(cprime_layer2 PUBLIC cxx_std_17)
+
 # Create Layer 1 Validation library (debugging and testing support)
 add_library(cprime_layer1validation
     layer1validation/enum_stringifier.h
@@ -102,7 +112,7 @@ set(COMPILER_FLAGS
 )
 
 # Apply flags to all libraries
-foreach(lib IN ITEMS cprime_commons cprime_layer0 cprime_layer1 cprime_layer1validation cprime_orchestrator cprime_layer0validation)
+foreach(lib IN ITEMS cprime_commons cprime_layer0 cprime_layer1 cprime_layer2 cprime_layer1validation cprime_orchestrator cprime_layer0validation)
     target_compile_options(${lib} PRIVATE ${COMPILER_FLAGS})
 endforeach()
 

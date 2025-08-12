@@ -45,6 +45,7 @@ target_link_libraries(cprime_tests
     cprime_commons
     cprime_layer0 
     cprime_layer1
+    cprime_layer2
     cprime_layer1validation
     cprime_layer0validation
     cprime_orchestrator
