@@ -40,18 +40,16 @@ function(generate_includes_file DISCOVERY_REGISTRY OUTPUT_FILE)
     # Generate include statements
     foreach(LAYER_NUM ${UNIQUE_LAYERS})
         string(APPEND INCLUDES_CONTENT "#include \"../compiler/src/layer${LAYER_NUM}/layer${LAYER_NUM}.h\"\n")
+        string(APPEND INCLUDES_CONTENT "#include \"../compiler/src/layer${LAYER_NUM}validation/layer${LAYER_NUM}validation.h\"\n")
     endforeach()
-    
-    string(APPEND INCLUDES_CONTENT "\n// Required for testing\n")
-    string(APPEND INCLUDES_CONTENT "#include \"layer_test_fixture.h\"\n")
     
     file(WRITE ${OUTPUT_FILE} "${INCLUDES_CONTENT}")
     message(STATUS "Generated includes file: ${OUTPUT_FILE}")
 endfunction()
 
-# Generate test cases file with fully copied function bodies
-function(generate_test_cases_file DISCOVERY_REGISTRY OUTPUT_FILE)
-    message(STATUS "Generating test cases file with copied function bodies")
+# Generate instrumented functions file with fully copied function bodies (no TEST_F blocks)
+function(generate_instrumented_functions_file DISCOVERY_REGISTRY OUTPUT_FILE)
+    message(STATUS "Generating instrumented functions file with copied function bodies")
     
     file(READ ${DISCOVERY_REGISTRY} DISCOVERY_CONTENT)
     
@@ -60,9 +58,10 @@ function(generate_test_cases_file DISCOVERY_REGISTRY OUTPUT_FILE)
         return()
     endif()
     
-    set(TEST_CASES_CONTENT "")
-    string(APPEND TEST_CASES_CONTENT "// Auto-generated test cases - DO NOT EDIT MANUALLY\n")
-    string(APPEND TEST_CASES_CONTENT "// Generated from: ${DISCOVERY_REGISTRY}\n\n")
+    set(INSTRUMENTED_FUNCTIONS_CONTENT "")
+    string(APPEND INSTRUMENTED_FUNCTIONS_CONTENT "// Auto-generated instrumented functions - DO NOT EDIT MANUALLY\n")
+    string(APPEND INSTRUMENTED_FUNCTIONS_CONTENT "// Generated from: ${DISCOVERY_REGISTRY}\n\n")
+    string(APPEND INSTRUMENTED_FUNCTIONS_CONTENT "namespace instrumented_layers {\n\n")
     
     # Parse discovered functions - each function spans multiple lines
     string(REPLACE "\n" ";" DISCOVERY_LINES "${DISCOVERY_CONTENT}")
@@ -76,7 +75,7 @@ function(generate_test_cases_file DISCOVERY_REGISTRY OUTPUT_FILE)
         if(LINE MATCHES "^LAYER:([0-9]+)")
             # If we have a complete function, process it
             if(CURRENT_LAYER AND CURRENT_RETURN AND CURRENT_PARAMS AND CURRENT_FILE)
-                process_discovered_function("${CURRENT_LAYER}" "${CURRENT_RETURN}" "${CURRENT_PARAMS}" "${CURRENT_FILE}" TEST_CASES_CONTENT)
+                process_discovered_function("${CURRENT_LAYER}" "${CURRENT_RETURN}" "${CURRENT_PARAMS}" "${CURRENT_FILE}" INSTRUMENTED_FUNCTIONS_CONTENT)
             endif()
             
             # Start new function
@@ -98,11 +97,14 @@ function(generate_test_cases_file DISCOVERY_REGISTRY OUTPUT_FILE)
     
     # Process the last function
     if(CURRENT_LAYER AND CURRENT_RETURN AND CURRENT_PARAMS AND CURRENT_FILE)
-        process_discovered_function("${CURRENT_LAYER}" "${CURRENT_RETURN}" "${CURRENT_PARAMS}" "${CURRENT_FILE}" TEST_CASES_CONTENT)
+        process_discovered_function("${CURRENT_LAYER}" "${CURRENT_RETURN}" "${CURRENT_PARAMS}" "${CURRENT_FILE}" INSTRUMENTED_FUNCTIONS_CONTENT)
     endif()
     
-    file(WRITE ${OUTPUT_FILE} "${TEST_CASES_CONTENT}")
-    message(STATUS "Generated test cases file: ${OUTPUT_FILE}")
+    # Close namespace
+    string(APPEND INSTRUMENTED_FUNCTIONS_CONTENT "\n} // namespace instrumented_layers\n")
+    
+    file(WRITE ${OUTPUT_FILE} "${INSTRUMENTED_FUNCTIONS_CONTENT}")
+    message(STATUS "Generated instrumented functions file: ${OUTPUT_FILE}")
 endfunction()
 
 # Helper function to process a discovered function
@@ -130,8 +132,8 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
         # Split function body into code blocks separated by sublayer calls
         split_function_body_at_sublayers("${FUNCTION_BODY}" "${LAYER_NUM}" CODE_BLOCKS)
         
-        # Generate TEST_F case with separated code blocks
-        string(APPEND CURRENT_CONTENT "TEST_F(LayerTestFixture, Layer${LAYER_NUM}_BasicTest) {\n")
+        # Generate instrumented function with separated code blocks
+        string(APPEND CURRENT_CONTENT "${RETURN_TYPE} execute_layer${LAYER_NUM}_instrumented(${PARAMETERS}) {\n")
         string(APPEND CURRENT_CONTENT "    // === INSTRUMENTED layer${LAYER_NUM} FUNCTION ===\n")
         
         # Insert each code block with instrumentation
@@ -166,7 +168,7 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
                 
                 string(APPEND CURRENT_CONTENT "\n    // --- Code Block ${BLOCK_INDEX} (Final) ---\n")
                 string(APPEND CURRENT_CONTENT "${PROCESSED_BLOCK}")
-                string(APPEND CURRENT_CONTENT "\n    log_intermediate_state(\"final_result\", auto_serialize(retVal));\n")
+                string(APPEND CURRENT_CONTENT "\n    log_intermediate_state(\"final_result\", layer${LAYER_NUM}_sublayers::validation::serialize(retVal));\n")
             else()
                 # Regular block - extract variable name from the sublayer call line itself
                 string(APPEND CURRENT_CONTENT "\n    // --- Code Block ${BLOCK_INDEX} ---\n")
@@ -178,7 +180,7 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
                     set(VARIABLE_NAME "retVal${VAR_NUMBER}")
                     
                     message(STATUS "      Using variable name: '${VARIABLE_NAME}' for block ${BLOCK_INDEX}")
-                    string(APPEND CURRENT_CONTENT "\n    log_intermediate_state(\"${VARIABLE_NAME}\", auto_serialize(${VARIABLE_NAME}));\n")
+                    string(APPEND CURRENT_CONTENT "\n    log_intermediate_state(\"${VARIABLE_NAME}\", layer${LAYER_NUM}_sublayers::validation::serialize(${VARIABLE_NAME}));\n")
                 endif()
             endif()
         endforeach()
@@ -187,6 +189,7 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
         string(REGEX REPLACE "return layer" "auto retVal = layer" CURRENT_CONTENT "${CURRENT_CONTENT}")
         
         string(APPEND CURRENT_CONTENT "\n    // === END INSTRUMENTED FUNCTION ===\n")
+        string(APPEND CURRENT_CONTENT "    return retVal;\n")
         string(APPEND CURRENT_CONTENT "}\n\n")
     else()
         message(WARNING "Could not extract function body for layer${LAYER_NUM}")
@@ -334,21 +337,96 @@ function(extract_complete_function_body FUNCTION_NAME SOURCE_FILE OUTPUT_VAR)
     endif()
 endfunction()
 
-# Main function to generate both files
+# Main function to generate three .inc files
 function(generate_layer_test_files DISCOVERY_REGISTRY OUTPUT_DIR)
-    message(STATUS "Generating layer test files")
+    message(STATUS "Generating layer test .inc files")
     
-    # Generate includes file
-    set(INCLUDES_FILE "${OUTPUT_DIR}/layer_includes_generated.h")
+    # Generate includes file (.inc)
+    set(INCLUDES_FILE "${OUTPUT_DIR}/layer_includes_generated.inc")
     generate_includes_file(${DISCOVERY_REGISTRY} ${INCLUDES_FILE})
     
-    # Generate test cases file
-    set(TEST_CASES_FILE "${OUTPUT_DIR}/layer_test_cases_generated.cpp")
-    generate_test_cases_file(${DISCOVERY_REGISTRY} ${TEST_CASES_FILE})
+    # Generate instrumented functions file (.inc)
+    set(INSTRUMENTED_FUNCTIONS_FILE "${OUTPUT_DIR}/layer_instrumented_functions_generated.inc")
+    generate_instrumented_functions_file(${DISCOVERY_REGISTRY} ${INSTRUMENTED_FUNCTIONS_FILE})
     
-    message(STATUS "Generated files:")
+    # Generate dynamic TEST_F blocks file (.inc)
+    set(DYNAMIC_TESTS_FILE "${OUTPUT_DIR}/layer_dynamic_tests_generated.inc")
+    generate_dynamic_tests_file(${DISCOVERY_REGISTRY} ${DYNAMIC_TESTS_FILE})
+    
+    message(STATUS "Generated .inc files:")
     message(STATUS "  Includes: ${INCLUDES_FILE}")
-    message(STATUS "  Test cases: ${TEST_CASES_FILE}")
+    message(STATUS "  Instrumented functions: ${INSTRUMENTED_FUNCTIONS_FILE}")
+    message(STATUS "  Dynamic tests: ${DYNAMIC_TESTS_FILE}")
+endfunction()
+
+# Generate dynamic TEST_F blocks file based on discovered layers
+function(generate_dynamic_tests_file DISCOVERY_REGISTRY OUTPUT_FILE)
+    message(STATUS "Generating dynamic TEST_F blocks file")
+    
+    file(READ ${DISCOVERY_REGISTRY} DISCOVERY_CONTENT)
+    
+    if(NOT DISCOVERY_CONTENT OR DISCOVERY_CONTENT MATCHES "^#.*No layer functions")
+        file(WRITE ${OUTPUT_FILE} "// No layer functions discovered for dynamic test generation\n")
+        return()
+    endif()
+    
+    set(DYNAMIC_TESTS_CONTENT "")
+    string(APPEND DYNAMIC_TESTS_CONTENT "// Auto-generated dynamic TEST_F blocks - DO NOT EDIT MANUALLY\n")
+    string(APPEND DYNAMIC_TESTS_CONTENT "// Generated from: ${DISCOVERY_REGISTRY}\n\n")
+    
+    # Extract unique layer numbers from discovery
+    string(REGEX MATCHALL "LAYER:([0-9]+)" LAYER_MATCHES "${DISCOVERY_CONTENT}")
+    set(UNIQUE_LAYERS "")
+    
+    foreach(LAYER_MATCH ${LAYER_MATCHES})
+        string(REGEX MATCH "LAYER:([0-9]+)" EXTRACTED_LAYER "${LAYER_MATCH}")
+        if(EXTRACTED_LAYER)
+            set(LAYER_NUM "${CMAKE_MATCH_1}")
+            list(APPEND UNIQUE_LAYERS ${LAYER_NUM})
+        endif()
+    endforeach()
+    
+    # Remove duplicates
+    if(UNIQUE_LAYERS)
+        list(REMOVE_DUPLICATES UNIQUE_LAYERS)
+        list(SORT UNIQUE_LAYERS)
+    endif()
+    
+    # Generate TEST_F block for each layer
+    foreach(LAYER_NUM ${UNIQUE_LAYERS})
+        math(EXPR EXPECTED_LAYER "${LAYER_NUM} + 1")
+        
+        string(APPEND DYNAMIC_TESTS_CONTENT "TEST_F(LayerTestFixture, Layer${LAYER_NUM}_DynamicTests) {\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "    auto test_cases = discover_test_cases();\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "    \n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "    for (const auto& test_case : test_cases) {\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "        if (test_case.expected_outputs.count(${EXPECTED_LAYER})) {\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            SCOPED_TRACE(\"Test case: \" + test_case.name);\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            \n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            // Fresh input for this layer test\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            std::stringstream fresh_input(test_case.input_content);\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            StringTable string_table;\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            \n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            // Execute instrumented layer${LAYER_NUM}\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            auto actual_result = instrumented_layers::execute_layer${LAYER_NUM}_instrumented(fresh_input, string_table);\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            \n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            // Validate result\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            std::string actual_serialized = layer${LAYER_NUM}_sublayers::validation::serialize(actual_result);\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            std::string expected = test_case.expected_outputs.at(${EXPECTED_LAYER});\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            \n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            if (actual_serialized != expected) {\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "                log_test_failure(test_case.name, ${LAYER_NUM}, get_intermediate_states(), actual_serialized, expected);\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "                FAIL() << \"Layer${LAYER_NUM} output mismatch for \" << test_case.name;\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            }\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            \n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "            clear_intermediate_states();\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "        }\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "    }\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "}\n\n")
+    endforeach()
+    
+    file(WRITE ${OUTPUT_FILE} "${DYNAMIC_TESTS_CONTENT}")
+    message(STATUS "Generated dynamic tests file: ${OUTPUT_FILE}")
 endfunction()
 
 # Function to display discovery summary
