@@ -1,5 +1,27 @@
 # CPrime Compiler Test Suite using Google Test
 
+# Include CMake modules for function discovery and test generation
+include(${CMAKE_SOURCE_DIR}/../cmake/FunctionDiscovery.cmake)
+include(${CMAKE_SOURCE_DIR}/../cmake/TestGeneration.cmake)
+
+# Set paths for discovery system
+set(COMPILER_SRC_DIR "${CMAKE_SOURCE_DIR}/src")
+set(TEST_CASES_DIR "${CMAKE_SOURCE_DIR}/../test_cases")
+set(GENERATED_DIR "${CMAKE_BINARY_DIR}/generated")
+
+# Create generated directory
+file(MAKE_DIRECTORY ${GENERATED_DIR})
+
+# Phase 1: Discover layer functions
+set(DISCOVERY_REGISTRY "${CMAKE_BINARY_DIR}/layer_discovery.txt")
+discover_layer_functions(${COMPILER_SRC_DIR} ${DISCOVERY_REGISTRY})
+
+# Display discovery summary
+display_discovery_summary(${DISCOVERY_REGISTRY})
+
+# Phase 2: Generate the 2 files (includes + test cases)
+generate_layer_test_files(${DISCOVERY_REGISTRY} ${GENERATED_DIR})
+
 # Collect all test files
 file(GLOB_RECURSE UNIT_TEST_FILES "unit/*.cpp")
 file(GLOB_RECURSE INTEGRATION_TEST_FILES "integration/*.cpp")
@@ -15,6 +37,7 @@ add_executable(cprime_tests
 target_include_directories(cprime_tests PRIVATE
     ${CMAKE_SOURCE_DIR}/src  # For accessing compiler headers
     ${CMAKE_CURRENT_SOURCE_DIR}  # For test_common.h
+    ${GENERATED_DIR}  # For generated test files
 )
 
 # Link libraries

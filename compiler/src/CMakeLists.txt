@@ -48,6 +48,8 @@ target_compile_features(cprime_layer0 PUBLIC cxx_std_17)
 add_library(cprime_layer1
     layer1/tokenizer.h
     layer1/tokenizer.cpp
+    layer1/layer1.h
+    layer1/layer1.cpp
 )
 
 target_include_directories(cprime_layer1 PUBLIC .)
