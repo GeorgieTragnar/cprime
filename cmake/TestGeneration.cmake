@@ -173,25 +173,9 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
                 string(APPEND CURRENT_CONTENT "${CODE_BLOCK}")
                 
                 if(BLOCK_INDEX LESS ${LAST_BLOCK})
-                    # Since we know the pattern, let's use layer-specific variable names
-                    # Based on the expected pattern: chunks_1a, chunks_1b, chunks_1c, chunks_1d
-                    if(LAYER_NUM EQUAL 1)
-                        if(BLOCK_INDEX EQUAL 0)
-                            set(VARIABLE_NAME "chunks_1a")
-                        elseif(BLOCK_INDEX EQUAL 1)
-                            set(VARIABLE_NAME "chunks_1b")
-                        elseif(BLOCK_INDEX EQUAL 2)
-                            set(VARIABLE_NAME "chunks_1c")
-                        elseif(BLOCK_INDEX EQUAL 3)
-                            set(VARIABLE_NAME "chunks_1d")
-                        else()
-                            set(VARIABLE_NAME "chunks_${LAYER_NUM}_${BLOCK_INDEX}")
-                        endif()
-                    else()
-                        # For other layers, use a generic pattern
-                        math(EXPR VAR_SUFFIX "${BLOCK_INDEX} + 1")
-                        set(VARIABLE_NAME "result_${LAYER_NUM}_${VAR_SUFFIX}")
-                    endif()
+                    # Use standardized retVal1, retVal2, retVal3, etc. naming pattern
+                    math(EXPR VAR_NUMBER "${BLOCK_INDEX} + 1")
+                    set(VARIABLE_NAME "retVal${VAR_NUMBER}")
                     
                     message(STATUS "      Using variable name: '${VARIABLE_NAME}' for block ${BLOCK_INDEX}")
                     string(APPEND CURRENT_CONTENT "\n    log_intermediate_state(\"${VARIABLE_NAME}\", auto_serialize(${VARIABLE_NAME}));\n")
@@ -199,7 +183,7 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
             endif()
         endforeach()
         
-        # Final post-processing: replace any remaining return statements with auto retVal =
+        # Final post-processing: replace return statements with auto retVal =
         string(REGEX REPLACE "return layer" "auto retVal = layer" CURRENT_CONTENT "${CURRENT_CONTENT}")
         
         string(APPEND CURRENT_CONTENT "\n    // === END INSTRUMENTED FUNCTION ===\n")
