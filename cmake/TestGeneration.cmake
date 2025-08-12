@@ -169,7 +169,7 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
                 
                 string(APPEND CURRENT_CONTENT "\n    // --- Code Block ${BLOCK_INDEX} (Final) ---\n")
                 string(APPEND CURRENT_CONTENT "${PROCESSED_BLOCK}")
-                string(APPEND CURRENT_CONTENT "\n    log_intermediate_state(\"final_result\", layer${LAYER_NUM}_sublayers::validation::serialize(retVal));\n")
+                string(APPEND CURRENT_CONTENT "\n    log_intermediate_state(\"final_result\", cprime::layer${LAYER_NUM}_sublayers::validation::serialize(retVal));\n")
             else()
                 # Regular block - extract variable name from the sublayer call line itself
                 string(APPEND CURRENT_CONTENT "\n    // --- Code Block ${BLOCK_INDEX} ---\n")
@@ -181,7 +181,7 @@ function(process_discovered_function LAYER_NUM RETURN_TYPE PARAMETERS SOURCE_FIL
                     set(VARIABLE_NAME "retVal${VAR_NUMBER}")
                     
                     message(STATUS "      Using variable name: '${VARIABLE_NAME}' for block ${BLOCK_INDEX}")
-                    string(APPEND CURRENT_CONTENT "\n    log_intermediate_state(\"${VARIABLE_NAME}\", layer${LAYER_NUM}_sublayers::validation::serialize(${VARIABLE_NAME}));\n")
+                    string(APPEND CURRENT_CONTENT "\n    log_intermediate_state(\"${VARIABLE_NAME}\", cprime::layer${LAYER_NUM}_sublayers::validation::serialize(${VARIABLE_NAME}));\n")
                 endif()
             endif()
         endforeach()
