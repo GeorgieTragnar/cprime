@@ -303,6 +303,10 @@ main() {
     # Parse command line arguments
     parse_arguments "$@"
     
+    # Clean tmp directory for fresh test runs
+    echo -e "${YELLOW}Cleaning tmp directory for fresh test runs...${NC}"
+    rm -rf "$PROJECT_ROOT/tmp"
+    
     # Validate build system
     check_build_system
     

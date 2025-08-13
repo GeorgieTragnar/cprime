@@ -1,5 +1,6 @@
 #include "layer1.h"
 #include <cctype>
+#include <cstdio>
 
 namespace cprime {
 namespace layer1_sublayers {
@@ -34,6 +35,7 @@ std::vector<ProcessingChunk> sublayer1a(std::stringstream& stream) {
     uint32_t chunk_start_pos = 0;
     uint32_t chunk_start_line = 1, chunk_start_column = 1;
     std::string current_chunk;
+    bool need_start_new_chunk = false;
     
     auto add_string_chunk = [&]() {
         if (!current_chunk.empty()) {
@@ -96,64 +98,64 @@ std::vector<ProcessingChunk> sublayer1a(std::stringstream& stream) {
                 switch (c) {
                     case ' ':
                         add_token_chunk(EToken::SPACE, ERawToken::WHITESPACE);
-                        start_new_chunk();
+                        need_start_new_chunk = true;
                         break;
                     case '\t':
                         add_token_chunk(EToken::TAB, ERawToken::WHITESPACE);
-                        start_new_chunk();
+                        need_start_new_chunk = true;
                         break;
                     case '\r':
                         add_token_chunk(EToken::CARRIAGE_RETURN, ERawToken::WHITESPACE);
-                        start_new_chunk();
+                        need_start_new_chunk = true;
                         break;
                     case '\v':
                         add_token_chunk(EToken::VERTICAL_TAB, ERawToken::WHITESPACE);
-                        start_new_chunk();
+                        need_start_new_chunk = true;
                         break;
                     case '\f':
                         add_token_chunk(EToken::FORM_FEED, ERawToken::WHITESPACE);
-                        start_new_chunk();
+                        need_start_new_chunk = true;
                         break;
                     case '\n':
                         add_token_chunk(EToken::NEWLINE, ERawToken::NEWLINE);
-                        start_new_chunk();
+                        need_start_new_chunk = true;
                         line++; column = 0; // Will be incremented at end of loop
                         break;
                     case '{':
                         add_token_chunk(EToken::LEFT_BRACE, ERawToken::LEFT_BRACE);
-                        start_new_chunk();
+                        need_start_new_chunk = true;
                         break;
                     case '}':
                         add_token_chunk(EToken::RIGHT_BRACE, ERawToken::RIGHT_BRACE);
-                        start_new_chunk();
+                        need_start_new_chunk = true;
                         break;
                     case ';':
                         add_token_chunk(EToken::SEMICOLON, ERawToken::SEMICOLON);
-                        start_new_chunk();
+                        need_start_new_chunk = true;
                         break;
                     case '(':
                         add_token_chunk(EToken::LEFT_PAREN, ERawToken::KEYWORD);
-                        start_new_chunk();
+                        need_start_new_chunk = true;
                         break;
                     case ')':
                         add_token_chunk(EToken::RIGHT_PAREN, ERawToken::KEYWORD);
-                        start_new_chunk();
+                        need_start_new_chunk = true;
                         break;
                     case '[':
                         add_token_chunk(EToken::LEFT_BRACKET, ERawToken::KEYWORD);
-                        start_new_chunk();
+                        need_start_new_chunk = true;
                         break;
                     case ']':
                         add_token_chunk(EToken::RIGHT_BRACKET, ERawToken::KEYWORD);
-                        start_new_chunk();
+                        need_start_new_chunk = true;
                         break;
                     case ',':
                         add_token_chunk(EToken::COMMA, ERawToken::KEYWORD);
-                        start_new_chunk();
+                        need_start_new_chunk = true;
                         break;
                     case '#':
                         add_token_chunk(EToken::HASH, ERawToken::KEYWORD);
-                        start_new_chunk();
+                        need_start_new_chunk = true;
                         break;
                     default:
                         // Add to current unprocessed chunk
@@ -163,13 +165,16 @@ std::vector<ProcessingChunk> sublayer1a(std::stringstream& stream) {
                 break;
                 
             case State::IN_LINE_COMMENT:
-                current_chunk += c;
                 if (c == '\n') {
-                    // Line comment ends, create comment token
+                    // Line comment ends - don't include newline in comment
                     add_string_chunk(); // This creates the comment as unprocessed string for now
+                    // Now create the newline token separately
+                    add_token_chunk(EToken::NEWLINE, ERawToken::NEWLINE);
                     state = State::NORMAL;
-                    start_new_chunk();
+                    need_start_new_chunk = true; // Defer until after position increment
                     line++; column = 0;
+                } else {
+                    current_chunk += c;
                 }
                 break;
                 
@@ -204,6 +209,12 @@ std::vector<ProcessingChunk> sublayer1a(std::stringstream& stream) {
         
         position++;
         column++;
+        
+        // Handle deferred start_new_chunk after position increment
+        if (need_start_new_chunk) {
+            start_new_chunk();
+            need_start_new_chunk = false;
+        }
     }
     
     // Add final chunk if any

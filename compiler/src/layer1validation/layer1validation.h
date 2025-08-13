@@ -87,6 +87,12 @@ inline std::string etoken_to_string(EToken token) {
         case EToken::IDENTIFIER: return "IDENTIFIER";
         case EToken::COMMENT: return "COMMENT";
         case EToken::EOF_TOKEN: return "EOF_TOKEN";
+        // Primitive type keywords
+        case EToken::FLOAT: return "FLOAT";
+        case EToken::DOUBLE: return "DOUBLE";
+        case EToken::BOOL: return "BOOL";
+        case EToken::CHAR: return "CHAR";
+        case EToken::VOID: return "VOID";
         default: return "UNKNOWN_TOKEN";
     }
 }
@@ -109,49 +115,7 @@ inline std::string erawtoken_to_string(ERawToken raw_token) {
     }
 }
 
-// Helper function to serialize variant value safely (no StringTable dereferencing)
-inline std::string serialize_variant_value_safe(const std::variant<
-    std::monostate, int32_t, uint32_t, int64_t, uint64_t,
-    long long, unsigned long long, float, double, long double,
-    char, wchar_t, char16_t, char32_t, bool, StringIndex>& value) {
-    
-    if (std::holds_alternative<std::monostate>(value)) {
-        return "none";
-    } else if (std::holds_alternative<int32_t>(value)) {
-        return "int32:" + std::to_string(std::get<int32_t>(value));
-    } else if (std::holds_alternative<uint32_t>(value)) {
-        return "uint32:" + std::to_string(std::get<uint32_t>(value));
-    } else if (std::holds_alternative<int64_t>(value)) {
-        return "int64:" + std::to_string(std::get<int64_t>(value));
-    } else if (std::holds_alternative<uint64_t>(value)) {
-        return "uint64:" + std::to_string(std::get<uint64_t>(value));
-    } else if (std::holds_alternative<long long>(value)) {
-        return "longlong:" + std::to_string(std::get<long long>(value));
-    } else if (std::holds_alternative<unsigned long long>(value)) {
-        return "ulonglong:" + std::to_string(std::get<unsigned long long>(value));
-    } else if (std::holds_alternative<float>(value)) {
-        return "float:" + std::to_string(std::get<float>(value));
-    } else if (std::holds_alternative<double>(value)) {
-        return "double:" + std::to_string(std::get<double>(value));
-    } else if (std::holds_alternative<long double>(value)) {
-        return "longdouble:" + std::to_string(std::get<long double>(value));
-    } else if (std::holds_alternative<char>(value)) {
-        return "char:" + std::to_string(static_cast<int>(std::get<char>(value)));
-    } else if (std::holds_alternative<wchar_t>(value)) {
-        return "wchar:" + std::to_string(static_cast<int>(std::get<wchar_t>(value)));
-    } else if (std::holds_alternative<char16_t>(value)) {
-        return "char16:" + std::to_string(static_cast<int>(std::get<char16_t>(value)));
-    } else if (std::holds_alternative<char32_t>(value)) {
-        return "char32:" + std::to_string(static_cast<int>(std::get<char32_t>(value)));
-    } else if (std::holds_alternative<bool>(value)) {
-        return std::string("bool:") + (std::get<bool>(value) ? "true" : "false");
-    } else if (std::holds_alternative<StringIndex>(value)) {
-        auto idx = std::get<StringIndex>(value);
-        // Don't try to dereference - just show the index for debugging
-        return "StringIndex[" + std::to_string(idx.value) + "]";
-    }
-    return "unknown";
-}
+// Value serialization removed - only tokens, pos, line, col are printed
 
 // Helper function to escape string content
 inline std::string escape_string(const std::string& str) {
@@ -170,19 +134,17 @@ inline std::string escape_string(const std::string& str) {
 }
 
 /**
- * Serialize single ProcessingChunk to string (safe version without StringTable dereferencing)
+ * Serialize single ProcessingChunk to string (clean format without value prints)
  */
 inline std::string serialize_chunk_safe(const ProcessingChunk& chunk) {
     if (chunk.is_processed()) {
         // Processed chunk contains a RawToken
         const RawToken& token = chunk.get_token();
-        std::string value_str = serialize_variant_value_safe(token._literal_value);
         return "CHUNK[PROCESSED]: raw=" + erawtoken_to_string(token._raw_token) + 
                ", token=" + etoken_to_string(token._token) + 
                ", pos=" + std::to_string(token._position) + 
                ", line=" + std::to_string(token._line) + 
-               ", col=" + std::to_string(token._column) + 
-               ", value=" + value_str;
+               ", col=" + std::to_string(token._column);
     } else {
         // Unprocessed chunk contains string content
         const std::string& content = chunk.get_string();
@@ -195,16 +157,14 @@ inline std::string serialize_chunk_safe(const ProcessingChunk& chunk) {
 }
 
 /**
- * Serialize single RawToken to string (safe version without StringTable dereferencing)
+ * Serialize single RawToken to string (clean format without value prints)
  */
 inline std::string serialize_token_safe(const RawToken& token) {
-    std::string value_str = serialize_variant_value_safe(token._literal_value);
     return "TOKEN: raw=" + erawtoken_to_string(token._raw_token) + 
            ", token=" + etoken_to_string(token._token) + 
            ", pos=" + std::to_string(token._position) + 
            ", line=" + std::to_string(token._line) + 
-           ", col=" + std::to_string(token._column) + 
-           ", value=" + value_str;
+           ", col=" + std::to_string(token._column);
 }
 
 /**
@@ -214,10 +174,10 @@ inline std::string serialize_token_safe(const RawToken& token) {
  */
 inline std::string serialize(const std::vector<cprime::ProcessingChunk>& chunks) {
     if (chunks.empty()) {
-        return "# No chunks\n";
+        return "";
     }
     
-    std::string result = "# ProcessingChunk serialization - " + std::to_string(chunks.size()) + " chunks\n";
+    std::string result;
     
     for (size_t i = 0; i < chunks.size(); ++i) {
         result += serialize_chunk_safe(chunks[i]);
@@ -236,10 +196,10 @@ inline std::string serialize(const std::vector<cprime::ProcessingChunk>& chunks)
  */
 inline std::string serialize(const std::vector<cprime::RawToken>& tokens) {
     if (tokens.empty()) {
-        return "# No tokens\n";
+        return "";
     }
     
-    std::string result = "# RawToken serialization - " + std::to_string(tokens.size()) + " tokens\n";
+    std::string result;
     
     for (size_t i = 0; i < tokens.size(); ++i) {
         result += serialize_token_safe(tokens[i]);

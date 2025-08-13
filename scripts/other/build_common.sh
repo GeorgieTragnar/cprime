@@ -111,6 +111,12 @@ clean_build_directory() {
             echo -e "${YELLOW}Cleaning build directory...${NC}"
         fi
         rm -rf "$build_dir"
+        
+        # Verify the directory was actually removed
+        if [ -d "$build_dir" ]; then
+            echo -e "${RED}Error: Failed to clean build directory at $build_dir${NC}" >&2
+            exit 1
+        fi
     fi
 }
 
