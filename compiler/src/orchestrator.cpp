@@ -1,6 +1,6 @@
 #include "orchestrator.h"
 #include "layer0/input_processor.h"
-#include "layer1/tokenizer.h"
+#include "layer1/layer1.h"
 #include "commons/logger.h"
 
 namespace cprime {
@@ -84,8 +84,8 @@ bool CompilerOrchestrator::run_layer1() {
         LOG_DEBUG("Tokenizing stream: {}", stream_id);
         
         try {
-            // Call the tokenizer with string table
-            auto tokens = Tokenizer::tokenize_stream(stream, string_table_);
+            // Call the new standardized layer1 function
+            auto tokens = layer1(stream, string_table_);
             
             LOG_INFO("Stream '{}' tokenized: {} tokens generated", stream_id, tokens.size());
             

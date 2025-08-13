@@ -1,4 +1,5 @@
 #include "test_case_discovery.h"
+#include "../../src/commons/logger.h"
 #include <fstream>
 #include <sstream>
 #include <algorithm>
@@ -11,30 +12,60 @@ namespace cprime::testing {
 // ============================================================================
 
 std::vector<TestCase> TestCaseDiscovery::discover_layer1_test_cases(const std::filesystem::path& test_cases_dir) {
-    return discover_test_cases(test_cases_dir, 1, 2);
+    auto logger = cprime::LoggerFactory::get_logger("test_discovery");
+    LOG_DEBUG("discover_layer1_test_cases() - Input directory: {}", test_cases_dir.string());
+    
+    auto result = discover_test_cases(test_cases_dir, 1, 2);
+    LOG_DEBUG("discover_layer1_test_cases() - Returning {} test cases", result.size());
+    return result;
 }
 
 std::vector<TestCase> TestCaseDiscovery::discover_test_cases(const std::filesystem::path& test_cases_dir, 
                                                            int input_layer, 
                                                            int output_layer) {
+    auto logger = cprime::LoggerFactory::get_logger("test_discovery");
     std::vector<TestCase> test_cases;
     
-    if (!is_directory_accessible(test_cases_dir)) {
+    LOG_DEBUG("discover_test_cases() - Directory: {}, input_layer: {}, output_layer: {}", 
+              test_cases_dir.string(), input_layer, output_layer);
+    
+    bool dir_accessible = is_directory_accessible(test_cases_dir);
+    LOG_DEBUG("discover_test_cases() - Directory accessible: {}", dir_accessible);
+    
+    if (!dir_accessible) {
         return test_cases; // Return empty vector if directory doesn't exist or isn't accessible
     }
     
     // Iterate through subdirectories
+    size_t subdirs_found = 0;
+    size_t valid_test_cases = 0;
+    
     for (const auto& entry : std::filesystem::directory_iterator(test_cases_dir)) {
-        if (entry.is_directory() && is_valid_test_case(entry.path(), input_layer, output_layer)) {
-            TestCase test_case = create_test_case(entry.path());
-            test_cases.push_back(std::move(test_case));
+        if (entry.is_directory()) {
+            subdirs_found++;
+            std::string subdir_name = entry.path().filename().string();
+            LOG_DEBUG("discover_test_cases() - Found subdirectory: {}", subdir_name);
+            
+            bool is_valid = is_valid_test_case(entry.path(), input_layer, output_layer);
+            LOG_DEBUG("discover_test_cases() - {} is_valid_test_case: {}", subdir_name, is_valid);
+            
+            if (is_valid) {
+                TestCase test_case = create_test_case(entry.path());
+                test_cases.push_back(std::move(test_case));
+                valid_test_cases++;
+                LOG_DEBUG("discover_test_cases() - Created test case for: {}", subdir_name);
+            }
         }
     }
+    
+    LOG_DEBUG("discover_test_cases() - Subdirectories found: {}, valid test cases: {}", 
+              subdirs_found, valid_test_cases);
     
     // Sort by name for consistent ordering
     std::sort(test_cases.begin(), test_cases.end(), 
              [](const TestCase& a, const TestCase& b) { return a.name < b.name; });
     
+    LOG_DEBUG("discover_test_cases() - Returning {} sorted test cases", test_cases.size());
     return test_cases;
 }
 

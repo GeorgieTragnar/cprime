@@ -243,7 +243,7 @@ run_tests() {
         ./tests/cprime_tests $gtest_args
         exit_code=$?
     else
-        # Normal mode: filtered output similar to other scripts
+        # Normal mode: filtered output with debug logs included
         echo -e "${CYAN}Running tests...${NC}"
         echo ""
         ./tests/cprime_tests $gtest_args 2>&1 | while IFS= read -r line; do
@@ -255,6 +255,18 @@ run_tests() {
                     echo "$line"
                     ;;
                 *"RUN"*|*"OK"*|*"FAILED"*)
+                    echo "$line"
+                    ;;
+                # Include debug logs from CPrime logging system (colored format)
+                *"D0"*"|"*|*"I0"*"|"*|*"W0"*"|"*|*"E0"*"|"*)
+                    echo "$line"
+                    ;;
+                # Include exception messages and test failures
+                *"exception"*|*"Exception"*|*"EXCEPTION"*|*"Failure"*|*"Error"*)
+                    echo "$line"
+                    ;;
+                # Include Google Test trace information
+                *"Google Test trace"*|*"SCOPED_TRACE"*|*"Test case:"*)
                     echo "$line"
                     ;;
             esac

@@ -50,6 +50,11 @@ add_library(cprime_layer1
     layer1/tokenizer.cpp
     layer1/layer1.h
     layer1/layer1.cpp
+    layer1/sublayer1a.cpp
+    layer1/sublayer1b.cpp
+    layer1/sublayer1c.cpp
+    layer1/sublayer1d.cpp
+    layer1/sublayer1e.cpp
 )
 
 target_include_directories(cprime_layer1 PUBLIC .)
@@ -68,14 +73,7 @@ target_compile_features(cprime_layer2 PUBLIC cxx_std_17)
 
 # Create Layer 1 Validation library (debugging and testing support)
 add_library(cprime_layer1validation
-    layer1validation/enum_stringifier.h
-    layer1validation/enum_stringifier.cpp
-    layer1validation/chunk_serializer.h
-    layer1validation/chunk_serializer.cpp
-    layer1validation/token_serializer.h
-    layer1validation/token_serializer.cpp
-    layer1validation/layer1_debug.h
-    layer1validation/layer1_debug.cpp
+    layer1validation/layer1validation.h
 )
 
 target_include_directories(cprime_layer1validation PUBLIC .)
