@@ -76,14 +76,8 @@ execute_cmake() {
     # Change to build directory
     cd "$BUILD_DIR"
     
-    # Execute CMake with appropriate output handling
-    if [ "$OUTPUT_MODE" = "verbose" ]; then
-        # Verbose: show everything
-        cmake "$SOURCE_DIR" $cmake_args
-    else
-        # Normal: show filtered cmake output
-        cmake "$SOURCE_DIR" $cmake_args 2>&1 | grep -E "(--|ERROR|WARNING|FATAL_ERROR|found|Configuring done|Generating done)" || true
-    fi
+    # Execute CMake - always show full output, colors preserved
+    cmake "$SOURCE_DIR" $cmake_args
 }
 
 # Execute Make build
@@ -91,14 +85,15 @@ execute_make() {
     # Change to build directory (should already be there from cmake)
     cd "$BUILD_DIR"
     
-    # Execute make with appropriate output handling
+    echo -e "${BLUE}Building with $CORES parallel jobs...${NC}"
+    
+    # Execute make with appropriate verbosity
     if [ "$OUTPUT_MODE" = "verbose" ]; then
         # Verbose: show everything including makefile details
         make -j$CORES VERBOSE=1
     else
-        # Normal: show filtered make output
-        echo -e "${BLUE}Building with $CORES parallel jobs...${NC}"
-        make -j$CORES --no-print-directory 2>&1 | grep -E "(\[[[:space:]]*[0-9]+%\]|Building|Linking|warning:|error:|Error|Built target)" || true
+        # Normal: show normal make output, preserve all colors and errors
+        make -j$CORES --no-print-directory
     fi
 }
 
