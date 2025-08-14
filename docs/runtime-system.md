@@ -10,6 +10,506 @@ The execution runtime is selected at program entry using the `fn main() = Runtim
 
 For signal handling language primitives and syntax, see [Signal Handling](signal-handling.md).
 
+## Entry Point Revolution: Runtime-Controlled Program Entry
+
+### Beyond Traditional main() Function
+
+CPrime revolutionizes program entry points by replacing the fixed `int main(int argc, char* argv[])` signature with **runtime-controlled entry points** that use assignment operator binding. This design separates user program logic from platform-specific initialization and allows complete control over the startup sequence.
+
+#### The Core Innovation
+
+```cpp
+// Traditional C++ (limited and inflexible)
+int main(int argc, char* argv[]) {
+    // Hidden initialization sequence
+    // Fixed signature
+    // Platform-specific variations
+    // Cannot test as regular function
+}
+
+// CPrime entry point (flexible and explicit)
+return_type function_name(params) = runtime_expression { body }
+```
+
+**Key Benefits:**
+- **Any function name** - not limited to `main`
+- **Any signature** - runtime determines accepted parameters  
+- **Explicit initialization** - full control over startup sequence
+- **Platform independence** - same source works across targets
+- **Testable entry points** - entry functions are regular functions
+
+### Entry Point Assignment Syntax
+
+#### Basic Forms
+
+```cpp
+// Regular function (NOT an entry point)
+int main() { 
+    return 0;
+}
+
+// Entry point with default runtime
+int main() = default {
+    println("Hello, World!");
+    return 0;
+}
+
+// Entry point with custom runtime
+task<> server() = coroutine {
+    co_await run_server();
+}
+
+// Entry point with bare metal runtime  
+void boot() = bare_metal {
+    initialize_hardware();
+    run_kernel();
+}
+```
+
+#### Runtime Parameterization
+
+Runtimes can accept constructor-style parameters for configuration:
+
+```cpp
+// Parameterized default runtime
+int app() = default(
+    .heap_size = 4_MB,
+    .stack_size = 64_KB
+) {
+    run_application();
+    return 0;
+}
+
+// Coroutine runtime with configuration
+task<> server() = coroutine(
+    .scheduler = work_stealing,
+    .thread_pool = 8,
+    .max_coroutines = 10000
+) {
+    co_await run_async_server();
+}
+
+// Game engine with custom settings
+void game() = game_engine(
+    .frame_rate = 60,
+    .renderer = vulkan,
+    .audio_threads = 2
+) {
+    run_game_loop();
+}
+```
+
+### Staged Initialization System
+
+#### The Problem with Traditional Initialization
+
+Traditional C++ startup has a hidden, uncontrollable sequence:
+```
+_start → __libc_start_main → global_ctors → main
+```
+
+Problems:
+- **Opaque sequence** - developer has no control
+- **Ordering issues** - global constructor dependencies
+- **Platform variations** - different startup on each platform
+- **No customization** - one size fits all approach
+
+#### CPrime's Solution: Explicit Stages
+
+CPrime allows explicit control over initialization through **stage objects**:
+
+```cpp
+// Stage objects define initialization phases
+struct heap_stage {
+    size: usize,
+    static void init(size: usize) {
+        initialize_heap(size);
+    }
+}
+
+struct globals_stage {
+    static void init() {
+        run_global_constructors();
+    }
+}
+
+struct signal_stage {
+    defer: bool,
+    static void init(defer: bool) {
+        setup_signal_handlers(defer);
+    }
+}
+```
+
+#### Staged Entry Points
+
+Entry points can specify explicit initialization stages:
+
+```cpp
+// Entry point with staged initialization
+int server() = production_runtime(
+    heap_stage{.size = 1_GB},           // 1. Initialize heap
+    logging_stage{"server.log"},         // 2. Setup logging  
+    globals_stage{},                     // 3. Run constructors
+    network_stage{.port = 8080},         // 4. Initialize network
+    signal_stage{.defer = true}          // 5. Setup signals
+) {
+    // User code runs after all stages complete
+    return run_server();
+}
+```
+
+#### Stage Composition and Dependencies
+
+Stages can be composed and have dependencies:
+
+```cpp
+// Complex staged initialization
+void embedded_system() = bare_metal(
+    // Hardware initialization stages
+    vectors_stage{.base = 0x0000},       // Interrupt vectors first
+    memory_stage{.size = 512_KB},        // Memory management  
+    clock_stage{.frequency = 100_MHz},   // System clock
+    
+    // Conditional stages (compile-time)
+    #[cfg(feature = "uart")]
+    uart_stage{.baud = 115200},
+    
+    #[cfg(feature = "networking")]
+    ethernet_stage{.dhcp = false},
+    
+    // Optional stages (runtime)
+    optional sensor_stage{.i2c_bus = 1},
+    optional display_stage{.spi_bus = 0},
+    
+    // Final system stage
+    system_ready_stage{}
+) {
+    main_control_loop();
+}
+```
+
+### Runtime Types and Signature Flexibility
+
+#### Default Runtime
+
+The default runtime maintains C++ compatibility:
+
+```cpp
+// Traditional signature still supported
+int main() = default {
+    return 0;
+}
+
+// Extended default runtime
+int app(args: &[String]) = default {
+    process_arguments(args);
+    return 0;
+}
+
+// With staged initialization
+int service() = default(
+    logging_stage{"/var/log/service.log"},
+    globals_stage{},
+    signal_stage{.graceful_shutdown = true}
+) {
+    run_service();
+    return 0;
+}
+```
+
+#### Bare Metal Runtime
+
+For embedded systems and kernels:
+
+```cpp
+// Minimal embedded entry point
+void kernel() = bare_metal(
+    stack_stage{.size = 4_KB},
+    vectors_stage{.base = 0x0000}
+) {
+    // No standard library initialization
+    // No global constructors unless explicit
+    initialize_hardware();
+    kernel_main_loop();
+    // Never returns
+}
+
+// Bootloader entry point
+void bootloader() = bare_metal(
+    memory_stage{.size = 64_KB}
+) {
+    early_hardware_init();
+    load_kernel();
+    jump_to_kernel();
+}
+```
+
+#### Coroutine Runtime
+
+For async applications:
+
+```cpp
+// Web server entry point  
+task<> server() = coroutine(
+    scheduler_stage{.type = work_stealing, .threads = 8},
+    async_io_stage{.epoll_size = 1024}
+) {
+    let listener = TcpListener::bind("0.0.0.0:8080").await?;
+    
+    loop {
+        let (stream, addr) = listener.accept().await?;
+        spawn handle_connection(stream, addr);
+    }
+}
+
+// Database application
+result<()> db_app(connection_string: String) = coroutine(
+    thread_pool_stage{.workers = 4},
+    connection_pool_stage{.max_connections = 100}
+) {
+    let db = Database::connect(&connection_string).await?;
+    co_await run_database_operations(&db);
+    Ok(())
+}
+```
+
+#### Domain-Specific Runtimes
+
+Custom runtimes for specific domains:
+
+```cpp
+// Game engine runtime
+void game() = game_engine(
+    renderer_stage{.api = vulkan, .vsync = true},
+    audio_stage{.sample_rate = 44100},
+    physics_stage{.timestep = 16_ms}
+) {
+    let mut game_state = GameState::new();
+    
+    loop {
+        game_state.update();
+        game_state.render();
+        
+        if game_state.should_quit() {
+            break;
+        }
+    }
+}
+
+// Web server runtime
+response handle_request(request: HttpRequest) = http_server(
+    tls_stage{.cert = "server.pem", .key = "server.key"},
+    routing_stage{.static_dir = "./public"},
+    middleware_stage{.compression = true}
+) {
+    match request.path() {
+        "/api/users" => handle_users_api(request),
+        "/api/posts" => handle_posts_api(request),
+        _ => Response::not_found()
+    }
+}
+
+// Real-time system runtime
+void control_loop() = real_time(
+    priority_stage{.level = RealTimePriority::High},
+    memory_stage{.locked = true, .size = 1_MB},
+    timing_stage{.period = Duration::from_micros(100)}
+) {
+    let mut controller = PIDController::new();
+    
+    loop {
+        let sensor_data = read_sensors();
+        let control_output = controller.update(sensor_data);
+        apply_control_output(control_output);
+        
+        wait_for_next_period();
+    }
+}
+```
+
+### Implementation Architecture
+
+#### Compiler Responsibilities
+
+The compiler handles entry point transformation:
+
+```cpp
+// Source code
+int app() = default { return run(); }
+
+// Compiler generates platform-specific entry point
+#ifdef __linux__
+extern "C" int main(int argc, char* argv[]) {
+    // Initialize default runtime
+    default_runtime::init();
+    
+    // Set up staged initialization (if any)
+    default_runtime::run_stages();
+    
+    // Call user entry point  
+    int result = app();
+    
+    // Runtime cleanup
+    default_runtime::cleanup();
+    return result;
+}
+#endif
+
+#ifdef _WIN32
+extern "C" int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, 
+                             LPSTR lpCmdLine, int nCmdShow) {
+    default_runtime::init_windows(hInstance, lpCmdLine);
+    default_runtime::run_stages();
+    int result = app();
+    default_runtime::cleanup();
+    return result;
+}
+#endif
+```
+
+#### Platform Adaptation
+
+Same source code works across platforms:
+
+```cpp
+// Single source file
+int app() = default {
+    println("Hello from CPrime!");
+    return 0;
+}
+
+// Compiler generates appropriate symbols:
+// --target=linux    → generates 'main' symbol
+// --target=windows  → generates 'WinMain' symbol  
+// --target=embedded → generates '_start' symbol
+// --target=wasm     → generates '_start' and export table
+```
+
+#### Zero-Overhead Guarantee
+
+Entry point binding has zero runtime overhead:
+
+```cpp
+// Simple entry point
+int app() = default { return 0; }
+
+// Compiles to identical code as:
+int main() { return 0; }
+
+// Staged initialization is inlined when possible
+int app() = default(
+    heap_stage{.size = 1_MB}
+) { 
+    return 0; 
+}
+
+// Becomes:
+int main() {
+    initialize_heap(1048576);  // Inlined
+    return 0;
+}
+```
+
+### Advanced Features
+
+#### Multiple Entry Points
+
+Different entry points for different build configurations:
+
+```cpp
+// Production entry point
+int production() = default(
+    logging_stage{"/var/log/app.log"},
+    globals_stage{},
+    signal_stage{.graceful_shutdown = true}
+) {
+    run_production_server();
+    return 0;
+}
+
+// Debug entry point  
+int debug() = debug_runtime(
+    logging_stage{stdout},
+    debug_stage{.memory_tracking = true},
+    globals_stage{}
+) {
+    run_debug_server();
+    return 0;
+}
+
+// Test entry point
+int test() = test_runtime {
+    run_all_tests();
+    return 0;
+}
+
+// Selected at link time:
+// cprime build --entry=production  # Links production()
+// cprime build --entry=debug      # Links debug()  
+// cprime build --entry=test       # Links test()
+```
+
+#### Testing Support
+
+Entry points become testable regular functions:
+
+```cpp
+// Entry point
+int app() = default {
+    return run();
+}
+
+// Testable function (extracted logic)
+int run() {
+    let config = load_configuration();
+    let result = process_data(config);
+    save_results(result);
+    return 0;
+}
+
+// Unit tests
+#[test]
+fn test_run_with_valid_config() {
+    // Test run() directly without entry point overhead
+    assert_eq!(run(), 0);
+}
+
+#[test] 
+fn test_run_with_invalid_config() {
+    // Test error conditions
+    assert_eq!(run(), 1);
+}
+```
+
+#### Error Handling in Stages
+
+Stage failures can be handled gracefully:
+
+```cpp
+// Stage with error handling
+int server() = production_runtime(
+    heap_stage{.size = 1_GB} catch {
+        // Fallback to smaller heap
+        heap_stage{.size = 512_MB}
+    },
+    
+    network_stage{.port = 8080} catch {
+        // Try alternative port
+        network_stage{.port = 8081}
+    } catch {
+        // Final fallback
+        eprintln("Cannot initialize network");
+        exit(1);
+    },
+    
+    globals_stage{}
+) {
+    run_server();
+    return 0;
+}
+```
+
 ## Runtime Trait Definition
 
 ### Core Runtime Interface
@@ -921,12 +1421,235 @@ scheduler.handle(SIGUSR1, |_| async {
 });
 ```
 
+## Integration with CPrime's Architecture
+
+### Three-Class System Integration
+
+Runtime and stage objects follow CPrime's three-class system patterns:
+
+```cpp
+// Stage objects as data classes
+class NetworkStage {
+    port: u16,
+    bind_address: IpAddr,
+    max_connections: u32,
+    
+    constructed_by: NetworkStageOps,
+}
+
+// Stage operations as functional classes  
+functional class NetworkStageOps {
+    fn construct(port: u16) -> NetworkStage {
+        NetworkStage {
+            port,
+            bind_address: IpAddr::any(),
+            max_connections: 1000,
+        }
+    }
+    
+    fn init(stage: &NetworkStage) -> Result<()> {
+        let listener = TcpListener::bind((stage.bind_address, stage.port))?;
+        listener.set_max_connections(stage.max_connections);
+        GLOBAL_LISTENER.store(listener);
+        Ok(())
+    }
+}
+
+// Runtime data classes hold initialization state
+class DefaultRuntime {
+    stages: Vec<Box<dyn StageInit>>,
+    initialized: bool,
+    cleanup_handlers: Vec<CleanupFn>,
+    
+    constructed_by: DefaultRuntimeOps,
+}
+
+functional class DefaultRuntimeOps {
+    fn construct() -> DefaultRuntime {
+        DefaultRuntime {
+            stages: Vec::new(),
+            initialized: false,
+            cleanup_handlers: Vec::new(),
+        }
+    }
+    
+    fn add_stage(runtime: &mut DefaultRuntime, stage: Box<dyn StageInit>) {
+        runtime.stages.push(stage);
+    }
+    
+    fn initialize(runtime: &mut DefaultRuntime) -> Result<()> {
+        for stage in &runtime.stages {
+            stage.init()?;
+        }
+        runtime.initialized = true;
+        Ok(())
+    }
+}
+```
+
+### Signal Handling Integration
+
+Entry point runtime selection affects signal handling behavior:
+
+```cpp
+// Default runtime: Manual signal handling
+int server() = default {
+    signal(SIGINT, |_| {
+        write(2, "Shutting down\n", 14);
+        cleanup_and_exit(0);
+    });
+    
+    run_server_loop();
+    return 0;
+}
+
+// Coroutine runtime: Async signal handling
+task<> server() = coroutine {
+    // Signals automatically converted to async operations
+    scheduler.handle(SIGINT, |_| async {
+        println("Graceful shutdown initiated");
+        shutdown_all_connections().await;
+        save_state().await;
+    });
+    
+    co_await run_async_server();
+}
+
+// Staged initialization with signal setup
+int server() = default(
+    logging_stage{"/var/log/server.log"},
+    globals_stage{},
+    signal_stage{.graceful_shutdown = true, .reload_config = true}
+) {
+    // Signals already configured by signal_stage
+    run_server_with_signals();
+    return 0;
+}
+```
+
+### Comptime Integration
+
+Entry point binding can leverage comptime execution:
+
+```cpp
+// Comptime-generated entry points
+comptime {
+    registerSyntaxPattern("@main $func", (match) => {
+        return quote {
+            int generated_main() = default {
+                return $(match.func)();
+            }
+        };
+    });
+}
+
+// Usage
+@main my_application  // Generates entry point automatically
+
+// Comptime stage generation
+comptime {
+    fn generate_database_stages(config: DatabaseConfig) -> StageList {
+        let mut stages = Vec::new();
+        
+        stages.push(quote { heap_stage{.size = $(config.heap_size)} });
+        
+        if config.enable_logging {
+            stages.push(quote { logging_stage{$(config.log_file)} });
+        }
+        
+        if config.enable_metrics {
+            stages.push(quote { metrics_stage{.port = $(config.metrics_port)} });
+        }
+        
+        stages
+    }
+}
+
+// Generated entry point with computed stages
+int database_server() = production_runtime(
+    $(generate_database_stages(DATABASE_CONFIG))
+) {
+    run_database_server();
+    return 0;
+}
+```
+
+### Memory Management Integration
+
+Entry points and stages respect RAII principles:
+
+```cpp
+// RAII-compliant stage objects
+class TlsStage {
+    certificate_path: String,
+    private_key_path: String,
+    
+    constructed_by: TlsStageOps,
+}
+
+functional class TlsStageOps {
+    fn construct(cert: String, key: String) -> TlsStage {
+        TlsStage {
+            certificate_path: cert,
+            private_key_path: key,
+        }
+    }
+    
+    fn destruct(stage: &mut TlsStage) {
+        // Automatic cleanup of TLS resources
+        cleanup_tls_context();
+        clear_private_key_memory();
+    }
+    
+    fn init(stage: &TlsStage) -> Result<()> {
+        let cert = load_certificate(&stage.certificate_path)?;
+        let key = load_private_key(&stage.private_key_path)?;
+        initialize_tls_context(cert, key);
+        Ok(())
+    }
+}
+
+// RAII cleanup happens automatically
+int https_server() = production_runtime(
+    tls_stage{"server.crt", "server.key"},  // Auto-cleanup on exit
+    network_stage{.port = 443}              // Auto-cleanup on exit
+) {
+    run_https_server();
+    return 0;  // All stages automatically destructed
+}
+```
+
 ## Cross-References
 
-- **Signal Syntax**: See [Signal Handling](signal-handling.md) for language primitives and syntax
-- **Coroutine Details**: See [Coroutines](coroutines.md) for coroutine-specific signal handling architecture
-- **Channel Integration**: See [Channels](channels.md) for signal handling with channel operations
-- **Memory Safety**: See [Memory Management](memory-management.md) for signal handling with RAII guarantees
-- **Performance**: See [Compilation](compilation.md) for runtime selection impact on compilation
+- **[Signal Handling](signal-handling.md)**: Entry point runtime selection determines signal handling behavior (direct handlers vs async coroutines)
+- **[Coroutines](coroutines.md)**: Coroutine runtime enables async entry points and signal-to-coroutine conversion
+- **[Channels](channels.md)**: Channel-based communication patterns work with all runtime types
+- **[Memory Management](memory-management.md)**: Stage objects follow RAII principles for automatic cleanup
+- **[Three-Class System](three-class-system.md)**: Runtime and stage objects use Data/Functional class patterns
+- **[Comptime Execution](comptime-execution.md)**: Entry point binding can use comptime for stage generation and syntax transformation
+- **[Compilation Model](compilation.md)**: Entry point selection affects generated symbols and platform adaptation
+- **[Runtime/Comptime Keywords](runtime-comptime-keywords.md)**: Entry point system uses performance indication principles
 
-CPrime's runtime system provides flexible execution models that can be optimized for different use cases while maintaining consistent signal handling semantics across all runtime choices.
+## Conclusion
+
+CPrime's runtime-controlled entry point system represents a revolutionary approach to program initialization that:
+
+### Eliminates Traditional Limitations
+- **Fixed signatures** → Flexible, runtime-determined signatures
+- **Hidden initialization** → Explicit, controllable staged initialization  
+- **Platform lock-in** → Cross-platform source compatibility
+- **Untestable entry points** → Regular, testable functions
+
+### Enables Powerful Capabilities
+- **Staged initialization** with explicit ordering and dependencies
+- **Multiple entry points** for different build configurations
+- **Domain-specific runtimes** optimized for specific use cases
+- **Zero-overhead abstraction** with compile-time stage inlining
+
+### Maintains CPrime's Core Principles
+- **Explicit control** over initialization sequence
+- **Performance transparency** with zero-cost abstractions
+- **Memory safety** through RAII-compliant stage objects
+- **Architectural clarity** using the three-class system
+
+The entry point revolution transforms program startup from a hidden, inflexible process into an explicit, controllable, and optimizable system that adapts to any domain while maintaining the performance and safety characteristics essential for systems programming.
