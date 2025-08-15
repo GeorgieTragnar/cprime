@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
+#include <unordered_map>
 
 namespace cprime {
 
@@ -163,5 +165,11 @@ enum class EToken : uint16_t {
     NEWLINE,
     EOF_TOKEN
 };
+
+// Centralized keyword-to-token mapping
+extern const std::unordered_map<std::string, EToken> KEYWORD_TO_ETOKEN_MAP;
+
+// Helper function for compilation - string to token conversion
+EToken string_to_etoken(const std::string& keyword);
 
 } // namespace cprime

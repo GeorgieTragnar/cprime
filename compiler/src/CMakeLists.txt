@@ -18,6 +18,7 @@ add_library(cprime_commons
     commons/rawToken.h
     commons/token.h
     commons/enum/token.h
+    commons/enum/token.cpp
     commons/enum/rawToken.h
     commons/enum/contextualToken.h
     commons/logger.h

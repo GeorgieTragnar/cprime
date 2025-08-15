@@ -7,6 +7,7 @@
 #include <iomanip>
 #include "../commons/rawToken.h"
 #include "../commons/dirty/string_table.h"
+#include "../commons/enum/token.h"
 #include "../layer1/processing_chunk.h"
 
 // Layer 1 validation interface for testing
@@ -19,7 +20,7 @@ namespace validation {
 // NOTE: Removed static StringTable - it was causing StringIndex validation errors
 // Serialization now uses safe StringIndex representation without dereferencing
 
-// Helper function to convert EToken to string
+// Helper function to convert EToken to string (for debugging/validation only)
 inline std::string etoken_to_string(EToken token) {
     switch (token) {
         case EToken::INVALID: return "INVALID";
@@ -93,10 +94,65 @@ inline std::string etoken_to_string(EToken token) {
         case EToken::BOOL: return "BOOL";
         case EToken::CHAR: return "CHAR";
         case EToken::VOID: return "VOID";
+        case EToken::INT8_T: return "INT8_T";
+        case EToken::INT16_T: return "INT16_T";
+        case EToken::INT32_T: return "INT32_T";
+        case EToken::INT64_T: return "INT64_T";
+        case EToken::UINT8_T: return "UINT8_T";
+        case EToken::UINT16_T: return "UINT16_T";
+        case EToken::UINT32_T: return "UINT32_T";
+        case EToken::UINT64_T: return "UINT64_T";
+        case EToken::SIZE_T: return "SIZE_T";
+        // Class/Structure keywords
+        case EToken::CLASS: return "CLASS";
+        case EToken::STRUCT: return "STRUCT";
+        case EToken::INTERFACE: return "INTERFACE";
+        case EToken::UNION: return "UNION";
+        case EToken::FUNCTION: return "FUNCTION";
+        case EToken::FUNCTIONAL: return "FUNCTIONAL";
+        case EToken::DATA: return "DATA";
+        // Context-sensitive keywords
+        case EToken::RUNTIME: return "RUNTIME";
+        case EToken::COMPTIME: return "COMPTIME";
+        case EToken::CONSTEXPR: return "CONSTEXPR";
+        case EToken::DEFER: return "DEFER";
+        case EToken::AUTO: return "AUTO";
+        case EToken::CONST: return "CONST";
+        case EToken::SEMCONST: return "SEMCONST";
+        case EToken::STATIC: return "STATIC";
+        case EToken::INLINE: return "INLINE";
+        case EToken::VOLATILE: return "VOLATILE";
+        case EToken::DANGER: return "DANGER";
+        case EToken::IMPLEMENTS: return "IMPLEMENTS";
+        case EToken::EXTERN: return "EXTERN";
+        case EToken::MODULE: return "MODULE";
+        case EToken::DEFAULT: return "DEFAULT";
+        case EToken::OPEN: return "OPEN";
+        case EToken::CLOSED: return "CLOSED";
+        case EToken::FUNC: return "FUNC";
+        // Control flow
+        case EToken::IF: return "IF";
+        case EToken::ELSE: return "ELSE";
+        case EToken::WHILE: return "WHILE";
+        case EToken::FOR: return "FOR";
+        case EToken::RETURN: return "RETURN";
+        case EToken::BREAK: return "BREAK";
+        case EToken::CONTINUE: return "CONTINUE";
+        case EToken::TRY: return "TRY";
+        case EToken::CATCH: return "CATCH";
+        case EToken::RECOVER: return "RECOVER";
+        case EToken::FINALLY: return "FINALLY";
+        case EToken::SIGNAL: return "SIGNAL";
+        case EToken::EXCEPT: return "EXCEPT";
+        case EToken::RAISE: return "RAISE";
+        // Casting keywords
+        case EToken::CAST: return "CAST";
+        case EToken::STATIC_CAST: return "STATIC_CAST";
+        case EToken::DYNAMIC_CAST: return "DYNAMIC_CAST";
+        case EToken::SELECT: return "SELECT";
         // Exec system tokens
         case EToken::EXEC: return "EXEC";
         case EToken::EXEC_ALIAS: return "EXEC_ALIAS";
-        case EToken::FUNC: return "FUNC";
         default: return "UNKNOWN_TOKEN";
     }
 }
