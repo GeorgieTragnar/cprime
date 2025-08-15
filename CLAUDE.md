@@ -422,6 +422,27 @@ wc -l test_cases/{test_name}/layer2
 **Step 3e: Pipeline Validation** (for future layers)
 - Ensure Layer N-1 output exactly matches layerN input when both exist
 
+**Step 4: Run Tests (MANDATORY)**
+```bash
+# Build with tests enabled
+./scripts/build.sh -ct
+
+# Run Layer 1 tests to validate new test cases
+./scripts/test.sh 1
+
+# Check for any test failures
+# If tests fail, examine failure logs in tmp/ directory
+# Fix either the test case or the expected output as needed
+```
+
+**Step 5: Test Result Validation**
+- Verify all test cases pass
+- Check failure logs if tests fail - may indicate:
+  - Incorrect expected output in layer2 file
+  - Actual tokenization bug in Layer 1
+  - Test infrastructure issues
+- Re-run validation if test cases are updated
+
 **4. Test Execution Logic**
 ```python
 # Pseudo-code for test discovery

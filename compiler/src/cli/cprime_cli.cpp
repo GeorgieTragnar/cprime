@@ -147,7 +147,7 @@ int main(int argc, char* argv[]) {
                     if (!options.output_file.empty()) {
                         std::ofstream out_file(options.output_file);
                         if (out_file.is_open()) {
-                            out_file << serialized_output << std::endl;
+                            out_file << serialized_output;  // No trailing newline for file output
                             LOG_INFO("Token output written to: {}", options.output_file);
                         } else {
                             LOG_ERROR("Failed to open output file: {}", options.output_file);
@@ -155,7 +155,7 @@ int main(int argc, char* argv[]) {
                         }
                     } else {
                         // Output to console
-                        std::cout << serialized_output << std::endl;
+                        std::cout << serialized_output << std::endl;  // Keep newline for console
                     }
                     
                 } catch (const std::exception& e) {
