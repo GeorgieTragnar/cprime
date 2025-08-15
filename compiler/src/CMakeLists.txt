@@ -66,6 +66,7 @@ target_compile_features(cprime_layer1 PUBLIC cxx_std_17)
 add_library(cprime_layer2
     layer2/layer2.h
     layer2/layer2.cpp
+    layer2/sublayer2a.cpp
 )
 
 target_include_directories(cprime_layer2 PUBLIC .)
