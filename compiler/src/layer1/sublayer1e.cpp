@@ -49,7 +49,6 @@ std::vector<RawToken> sublayer1e(const std::vector<ProcessingChunk>& input, Stri
         {"constexpr", EToken::CONSTEXPR},
         {"defer", EToken::DEFER},
         {"auto", EToken::AUTO},
-        {"var", EToken::VAR},
         {"const", EToken::CONST},
         {"semconst", EToken::SEMCONST},
         {"static", EToken::STATIC},
@@ -60,9 +59,9 @@ std::vector<RawToken> sublayer1e(const std::vector<ProcessingChunk>& input, Stri
         {"extern", EToken::EXTERN},
         {"module", EToken::MODULE},
         {"default", EToken::DEFAULT},
-        {"func", EToken::FUNC},
         {"open", EToken::OPEN},
         {"closed", EToken::CLOSED},
+        {"func", EToken::FUNC},
         
         // Control flow
         {"if", EToken::IF},

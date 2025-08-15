@@ -1,0 +1,6 @@
+exec MyTemplate<T> {
+    // Complicated template generation ruleset would be written here
+    // if we want to make exec block that mimics C++ template behavior
+}
+
+MyTemplate<int> instance;

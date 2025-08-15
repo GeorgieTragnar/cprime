@@ -4,7 +4,7 @@
 #include <sstream>
 #include <vector>
 #include "../commons/rawToken.h"
-#include "../layer1/tokenizer.h"
+#include "../layer1/processing_chunk.h"
 
 // Layer 2 validation interface for testing
 // This header provides validation and serialization functions for layer 2 testing

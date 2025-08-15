@@ -1,0 +1,6 @@
+exec func<int> make_template() {
+    return func<int>() { return 42; };
+}
+
+func<int> test = make_template();
+func<string> test2 = make_template();

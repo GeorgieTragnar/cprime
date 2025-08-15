@@ -7,7 +7,7 @@
 #include <iomanip>
 #include "../commons/rawToken.h"
 #include "../commons/dirty/string_table.h"
-#include "../layer1/tokenizer.h"
+#include "../layer1/processing_chunk.h"
 
 // Layer 1 validation interface for testing
 // This header provides validation and serialization functions for layer 1 testing
@@ -93,6 +93,10 @@ inline std::string etoken_to_string(EToken token) {
         case EToken::BOOL: return "BOOL";
         case EToken::CHAR: return "CHAR";
         case EToken::VOID: return "VOID";
+        // Exec system tokens
+        case EToken::EXEC: return "EXEC";
+        case EToken::EXEC_ALIAS: return "EXEC_ALIAS";
+        case EToken::FUNC: return "FUNC";
         default: return "UNKNOWN_TOKEN";
     }
 }

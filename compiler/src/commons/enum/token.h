@@ -73,7 +73,6 @@ enum class EToken : uint16_t {
     CONSTEXPR,      // Compile-time evaluation (C++ style)
     DEFER,          // Context-sensitive: defer statement vs defer modifier
     AUTO,
-    VAR,
     CONST,
     SEMCONST,       // Special field modifier for 1:1 move policy
     STATIC,         // Static variables

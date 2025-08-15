@@ -3,7 +3,7 @@
 #include "../commons/rawToken.h"
 #include "../commons/dirty/string_table.h"
 #include "../commons/dirty/exec_alias_registry.h"
-#include "tokenizer.h" // For ProcessingChunk definition
+#include "processing_chunk.h" // For ProcessingChunk definition
 #include <vector>
 #include <string>
 #include <sstream>

@@ -1,0 +1,5 @@
+exec func<int> test() {
+    return func<int>() { return 42; };
+}
+
+func<int> instance = test();
