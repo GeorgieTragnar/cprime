@@ -344,4 +344,121 @@ tail -f logs/cprime.log
 
 ---
 
+## Layer-Agnostic Test Case Creation Methodology
+
+### Core Principle
+**layerN file serves dual purpose:**
+- **Input** for Layer N processing
+- **Expected output validation** for Layer N-1 processing
+
+### Test Discovery Algorithm
+Tests are automatically discovered where both `layerN` and `layerN+1` files exist:
+- If files exist: `layer1`, `layer2`, `layer4`, `layer5`, `layer6`
+- Then tests run for: **Layer 1** (1→2), **Layer 4** (4→5), **Layer 5** (5→6)
+- Layer 2 and 3 are skipped (no layer3 file to validate layer2 output)
+
+### Test Case Structure
+```
+test_cases/{test_name}/
+├── layer1          # CPrime source input
+├── layer2          # Layer 1 expected output / Layer 2 input
+├── layer3          # Layer 2 expected output / Layer 3 input (if exists)
+├── layer4          # Layer 3 expected output / Layer 4 input (if exists)
+└── layerN          # Layer N-1 expected output / Layer N input
+```
+
+### Creation Workflow
+
+**1. Create Base Input (layer1)**
+- Write focused CPrime code for specific language feature
+- Use clear, testable syntax patterns
+
+**2. Generate Layer Outputs Sequentially**
+```bash
+# Generate layer2 (Layer 1 tokenization output)
+./scripts/analyze.sh tokens {test_name} -o test_cases/{test_name}/layer2
+
+# Generate layer3 (Layer 2 structure output) - when implemented
+./scripts/analyze.sh context {test_name} -o test_cases/{test_name}/layer3
+
+# Generate layer4 (Layer 3 AST output) - when implemented  
+./scripts/analyze.sh ast {test_name} -o test_cases/{test_name}/layer4
+```
+
+**3. Validation Process (MANDATORY)**
+
+**Step 3a: Binary Content Analysis**
+```bash
+# 1. Show exact binary content and positions
+xxd -c 16 test_cases/{test_name}/layer1
+
+# 2. Review token output for validation
+head -20 test_cases/{test_name}/layer2
+```
+
+**Step 3b: Character-by-Character Validation**
+- Map each byte position to corresponding token
+- Verify multi-character tokens (identifiers, literals) span correct ranges
+- Ensure no gaps or overlaps in position coverage
+- Validate line/column tracking across newlines
+
+**Step 3c: Token Accuracy Checks**
+- **Position Accuracy**: Every token's pos/line/col must match actual source locations
+- **Character Coverage**: Every input byte must appear in exactly one token
+- **Token Classification**: Verify token types match Layer 1 design decisions
+- **Boundary Handling**: Check proper handling of whitespace, newlines, EOF
+
+**Step 3d: Complete Coverage Validation**
+```bash
+# Count total characters in input
+wc -c test_cases/{test_name}/layer1
+
+# Count total tokens generated  
+wc -l test_cases/{test_name}/layer2
+
+# Verify last token position + length equals file size
+```
+
+**Step 3e: Pipeline Validation** (for future layers)
+- Ensure Layer N-1 output exactly matches layerN input when both exist
+
+**4. Test Execution Logic**
+```python
+# Pseudo-code for test discovery
+for test_case in test_cases:
+    layers = discover_layer_files(test_case)  # [1,2,4,5,6]
+    testable_layers = []
+    
+    for i in range(len(layers)-1):
+        if layers[i+1] == layers[i] + 1:  # consecutive layers
+            testable_layers.append(layers[i])
+    
+    # Result: [1,4,5] - test Layer 1→2, Layer 4→5, Layer 5→6
+```
+
+**5. Quality Criteria**
+- **Completeness**: Every layer input fully processed to expected output
+- **Accuracy**: Byte-perfect position tracking through all layers
+- **Consistency**: Layer N-1 output must exactly match Layer N input
+- **Coverage**: Test cases cover comprehensive language feature matrix
+
+**6. Example Test Cases**
+- **arithmetic_operators**: Basic arithmetic (`+`, `-`, `*`, `/`, `%`)
+- **arithmetic_compound**: Compound assignment (`+=`, `-=`, `*=`, `/=`, `%=`)
+- **arithmetic_unary**: Unary operators (`++`, `--`, unary `+`, `-`)
+- **arithmetic_precedence**: Operator precedence testing
+- **arithmetic_complex**: Multi-level expressions with parentheses
+
+**7. Benefits**
+- **Scalable**: Easy to add new layers without changing methodology
+- **Flexible**: Can test incomplete pipelines (missing middle layers)
+- **Maintainable**: Single source of truth for each layer transition
+- **Comprehensive**: Full pipeline validation when all layers present
+
+### Current Implementation Status
+- **Layer 1 Testing**: ✅ Fully implemented with token dumping
+- **Layer 2+ Testing**: 🔄 Infrastructure ready, awaiting layer implementation
+
+---
+
 **Remember: This project uses MANDATORY SCRIPT WORKFLOW. Always enhance scripts rather than bypassing them.**

@@ -24,6 +24,7 @@ EXAMPLES_DIR="$PROJECT_ROOT/examples"
 MODE=""
 EXAMPLE_NAME=""
 OUTPUT_DIR="cprime_analysis"
+OUTPUT_FILE=""
 OPEN_RESULT=false
 VERBOSE=false
 QUIET_MODE=false
@@ -46,8 +47,10 @@ show_help() {
     echo "  validation   Show file validation process"
     echo "  layer0       Complete Layer 0 analysis (input + streams + validation)"
     echo ""
-    echo -e "${BOLD}FUTURE LAYER MODES (Not Yet Implemented):${NC}"
+    echo -e "${BOLD}LAYER 1 MODES (Tokenization - AVAILABLE):${NC}"
     echo "  tokens       Analyze and dump raw tokens (Layer 1)"
+    echo ""
+    echo -e "${BOLD}FUTURE LAYER MODES (Not Yet Implemented):${NC}"
     echo "  context      Analyze context-sensitive keyword resolution (Layer 2)"
     echo "  ast          Build and analyze AST structure (Layer 3)"
     echo "  full         Run complete pipeline analysis (all layers)"
@@ -56,6 +59,7 @@ show_help() {
     echo -e "${BOLD}OPTIONS:${NC}"
     echo "  -v, --verbose        Enable verbose debug output"
     echo "  --quiet             Suppress verbose headers and file info"
+    echo "  -o, --output FILE   Write token output to file (for tokens mode)"
     echo "  -h, --help          Show this help message"
     echo "  --                  Pass remaining arguments directly to CLI"
     echo ""
@@ -64,6 +68,8 @@ show_help() {
     echo "  $0 streams hello                    # Analyze stringstreams for hello.cprime"
     echo "  $0 validation simple                # Show file validation for simple.cp"
     echo "  $0 layer0 class_test                # Complete Layer 0 analysis"
+    echo "  $0 tokens test_custom_arithmetic     # Dump Layer 1 tokens"
+    echo "  $0 tokens arithmetic_operators -o layer2  # Save tokens to file"
     echo "  $0 layer0 -v hello                  # Verbose Layer 0 analysis"
     echo ""
     echo -e "${BOLD}AVAILABLE EXAMPLES:${NC}"
@@ -93,8 +99,17 @@ while [[ $# -gt 0 ]]; do
             MODE="$1"
             shift
             ;;
+        # Layer 1 modes (implemented)
+        tokens)
+            if [ -n "$MODE" ]; then
+                echo -e "${RED}Error: Multiple modes specified${NC}"
+                exit 1
+            fi
+            MODE="$1"
+            shift
+            ;;
         # Future layer modes (not yet implemented)
-        tokens|context|ast|full|interactive)
+        context|ast|full|interactive)
             if [ -n "$MODE" ]; then
                 echo -e "${RED}Error: Multiple modes specified${NC}"
                 exit 1
@@ -109,6 +124,14 @@ while [[ $# -gt 0 ]]; do
         --quiet)
             QUIET_MODE=true
             shift
+            ;;
+        -o|--output)
+            if [ -z "$2" ]; then
+                echo -e "${RED}Error: --output requires a filename${NC}"
+                exit 1
+            fi
+            OUTPUT_FILE="$2"
+            shift 2
             ;;
         -h|--help)
             show_help
@@ -226,6 +249,57 @@ fi
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
+# Helper function to run Layer 1 token analysis with the CLI
+run_layer1_token_analysis() {
+    local output_file="$1"  # Optional output file parameter
+    
+    if [ "$QUIET_MODE" = false ]; then
+        echo -e "${CYAN}Running Layer 1 token dumping analysis...${NC}"
+    fi
+    
+    # Prepare CLI arguments
+    local cli_args="--dump-tokens"
+    
+    # Add output file if specified
+    if [ -n "$output_file" ]; then
+        cli_args="$cli_args -o $output_file"
+        if [ "$QUIET_MODE" = false ]; then
+            echo -e "${CYAN}Output will be written to: $output_file${NC}"
+        fi
+    fi
+    
+    # Add verbose flag if requested
+    if [ "$VERBOSE" = true ]; then
+        cli_args="$cli_args --verbose"
+    fi
+    
+    # Add extra flags if specified
+    if [ -n "$EXTRA_FLAGS" ]; then
+        cli_args="$cli_args $EXTRA_FLAGS"
+    fi
+    
+    if [ "$VERBOSE" = true ]; then
+        echo "Input file: $EXAMPLE_FILE"
+        echo "CLI command: $CPRIME_CLI $cli_args $EXAMPLE_FILE"
+    fi
+    
+    # Execute the CLI
+    $CPRIME_CLI $cli_args "$EXAMPLE_FILE"
+    
+    local exit_code=$?
+    if [ $exit_code -eq 0 ]; then
+        if [ "$QUIET_MODE" = false ]; then
+            echo -e "${GREEN}✓ Layer 1 token analysis completed${NC}"
+            if [ -n "$output_file" ]; then
+                echo -e "${CYAN}Token output saved to: $output_file${NC}"
+            fi
+        fi
+    else
+        echo -e "${RED}✗ Layer 1 token analysis failed (exit code: $exit_code)${NC}"
+        exit 1
+    fi
+}
+
 # Helper function to run Layer 0 analysis with the CLI
 run_layer0_analysis() {
     local mode="$1"
@@ -301,12 +375,11 @@ case $MODE in
         run_layer0_analysis "analyze-streams"
         run_layer0_analysis "show-file-validation"
         ;;
-    # Future layer modes (not yet implemented)
+    # Layer 1 modes (implemented)
     tokens)
-        echo -e "${RED}Token analysis (Layer 1) not yet implemented${NC}"
-        echo "This will analyze tokenization using future CLI capabilities"
-        exit 1
+        run_layer1_token_analysis "$OUTPUT_FILE"
         ;;
+    # Future layer modes (not yet implemented)
     context)
         echo -e "${RED}Context analysis (Layer 2) not yet implemented${NC}"
         echo "This will analyze context resolution using future CLI capabilities"
@@ -347,6 +420,9 @@ if [ "$QUIET_MODE" = false ]; then
             ;;
         streams)
             echo -e "${CYAN}Completed Layer 0 streams analysis${NC}"
+            ;;
+        tokens)
+            echo -e "${CYAN}Completed Layer 1 token dumping analysis${NC}"
             ;;
         validation)
             echo -e "${CYAN}Completed Layer 0 validation analysis${NC}"

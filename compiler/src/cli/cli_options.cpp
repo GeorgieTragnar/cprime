@@ -8,7 +8,7 @@ namespace cprime::cli {
 
 void CLIOptions::validate() {
     // Check that we have input files if we're doing file-based operations
-    if (has_layer0_operations() && input_files.empty()) {
+    if ((has_layer0_operations() || dump_tokens) && input_files.empty()) {
         throw std::runtime_error("Input files required for file-based operations");
     }
     
