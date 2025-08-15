@@ -3,9 +3,11 @@
 #include <vector>
 #include <memory>
 #include "enum/contextualToken.h"
-#include "instruction.h"
 
 namespace cprime {
+
+// Forward declaration to avoid circular includes
+class Context;
 
 struct ContextualToken {
 	EContextualToken _contextualToken;

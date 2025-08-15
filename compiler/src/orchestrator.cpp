@@ -1,6 +1,8 @@
 #include "orchestrator.h"
 #include "layer0/input_processor.h"
 #include "layer1/layer1.h"
+#include "layer2/layer2.h"
+#include "layer2validation/layer2validation.h"
 #include "commons/logger.h"
 
 namespace cprime {
@@ -29,7 +31,11 @@ bool CompilerOrchestrator::run() {
         success = run_layer1();
     }
     
-    // TODO: Add Layer 2 (Structure Building)
+    // Layer 2: Structure Building  
+    if (success) {
+        success = run_layer2();
+    }
+    
     // TODO: Add Layer 3 (Contextualization)
     // TODO: Add Layer 4 (RAII injection)
     // TODO: Add ErrorHandler execution
@@ -92,8 +98,10 @@ bool CompilerOrchestrator::run_layer1() {
             
             LOG_INFO("Stream '{}' tokenized: {} tokens generated", stream_id, tokens.size());
             
-            // TODO: Store tokens in CompilationContext or pass to next layer
-            // For now, just log some statistics
+            // Store tokens for Layer 2
+            token_streams_[stream_id] = tokens;
+            
+            // Log some statistics
             size_t literal_count = 0, identifier_count = 0, keyword_count = 0;
             for (const auto& token : tokens) {
                 switch (token._raw_token) {
@@ -121,8 +129,46 @@ bool CompilerOrchestrator::run_layer1() {
     return true;
 }
 
-// TODO: Implement Layer 2 structure building
-// bool CompilerOrchestrator::run_layer2() { ... }
+bool CompilerOrchestrator::run_layer2() {
+    log_layer_start("Layer 2 (Structure Building)");
+    
+    if (token_streams_.empty()) {
+        auto& logger = logger_; // Alias for LOG macros
+        LOG_ERROR("Layer 2 failed: No token streams from Layer 1");
+        log_layer_end("Layer 2", false);
+        return false;
+    }
+    
+    auto& logger = logger_; // Alias for LOG macros
+    LOG_DEBUG("Starting structure building of {} token streams", token_streams_.size());
+    
+    try {
+        // Create ExecAliasRegistry for exec alias processing
+        ExecAliasRegistry exec_alias_registry;
+        
+        // Call Layer 2 to build scope structure
+        auto scopes = layer2(token_streams_, string_table_, exec_alias_registry);
+        
+        LOG_INFO("Layer 2 completed: {} scopes built", scopes.size());
+        
+        // Log basic scope count (detailed type stats belong in later layers)
+        LOG_DEBUG("Layer 2 Structure: {} scopes built", scopes.size());
+        
+        // For development: always log full scope structure  
+        std::string full_structure = layer2validation::serialize_scope_vector(scopes);
+        LOG_INFO("Layer 2 Full Structure:\n{}", full_structure);
+        
+        // TODO: Store scopes for Layer 3
+        
+    } catch (const std::exception& e) {
+        LOG_ERROR("Structure building failed: {}", e.what());
+        log_layer_end("Layer 2", false);
+        return false;
+    }
+    
+    log_layer_end("Layer 2", true);
+    return true;
+}
 
 // TODO: Implement ErrorHandler execution
 // bool CompilerOrchestrator::run_error_handler() { ... }

@@ -1,33 +1,67 @@
 #pragma once
 
 #include "../commons/rawToken.h"
+#include "../commons/scope.h"
+#include "../commons/instruction.h"
 #include "../commons/dirty/string_table.h"
-#include "../layer1/processing_chunk.h" // For ProcessingChunk definition
+#include "../commons/dirty/exec_alias_registry.h"
 #include <vector>
+#include <map>
 #include <string>
-#include <sstream>
 
 namespace cprime {
 
-// Layer 2 main function - what compiler will use (replaces Tokenizer::tokenize_stream)
-std::vector<RawToken> layer2(std::stringstream& stream, StringTable& string_table);
+// Layer 2 main function - Structure Building
+// Input: Map of file streams to RawToken vectors from Layer 1
+// Output: Flat vector of structured Scopes with Instructions
+std::vector<Scope> layer2(const std::map<std::string, std::vector<RawToken>>& streams, 
+                         const StringTable& string_table, 
+                         ExecAliasRegistry& exec_registry);
 
-// Layer 2 sublayer implementations in nested namespace
+// Layer 2 sublayer implementations 
 namespace layer2_sublayers {
-    // Layer 2A: Extract unambiguous single-character tokens + state machine
-    std::vector<ProcessingChunk> sublayer2a(std::stringstream& stream);
     
-    // Layer 2B: Extract string and character literals (prefix-aware)
-    std::vector<ProcessingChunk> sublayer2b(const std::vector<ProcessingChunk>& input, StringTable& string_table);
+    // Sublayer 2A: Pure structural scope building with cache-and-semicolon parsing
+    // - Convert RawTokens to lightweight Token references
+    // - Build flat scope vector with parent/child indexing
+    // - Use mandatory semicolons for unambiguous parsing
+    std::vector<Scope> sublayer2a(const std::map<std::string, std::vector<RawToken>>& streams,
+                                  const StringTable& string_table);
     
-    // Layer 2C: Extract operators that can never be part of identifiers
-    std::vector<ProcessingChunk> sublayer2c(const std::vector<ProcessingChunk>& input);
+    // Sublayer 2B: Exec logic compilation and resolution (future implementation)
+    // - Compile exec blocks to ExecutableLambda format
+    // - Link scope indices to executable logic
+    // - Populate ExecAliasRegistry with compiled exec blocks
+    void sublayer2b(std::vector<Scope>& scopes, 
+                    ExecAliasRegistry& exec_registry);
+}
+
+// Internal helper structures for Sublayer 2A
+namespace layer2_internal {
     
-    // Layer 2D: Extract number literals (suffix-aware)
-    std::vector<ProcessingChunk> sublayer2d(const std::vector<ProcessingChunk>& input);
+    // Token cache for accumulating tokens until boundaries
+    struct TokenCache {
+        std::vector<Token> cached_tokens;
+        uint32_t current_stringstream_id;
+        
+        void add_token(const RawToken& raw_token, uint32_t token_index);
+        void clear();
+        bool empty() const;
+        Instruction create_instruction();
+    };
     
-    // Layer 2E: Extract keywords and convert remaining strings to identifiers
-    std::vector<RawToken> sublayer2e(const std::vector<ProcessingChunk>& input, StringTable& string_table);
+    // Scope building state machine
+    struct ScopeBuilder {
+        std::vector<Scope> scopes;
+        uint32_t current_scope_index;
+        TokenCache token_cache;
+        
+        void enter_scope(ScopeType type, const Instruction& header);
+        void exit_scope(const Instruction& footer);
+        void add_instruction(const Instruction& instruction);
+        
+        // Scope type detection removed - semantic analysis belongs in later layers
+    };
 }
 
 } // namespace cprime

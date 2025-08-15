@@ -88,7 +88,7 @@ add_library(cprime_orchestrator
 )
 
 target_include_directories(cprime_orchestrator PUBLIC .)
-target_link_libraries(cprime_orchestrator PUBLIC cprime_commons cprime_layer0 cprime_layer1)
+target_link_libraries(cprime_orchestrator PUBLIC cprime_commons cprime_layer0 cprime_layer1 cprime_layer2)
 target_compile_features(cprime_orchestrator PUBLIC cxx_std_17)
 
 # Create layer0validation library (debug support for Layer 0)

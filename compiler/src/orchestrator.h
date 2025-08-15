@@ -2,6 +2,7 @@
 
 #include "layer0/compilation_parameters.h"
 #include "commons/dirty/string_table.h"
+#include "commons/rawToken.h"
 #include "commons/logger.h"
 #include <map>
 #include <sstream>
@@ -52,16 +53,18 @@ private:
     // Input streams from Layer 0 (passed to Layer 1)
     std::map<std::string, std::stringstream> input_streams_;
     
+    // Token data from Layer 1 (passed to Layer 2)
+    std::map<std::string, std::vector<RawToken>> token_streams_;
+    
     // TODO: Add CompilationContext ownership and management
     // TODO: Add proper error handling system
     
     // Layer execution methods (private - called by run())
     bool run_layer0();  // Input processing
     bool run_layer1();  // Tokenization
+    bool run_layer2();  // Structure building
     
     // TODO: Add future layer methods
-    // bool run_layer1();  // Tokenization
-    // bool run_layer2();  // Structure building  
     // bool run_layer3();  // Contextualization
     // bool run_layer4();  // RAII injection
     
