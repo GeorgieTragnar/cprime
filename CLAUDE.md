@@ -34,7 +34,7 @@ CPrime is a systems programming language designed to achieve everything that C++
 ├── examples/            # Sample .cp and .cprime files for testing
 ├── scripts/             # BUILD/TEST/DEBUG/COMPILE AUTOMATION (MANDATORY INTERFACE)
 │   ├── build.sh         # ALL BUILDING MUST USE THIS
-│   ├── test_runner.sh   # ALL TESTING MUST USE THIS  
+│   ├── test.sh          # ALL TESTING MUST USE THIS  
 │   ├── cprime_analyze.sh # ALL DEBUGGING MUST USE THIS
 │   └── compile.sh       # ALL EXAMPLE COMPILATION MUST USE THIS
 └── logs/               # Compiler and test execution logs
@@ -73,21 +73,21 @@ CPrime is a systems programming language designed to achieve everything that C++
 - vcpkg with spdlog (required)
 - GTest (required only with `-t` flag)
 
-### Test Runner: `./scripts/test_runner.sh`
+### Test Runner: `./scripts/test.sh`
 **The ONLY way to run tests**
 
 ```bash
 # Layer selection with integers
-./scripts/test_runner.sh 1,3,5        # Run layers 1, 3, 5 with validation
-./scripts/test_runner.sh 1-4          # Run layers 1 through 4 with validation
-./scripts/test_runner.sh -l 1,3,5     # Run layers 1, 3, 5 WITHOUT validation
+./scripts/test.sh 1,3,5        # Run layers 1, 3, 5 with validation
+./scripts/test.sh 1-4          # Run layers 1 through 4 with validation
+./scripts/test.sh -l 1,3,5     # Run layers 1, 3, 5 WITHOUT validation
 
 # Explicit layer selection
-./scripts/test_runner.sh --l1 --l3v   # Layer 1 core + Layer 3 validation
-./scripts/test_runner.sh --l2v        # Only Layer 2 validation
+./scripts/test.sh --l1 --l3v   # Layer 1 core + Layer 3 validation
+./scripts/test.sh --l2v        # Only Layer 2 validation
 
 # Legacy backward compatibility
-./scripts/test_runner.sh -l1 -l2v     # Old syntax still supported
+./scripts/test.sh -l1 -l2v     # Old syntax still supported
 ```
 
 **Key Features:**
@@ -211,7 +211,7 @@ CPrime is a systems programming language designed to achieve everything that C++
 4. **DO** update this documentation after script enhancements
 
 ### Script Maintenance
-- All four scripts (`build.sh`, `test_runner.sh`, `cprime_analyze.sh`, `compile.sh`) must be maintained throughout the project lifecycle
+- All four scripts (`build.sh`, `test.sh`, `cprime_analyze.sh`, `compile.sh`) must be maintained throughout the project lifecycle
 - Scripts are the official interface - they will evolve into sophisticated tooling
 - Consistency is critical for development workflow
 
@@ -229,7 +229,7 @@ CPrime is a systems programming language designed to achieve everything that C++
 ./scripts/build.sh -ct
 
 # 2. Run comprehensive tests
-./scripts/test_runner.sh 1-4
+./scripts/test.sh 1-4
 
 # 3. Test compiler with examples
 ./scripts/compile.sh hello
@@ -242,7 +242,7 @@ CPrime is a systems programming language designed to achieve everything that C++
 ```bash
 # 1. Build and test specific layer
 ./scripts/build.sh -ct
-./scripts/test_runner.sh 2  # Layer 2 with validation
+./scripts/test.sh 2  # Layer 2 with validation
 
 # 2. Test with examples
 ./scripts/compile.sh class_test --debug
@@ -251,7 +251,7 @@ CPrime is a systems programming language designed to achieve everything that C++
 ./scripts/analyze.sh context test_sample
 
 # 4. Run validation only
-./scripts/test_runner.sh --l2v
+./scripts/test.sh --l2v
 ```
 
 ### Testing Current Compiler (Layer 0 Only)
@@ -298,7 +298,7 @@ CPrime is a systems programming language designed to achieve everything that C++
 ### Debugging Failed Tests
 ```bash
 # 1. Run specific failing layer
-./scripts/test_runner.sh -l 1  # Layer 1 without validation
+./scripts/test.sh -l 1  # Layer 1 without validation
 
 # 2. Debug Layer 0 issues
 ./scripts/analyze.sh layer0 problematic_example
@@ -328,7 +328,7 @@ tail -f logs/cprime.log
 ./scripts/analyze.sh -v streams simple
 
 # Run all layers with validation (when available)
-./scripts/test_runner.sh 1-4
+./scripts/test.sh 1-4
 
 # Future debugging (when layers implemented)
 ./scripts/analyze.sh tokens hello
@@ -337,7 +337,7 @@ tail -f logs/cprime.log
 
 ### When Things Go Wrong
 1. **Build Fails**: Check vcpkg dependencies, ensure CMake 3.16+
-2. **Tests Fail**: Use layer-specific testing with `./scripts/test_runner.sh [layer]`
+2. **Tests Fail**: Use layer-specific testing with `./scripts/test.sh [layer]`
 3. **Analysis Fails**: Ensure `cprime_cli` binary exists in `build/bin/`
 4. **Layer 0 Issues**: Use `./scripts/analyze.sh layer0 [example]` for debugging
 5. **Scripts Need Enhancement**: Follow Script Enhancement Policy above
