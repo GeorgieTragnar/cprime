@@ -1,0 +1,13 @@
+bool a = x == y;
+bool b = x != y;
+bool c = x < y;
+bool d = x > y;
+bool e = x <= y;
+bool f = x >= y;
+bool g = a && b;
+bool h = a || b;
+bool i = !a;
+int j = x & y;
+int k = x | y;
+int l = x ^ y;
+int m = ~x;
