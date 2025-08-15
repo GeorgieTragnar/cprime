@@ -54,10 +54,13 @@ function(discover_layer_functions SOURCE_DIR OUTPUT_REGISTRY)
                         list(APPEND SUBLAYER_CALLS "${SUBLAYER_MATCH}")
                     endforeach()
                     
+                    # Uniform parameters for all layers - all layers receive ExecAliasRegistry
+                    set(LAYER_PARAMS "std::stringstream& stream, StringTable& string_table, ExecAliasRegistry& exec_alias_registry")
+                    
                     # Store basic function info for now
                     string(REPLACE ";" "," SUBLAYER_CALLS_STR "${SUBLAYER_CALLS}")
                     list(APPEND DISCOVERED_FUNCTIONS 
-                         "LAYER:${LAYER_NUMBER};RETURN:std::vector<RawToken>;PARAMS:std::stringstream& stream, StringTable& string_table;BODY:${FUNCTION_BODY};SUBLAYERS:${SUBLAYER_CALLS_STR};FILE:${SOURCE_FILE}")
+                         "LAYER:${LAYER_NUMBER};RETURN:std::vector<RawToken>;PARAMS:${LAYER_PARAMS};BODY:${FUNCTION_BODY};SUBLAYERS:${SUBLAYER_CALLS_STR};FILE:${SOURCE_FILE}")
                     
                     math(EXPR TOTAL_FUNCTIONS_FOUND "${TOTAL_FUNCTIONS_FOUND} + 1")
                 endif()

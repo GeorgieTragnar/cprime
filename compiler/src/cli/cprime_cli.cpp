@@ -135,8 +135,11 @@ int main(int argc, char* argv[]) {
                 LOG_INFO("Tokenizing stream: {}", stream_id);
                 
                 try {
+                    // Create ExecAliasRegistry for exec alias detection
+                    ExecAliasRegistry exec_alias_registry;
+                    
                     // Run Layer 1 tokenization
-                    auto tokens = layer1(stream, string_table);
+                    auto tokens = layer1(stream, string_table, exec_alias_registry);
                     
                     LOG_INFO("Generated {} tokens for stream '{}'", tokens.size(), stream_id);
                     

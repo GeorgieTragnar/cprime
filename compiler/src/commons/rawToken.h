@@ -3,6 +3,7 @@
 #include "enum/token.h"
 #include "enum/rawToken.h"
 #include "dirty/string_table.h"
+#include "dirty/exec_alias_registry.h"
 #include <variant>
 #include <string>
 #include <cstdint>
@@ -38,7 +39,9 @@ struct RawToken {
 		// Boolean literal
 		bool,                          // TRUE_LITERAL, FALSE_LITERAL
 		// String reference (all string types, identifiers, comments use StringIndex)
-		StringIndex                    // IDENTIFIER, STRING_LITERAL, WSTRING_LITERAL, etc., COMMENT
+		StringIndex,                   // IDENTIFIER, STRING_LITERAL, WSTRING_LITERAL, etc., COMMENT
+		// Exec alias reference
+		ExecAliasIndex                 // EXEC_ALIAS
 		> _literal_value;
 };
 

@@ -1,6 +1,8 @@
 #include "layer1.h"
+#include "commons/logger.h"
 #include <cctype>
 #include <cstdio>
+#include <iostream>
 
 namespace cprime {
 namespace layer1_sublayers {
@@ -17,8 +19,8 @@ static RawToken create_raw_token(EToken token, ERawToken raw_token, uint32_t lin
     return result;
 }
 
-// Layer 1A: State machine for unambiguous single-character tokens
-std::vector<ProcessingChunk> sublayer1a(std::stringstream& stream) {
+// Layer 1A: State machine for unambiguous single-character tokens + exec alias detection
+std::vector<ProcessingChunk> sublayer1a(std::stringstream& stream, ExecAliasRegistry& exec_alias_registry) {
     std::string source = stream.str();
     std::vector<ProcessingChunk> chunks;
     
@@ -56,6 +58,79 @@ std::vector<ProcessingChunk> sublayer1a(std::stringstream& stream) {
         chunk_start_column = column;
     };
     
+    // Exec alias detection hook - checks for "exec alias_name" patterns at chunk boundaries
+    auto check_exec_alias = [&]() -> bool {
+        auto logger = cprime::LoggerFactory::get_logger("main");
+        
+        // Only check when starting a new chunk and current character is 'e'
+        if (!current_chunk.empty()) {
+            LOG_DEBUG("check_exec_alias: skipping - current_chunk not empty: '{}'", current_chunk);
+            return false;
+        }
+        
+        LOG_DEBUG("check_exec_alias: checking position {} (char '{}')", position, source[position]);
+        
+        // Check for "exec " pattern (exec followed by whitespace)
+        const std::string exec_pattern = "exec ";
+        if (position + exec_pattern.length() > source.size()) {
+            LOG_DEBUG("check_exec_alias: not enough characters remaining for 'exec ' pattern");
+            return false;
+        }
+        
+        // Verify the pattern matches
+        for (size_t i = 0; i < exec_pattern.length(); ++i) {
+            if (source[position + i] != exec_pattern[i]) {
+                LOG_DEBUG("check_exec_alias: pattern mismatch at position {} + {}: expected '{}', got '{}'", 
+                         position, i, exec_pattern[i], source[position + i]);
+                return false;
+            }
+        }
+        
+        LOG_DEBUG("check_exec_alias: found 'exec ' pattern at position {}", position);
+        
+        // Find the start of the alias name (skip whitespace after "exec")
+        size_t alias_start = position + exec_pattern.length();
+        while (alias_start < source.size() && std::isspace(source[alias_start])) {
+            alias_start++;
+        }
+        
+        // Extract alias name (alphanumeric + underscore only)
+        size_t alias_end = alias_start;
+        while (alias_end < source.size() && 
+               (std::isalnum(source[alias_end]) || source[alias_end] == '_')) {
+            alias_end++;
+        }
+        
+        // Valid alias name found?
+        if (alias_end > alias_start) {
+            std::string alias_name = source.substr(alias_start, alias_end - alias_start);
+            LOG_DEBUG("check_exec_alias: found potential alias name: '{}'", alias_name);
+            
+            // Check what follows the alias name - should be template parameters or scope
+            while (alias_end < source.size() && std::isspace(source[alias_end])) {
+                alias_end++;
+            }
+            
+            char next_char = (alias_end < source.size()) ? source[alias_end] : '\0';
+            LOG_DEBUG("check_exec_alias: character after alias name: '{}'", next_char);
+            
+            // Valid exec template pattern: "exec alias_name<...>" or "exec alias_name {"
+            if (alias_end < source.size() && (source[alias_end] == '<' || source[alias_end] == '{')) {
+                // Register the alias
+                LOG_DEBUG("check_exec_alias: registering alias '{}'", alias_name);
+                exec_alias_registry.register_alias(alias_name);
+                LOG_DEBUG("check_exec_alias: successfully registered alias '{}'", alias_name);
+                return true;
+            } else {
+                LOG_DEBUG("check_exec_alias: invalid pattern - expected '<' or '{{' after alias name, got '{}'", next_char);
+            }
+        } else {
+            LOG_DEBUG("check_exec_alias: no valid alias name found after 'exec '");
+        }
+        
+        return false;
+    };
+    
     start_new_chunk();
     
     while (position < source.size()) {
@@ -64,6 +139,12 @@ std::vector<ProcessingChunk> sublayer1a(std::stringstream& stream) {
         
         switch (state) {
             case State::NORMAL:
+                // Check for exec alias patterns when encountering 'e' at chunk boundary
+                if (c == 'e' && check_exec_alias()) {
+                    // Exec alias detected and registered, continue with normal processing
+                    // The hook doesn't consume characters, just registers the alias
+                }
+                
                 // Check for comment start
                 if (c == '/' && next_c == '/') {
                     state = State::IN_LINE_COMMENT;
@@ -223,6 +304,17 @@ std::vector<ProcessingChunk> sublayer1a(std::stringstream& stream) {
     // Add EOF token
     RawToken eof = create_raw_token(EToken::EOF_TOKEN, ERawToken::EOF_TOKEN, line, column, position);
     chunks.emplace_back(std::move(eof), position, position, line, column);
+    
+    // Debug: Log the contents of the ExecAliasRegistry after processing
+    auto logger = cprime::LoggerFactory::get_logger("main");
+    LOG_DEBUG("=== ExecAliasRegistry Debug Info (after sublayer1a) ===");
+    LOG_DEBUG("Total registered aliases: {}", exec_alias_registry.size());
+    
+    auto all_aliases = exec_alias_registry.get_all_aliases();
+    for (const auto& alias_pair : all_aliases) {
+        LOG_DEBUG("  Alias '{}' -> Index {}", alias_pair.first, alias_pair.second.value);
+    }
+    LOG_DEBUG("=== End ExecAliasRegistry Debug Info ===");
     
     return chunks;
 }

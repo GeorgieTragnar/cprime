@@ -14,6 +14,7 @@
 
 // Common compiler includes
 #include "../../src/commons/dirty/string_table.h"
+#include "../../src/commons/dirty/exec_alias_registry.h"
 #include "../../src/commons/logger.h"
 #include "../../src/commons/dirty/component_buffer_manager.h"
 
@@ -24,6 +25,7 @@ using namespace cprime::testing;
 
 // Use full namespace qualification to avoid conflicts
 using cprime::StringTable;
+using cprime::ExecAliasRegistry;
 using cprime::RawToken;
 
 namespace {

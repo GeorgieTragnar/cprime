@@ -37,11 +37,18 @@ function(generate_includes_file DISCOVERY_REGISTRY OUTPUT_FILE)
         list(SORT UNIQUE_LAYERS)
     endif()
     
+    # Always include common dependencies for all layers
+    string(APPEND INCLUDES_CONTENT "#include \"../src/commons/dirty/exec_alias_registry.h\"\n")
+    string(APPEND INCLUDES_CONTENT "\n")
+    
     # Generate include statements
     foreach(LAYER_NUM ${UNIQUE_LAYERS})
         string(APPEND INCLUDES_CONTENT "#include \"../src/layer${LAYER_NUM}/layer${LAYER_NUM}.h\"\n")
         string(APPEND INCLUDES_CONTENT "#include \"../src/layer${LAYER_NUM}validation/layer${LAYER_NUM}validation.h\"\n")
     endforeach()
+    
+    # Add using declaration for convenience
+    string(APPEND INCLUDES_CONTENT "\nusing cprime::ExecAliasRegistry;\n")
     
     file(WRITE ${OUTPUT_FILE} "${INCLUDES_CONTENT}")
     message(STATUS "Generated includes file: ${OUTPUT_FILE}")
@@ -393,9 +400,18 @@ function(generate_dynamic_tests_file DISCOVERY_REGISTRY OUTPUT_FILE)
         string(APPEND DYNAMIC_TESTS_CONTENT "                // Fresh input for this layer test\n")
         string(APPEND DYNAMIC_TESTS_CONTENT "                std::stringstream fresh_input(test_case.input_content);\n")
         string(APPEND DYNAMIC_TESTS_CONTENT "                StringTable string_table;\n")
-        string(APPEND DYNAMIC_TESTS_CONTENT "                \n")
-        string(APPEND DYNAMIC_TESTS_CONTENT "                // Execute instrumented layer${LAYER_NUM} with deserialized input\n")
-        string(APPEND DYNAMIC_TESTS_CONTENT "                auto actual_result = instrumented_layers::execute_layer${LAYER_NUM}_instrumented(cprime::layer${LAYER_NUM}_sublayers::validation::deserialize(fresh_input), string_table);\n")
+        string(APPEND DYNAMIC_TESTS_CONTENT "                ExecAliasRegistry exec_alias_registry;\n")
+        
+        # Layer 1 takes stringstream directly, other layers take deserialized input
+        if(LAYER_NUM EQUAL 1)
+            string(APPEND DYNAMIC_TESTS_CONTENT "                \n")
+            string(APPEND DYNAMIC_TESTS_CONTENT "                // Execute instrumented layer${LAYER_NUM} with stringstream input\n")
+            string(APPEND DYNAMIC_TESTS_CONTENT "                auto actual_result = instrumented_layers::execute_layer${LAYER_NUM}_instrumented(fresh_input, string_table, exec_alias_registry);\n")
+        else()
+            string(APPEND DYNAMIC_TESTS_CONTENT "                \n")
+            string(APPEND DYNAMIC_TESTS_CONTENT "                // Execute instrumented layer${LAYER_NUM} with deserialized input\n")
+            string(APPEND DYNAMIC_TESTS_CONTENT "                auto actual_result = instrumented_layers::execute_layer${LAYER_NUM}_instrumented(cprime::layer${LAYER_NUM}_sublayers::validation::deserialize(fresh_input), string_table, exec_alias_registry);\n")
+        endif()
         string(APPEND DYNAMIC_TESTS_CONTENT "                \n")
         string(APPEND DYNAMIC_TESTS_CONTENT "                // Validate result\n")
         string(APPEND DYNAMIC_TESTS_CONTENT "                std::string actual_serialized = cprime::layer${LAYER_NUM}_sublayers::validation::serialize(actual_result);\n")

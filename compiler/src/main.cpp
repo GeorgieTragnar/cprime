@@ -3,6 +3,7 @@
 
 #include <filesystem>
 #include <exception>
+#include <spdlog/spdlog.h>
 
 #include "orchestrator.h"
 #include "layer0/compilation_parameters.h"
@@ -97,7 +98,9 @@ int main(int argc, char* argv[]) {
         // Set global log level based on compilation parameters
         if (params.debug_mode) {
             cprime::LoggerFactory::set_global_level(cprime::LogLevel::Debug);
-            LOG_DEBUG("Debug mode enabled - setting log level to Debug");
+            // Also set spdlog to trace level for maximum verbosity
+            spdlog::set_level(spdlog::level::trace);
+            LOG_DEBUG("Debug mode enabled - setting log level to Debug/Trace");
         } else if (params.verbose) {
             cprime::LoggerFactory::set_global_level(cprime::LogLevel::Info);
             LOG_DEBUG("Verbose mode enabled - setting log level to Info");

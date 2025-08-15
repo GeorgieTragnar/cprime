@@ -109,6 +109,8 @@ enum class EToken : uint16_t {
     STATIC_CAST,    // Fast unsafe casting (C++ equivalent)
     DYNAMIC_CAST,   // Safe runtime casting (C++ equivalent)
     SELECT,         // Control flow for multiple awaits
+    EXEC,           // Exec block keyword for compile-time code execution
+    EXEC_ALIAS,     // Dynamically registered exec template alias
     
     // Operators
     PLUS = 200,

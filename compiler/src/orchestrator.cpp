@@ -84,8 +84,11 @@ bool CompilerOrchestrator::run_layer1() {
         LOG_DEBUG("Tokenizing stream: {}", stream_id);
         
         try {
+            // Create ExecAliasRegistry for exec alias detection
+            ExecAliasRegistry exec_alias_registry;
+            
             // Call the new standardized layer1 function
-            auto tokens = layer1(stream, string_table_);
+            auto tokens = layer1(stream, string_table_, exec_alias_registry);
             
             LOG_INFO("Stream '{}' tokenized: {} tokens generated", stream_id, tokens.size());
             

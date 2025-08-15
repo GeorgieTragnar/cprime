@@ -27,6 +27,8 @@ add_library(cprime_commons
     commons/dirty/component_buffer_manager.cpp
     commons/dirty/string_table.h
     commons/dirty/string_table.cpp
+    commons/dirty/exec_alias_registry.h
+    commons/dirty/exec_alias_registry.cpp
 )
 
 target_include_directories(cprime_commons PUBLIC .)

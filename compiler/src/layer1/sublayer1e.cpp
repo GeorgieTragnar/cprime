@@ -31,7 +31,7 @@ static RawToken create_raw_token_with_value(EToken token, ERawToken raw_token, u
 }
 
 // Layer 1E: Extract keywords and convert remaining strings to identifiers
-std::vector<RawToken> sublayer1e(const std::vector<ProcessingChunk>& input, StringTable& string_table) {
+std::vector<RawToken> sublayer1e(const std::vector<ProcessingChunk>& input, StringTable& string_table, ExecAliasRegistry& exec_alias_registry) {
     // Keyword mapping - all CPrime keywords
     static const std::unordered_map<std::string, EToken> keywords = {
         // Class/Structure keywords
@@ -85,6 +85,7 @@ std::vector<RawToken> sublayer1e(const std::vector<ProcessingChunk>& input, Stri
         {"static_cast", EToken::STATIC_CAST},
         {"dynamic_cast", EToken::DYNAMIC_CAST},
         {"select", EToken::SELECT},
+        {"exec", EToken::EXEC},
         
         // Primitive types
         {"int8_t", EToken::INT8_T},
@@ -185,8 +186,15 @@ std::vector<RawToken> sublayer1e(const std::vector<ProcessingChunk>& input, Stri
                                                         current_column, chunk.start_pos + id_start);
                         result.push_back(std::move(token));
                     }
+                } else if (exec_alias_registry.contains_alias(identifier)) {
+                    // It's a registered exec alias - create EXEC_ALIAS token
+                    ExecAliasIndex alias_index = exec_alias_registry.get_alias_index(identifier);
+                    RawToken token = create_raw_token_with_value(EToken::EXEC_ALIAS, ERawToken::KEYWORD, 
+                                                               current_line, current_column, 
+                                                               chunk.start_pos + id_start, alias_index);
+                    result.push_back(std::move(token));
                 } else {
-                    // It's an identifier - intern the identifier string
+                    // It's a regular identifier - intern the identifier string
                     StringIndex identifier_index = string_table.intern(identifier);
                     RawToken token = create_raw_token_with_value(EToken::IDENTIFIER, ERawToken::IDENTIFIER, 
                                                                current_line, current_column, 
