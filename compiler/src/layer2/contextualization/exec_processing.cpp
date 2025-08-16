@@ -5,6 +5,85 @@
 
 namespace cprime::layer2_contextualization {
 
+// Helper function to detokenize an entire scope for header template functionality
+std::string detokenize_scope_for_template(const Scope& scope, 
+                                          const std::vector<Scope>& all_scopes,
+                                          const std::map<std::string, std::vector<RawToken>>& streams,
+                                          const StringTable& string_table) {
+    std::ostringstream oss;
+    
+    // Helper lambda to get raw token content
+    auto get_token_content = [&streams, &string_table](const Token& token) -> std::string {
+        // Find the token in the raw token streams
+        for (const auto& [stream_name, raw_tokens] : streams) {
+            if (token._tokenIndex < raw_tokens.size()) {
+                const auto& raw_token = raw_tokens[token._tokenIndex];
+                
+                // Handle different token types
+                if (std::holds_alternative<StringIndex>(raw_token._literal_value)) {
+                    StringIndex str_idx = std::get<StringIndex>(raw_token._literal_value);
+                    return string_table.get_string(str_idx);
+                } else {
+                    // For non-string tokens (operators, punctuation), return token symbol
+                    switch (raw_token._token) {
+                        case EToken::LEFT_BRACE: return "{";
+                        case EToken::RIGHT_BRACE: return "}";
+                        case EToken::LEFT_PAREN: return "(";
+                        case EToken::RIGHT_PAREN: return ")";
+                        case EToken::SEMICOLON: return ";";
+                        case EToken::SPACE: return " ";
+                        case EToken::NEWLINE: return "\n";
+                        case EToken::ASSIGN: return "=";
+                        case EToken::LESS_THAN: return "<";
+                        case EToken::GREATER_THAN: return ">";
+                        case EToken::COMMA: return ",";
+                        default: return ""; // Other tokens
+                    }
+                }
+            }
+        }
+        return ""; // Fallback
+    };
+    
+    // Helper lambda to detokenize instruction
+    auto detokenize_instruction = [&get_token_content](const Instruction& instruction) -> std::string {
+        std::string result;
+        for (const auto& token : instruction._tokens) {
+            result += get_token_content(token);
+        }
+        return result;
+    };
+    
+    // Detokenize header
+    if (!scope._header._tokens.empty()) {
+        oss << detokenize_instruction(scope._header);
+    }
+    
+    // Detokenize body instructions
+    for (const auto& instruction_variant : scope._instructions) {
+        if (std::holds_alternative<Instruction>(instruction_variant)) {
+            const Instruction& instruction = std::get<Instruction>(instruction_variant);
+            oss << detokenize_instruction(instruction);
+        } else {
+            // For nested scopes, recursively detokenize them
+            uint32_t nested_scope_index = std::get<uint32_t>(instruction_variant);
+            if (nested_scope_index < all_scopes.size()) {
+                oss << detokenize_scope_for_template(all_scopes[nested_scope_index], all_scopes, streams, string_table);
+            }
+        }
+    }
+    
+    // Detokenize footer
+    if (std::holds_alternative<Instruction>(scope._footer)) {
+        const Instruction& footer_instruction = std::get<Instruction>(scope._footer);
+        oss << detokenize_instruction(footer_instruction);
+    }
+    // Note: If footer is a scope index, we don't include it in template content
+    // since it represents generated code, not original template content
+    
+    return oss.str();
+}
+
 // Helper function to extract template parameters from tokens between < >
 std::vector<std::string> extract_template_parameters(const std::vector<Token>& tokens, size_t start_idx, size_t end_idx) {
     std::vector<std::string> parameters;
@@ -290,7 +369,8 @@ uint32_t process_exec_execution(const Instruction& exec_instruction,
                                const StringTable& string_table,
                                ExecAliasRegistry& exec_registry,
                                const std::map<std::string, std::vector<RawToken>>& streams,
-                               uint32_t current_scope_index) {
+                               uint32_t current_scope_index,
+                               bool is_header_exec) {
     
     auto logger = cprime::LoggerFactory::get_logger("exec_processing");
     LOG_INFO("Processing exec execution (single pass)...");
@@ -299,14 +379,33 @@ uint32_t process_exec_execution(const Instruction& exec_instruction,
         // Step 1: Extract exec execution info
         ExecExecutionInfo exec_info = extract_exec_info(exec_instruction, exec_registry, streams);
         
-        // Step 2: Get ExecutableLambda and execute Lua script
+        // Step 2: Prepare parameters for Lua execution
+        std::vector<std::string> lua_parameters = exec_info.parameters;
+        
+        // For header exec processing: prepend detokenized scope as first parameter
+        if (is_header_exec) {
+            LOG_INFO("Header exec processing: detokenizing scope {} for template", current_scope_index);
+            std::string scope_content = detokenize_scope_for_template(
+                master_scopes[current_scope_index], master_scopes, streams, string_table);
+            
+            // Insert scope content as first parameter, shift others
+            lua_parameters.insert(lua_parameters.begin(), scope_content);
+            LOG_INFO("Header exec: scope content ({} chars) added as first parameter", scope_content.length());
+        }
+        
+        // Step 3: Get ExecutableLambda and execute Lua script
         const ExecutableLambda& lambda = get_executable_lambda(exec_info, exec_registry, current_scope_index);
-        std::string generated_cprime_code = lambda.execute(exec_info.parameters);
+        std::string generated_cprime_code = lambda.execute(lua_parameters);
         
         LOG_INFO("Generated CPrime code ({} chars): {}", generated_cprime_code.length(), generated_cprime_code);
         
         // Step 3: Validate generated code is pure CPrime (no exec constructs)
-        validate_pure_cprime_output(generated_cprime_code);
+        // Note: Skip validation for header exec since template content may contain exec keywords
+        if (!is_header_exec) {
+            validate_pure_cprime_output(generated_cprime_code);
+        } else {
+            LOG_DEBUG("Skipping exec validation for header template - scope content may contain exec keywords");
+        }
         
         // Step 4: Tokenize generated CPrime code using Layer 1
         std::map<std::string, std::vector<RawToken>> generated_tokens = 

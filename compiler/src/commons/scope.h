@@ -9,7 +9,7 @@ namespace cprime {
 
 struct Scope {
 	Instruction _header; // it can hold parent var in case of lambda
-	Instruction _footer; // semicolon-terminated instructions at scope end
+	std::variant<Instruction, uint32_t> _footer; // instruction or scope index for exec replacement
 	uint32_t _parentScopeIndex;
 	std::vector<std::variant<Instruction, uint32_t>> _instructions; // it holds instructions or index for nested scope
 	std::vector<std::shared_ptr<Context>> _contexts;

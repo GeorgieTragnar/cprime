@@ -67,10 +67,16 @@ inline std::string serialize_scope(const Scope& scope, uint32_t scope_index, int
     }
     
     oss << indent_str << "  footer: ";
-    if (scope._footer._tokens.empty()) {
-        oss << "EMPTY\n";
-    } else {
-        oss << "\n" << serialize_instruction(scope._footer, indent + 2) << "\n";
+    if (std::holds_alternative<Instruction>(scope._footer)) {
+        const Instruction& footer_instruction = std::get<Instruction>(scope._footer);
+        if (footer_instruction._tokens.empty()) {
+            oss << "EMPTY\n";
+        } else {
+            oss << "\n" << serialize_instruction(footer_instruction, indent + 2) << "\n";
+        }
+    } else if (std::holds_alternative<uint32_t>(scope._footer)) {
+        uint32_t footer_scope_index = std::get<uint32_t>(scope._footer);
+        oss << "NESTED_SCOPE[" << footer_scope_index << "]\n";
     }
     
     oss << indent_str << "  instructions: ";

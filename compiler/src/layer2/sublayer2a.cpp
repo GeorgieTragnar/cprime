@@ -34,37 +34,48 @@ std::vector<Scope> sublayer2a(const std::map<std::string, std::vector<RawToken>>
             
             // Check for structural boundary tokens
             if (raw_token._token == EToken::SEMICOLON) {
-                // For exec scopes, don't treat semicolons as instruction boundaries
-                // Accumulate ALL content between { and } for exec blocks
-                bool inside_exec_scope = false;
-                
-                // Check if current scope is an exec scope by examining its header
-                if (builder.current_scope_index > 0 && builder.current_scope_index < builder.scopes.size()) {
-                    const auto& current_scope = builder.scopes[builder.current_scope_index];
-                    for (const auto& token : current_scope._header._tokens) {
-                        if (token._token == EToken::EXEC) {
-                            inside_exec_scope = true;
-                            break;
+                // Check if we're collecting exec footer tokens
+                if (builder.awaiting_exec_footer) {
+                    // End of exec footer - complete the footer and exit exec scope
+                    builder.token_cache.add_token(raw_token, token_index);
+                    auto footer_instruction = builder.token_cache.create_instruction();
+                    builder.exit_scope(footer_instruction);
+                    builder.token_cache.clear();
+                    builder.awaiting_exec_footer = false;
+                } else {
+                    // Regular semicolon handling
+                    // For exec scopes, don't treat semicolons as instruction boundaries
+                    // Accumulate ALL content between { and } for exec blocks
+                    bool inside_exec_scope = false;
+                    
+                    // Check if current scope is an exec scope by examining its header
+                    if (builder.current_scope_index > 0 && builder.current_scope_index < builder.scopes.size()) {
+                        const auto& current_scope = builder.scopes[builder.current_scope_index];
+                        for (const auto& token : current_scope._header._tokens) {
+                            if (token._token == EToken::EXEC) {
+                                inside_exec_scope = true;
+                                break;
+                            }
                         }
                     }
-                }
-                
-                if (inside_exec_scope) {
-                    // Inside exec scope: just accumulate the semicolon, don't create instruction boundary
-                    builder.token_cache.add_token(raw_token, token_index);
-                } else {
-                    // Regular CPrime scope: treat semicolon as instruction boundary
-                    if (!builder.token_cache.empty()) {
+                    
+                    if (inside_exec_scope) {
+                        // Inside exec scope: just accumulate the semicolon, don't create instruction boundary
                         builder.token_cache.add_token(raw_token, token_index);
-                        auto instruction = builder.token_cache.create_instruction();
-                        builder.add_instruction(instruction);
-                        builder.token_cache.clear();
                     } else {
-                        // Standalone semicolon - create empty instruction
-                        builder.token_cache.add_token(raw_token, token_index);
-                        auto instruction = builder.token_cache.create_instruction();
-                        builder.add_instruction(instruction);
-                        builder.token_cache.clear();
+                        // Regular CPrime scope: treat semicolon as instruction boundary
+                        if (!builder.token_cache.empty()) {
+                            builder.token_cache.add_token(raw_token, token_index);
+                            auto instruction = builder.token_cache.create_instruction();
+                            builder.add_instruction(instruction);
+                            builder.token_cache.clear();
+                        } else {
+                            // Standalone semicolon - create empty instruction
+                            builder.token_cache.add_token(raw_token, token_index);
+                            auto instruction = builder.token_cache.create_instruction();
+                            builder.add_instruction(instruction);
+                            builder.token_cache.clear();
+                        }
                     }
                 }
             }
@@ -122,11 +133,15 @@ std::vector<Scope> sublayer2a(const std::map<std::string, std::vector<RawToken>>
                     }
                 }
                 
-                if (exiting_exec_scope && !builder.token_cache.empty()) {
-                    // For exec scopes: accumulated content becomes the main instruction body
-                    auto exec_body_instruction = builder.token_cache.create_instruction();
-                    builder.add_instruction(exec_body_instruction);
-                    builder.exit_scope(Instruction{}); // Empty footer for exec scopes
+                if (exiting_exec_scope) {
+                    if (!builder.token_cache.empty()) {
+                        // For exec scopes: accumulated content becomes the main instruction body
+                        auto exec_body_instruction = builder.token_cache.create_instruction();
+                        builder.add_instruction(exec_body_instruction);
+                        builder.token_cache.clear();
+                    }
+                    // Don't exit scope yet - continue collecting footer tokens until semicolon
+                    builder.awaiting_exec_footer = true; // Flag to indicate we're collecting footer
                 } else if (!builder.token_cache.empty()) {
                     // Regular scopes: remaining tokens become footer
                     auto footer_instruction = builder.token_cache.create_instruction();

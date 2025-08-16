@@ -74,7 +74,8 @@ namespace layer2_contextualization {
                                    const StringTable& string_table,
                                    ExecAliasRegistry& exec_registry,
                                    const std::map<std::string, std::vector<RawToken>>& streams,
-                                   uint32_t current_scope_index);
+                                   uint32_t current_scope_index,
+                                   bool is_header_exec = false);
 }
 
 // Internal helper structures for Sublayer 2A
@@ -97,6 +98,7 @@ namespace layer2_internal {
         uint32_t current_scope_index;
         TokenCache token_cache;
         ExecAliasRegistry& exec_registry;
+        bool awaiting_exec_footer = false; // Flag for exec footer collection
         
         ScopeBuilder(ExecAliasRegistry& exec_reg) : exec_registry(exec_reg) {}
         

@@ -1,0 +1,42 @@
+// Test semantic exec system: footer replacement vs header templates
+exec simple_gen<value> {
+    -- Simple code generation for footer replacement
+    local val = params[0] or "42"
+    return "int generated_var = " .. val .. ";"
+}
+
+exec template_analyzer<analysis_type> {
+    -- Template functionality: analyze scope content (first parameter is scope)
+    local scope_content = params[0]  -- This will be the detokenized scope
+    local analysis = params[1] or "basic"
+    
+    -- Analyze the scope content
+    local var_count = 0
+    for _ in string.gmatch(scope_content, "int%s+%w+") do
+        var_count = var_count + 1
+    end
+    
+    return "// Template analysis (" .. analysis .. "): found " .. var_count .. " int variables\nint analysis_result = " .. var_count .. ";"
+}
+
+// Test 1: Footer exec - scope replacement semantics  
+exec <value> {
+    return "string footer_replaced = \"This scope was replaced by footer exec\";"
+}<42>
+
+// Test 2: Header exec - template functionality
+if template_analyzer<detailed> {
+    int x = 10;
+    int y = 20; 
+    print("Original scope content");
+}
+
+// Test 3: Mixed usage
+while simple_gen<100> {
+    int original_var = 5;
+    break;
+}
+
+int main() {
+    print("Testing semantic exec system");
+}
