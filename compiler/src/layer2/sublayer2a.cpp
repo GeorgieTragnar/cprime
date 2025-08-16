@@ -1,6 +1,7 @@
 #include "layer2.h"
 #include "../commons/enum/token.h"
 #include <cassert>
+#include <iostream>
 
 namespace cprime {
 
@@ -20,7 +21,6 @@ std::vector<Scope> sublayer2a(const std::map<std::string, std::vector<RawToken>>
     builder.scopes[0]._header = Instruction{}; // Empty header for global
     builder.scopes[0]._footer = Instruction{}; // Will be set at end  
     builder.scopes[0]._parentScopeIndex = 0;   // Global is its own parent
-    builder.scopes[0]._scopeType = ScopeType::BLOCK; // All scopes are just BLOCK in Sublayer 2A
     builder.current_scope_index = 0;
     
     // Process each stream
@@ -34,33 +34,56 @@ std::vector<Scope> sublayer2a(const std::map<std::string, std::vector<RawToken>>
             
             // Check for structural boundary tokens
             if (raw_token._token == EToken::SEMICOLON) {
-                // Create instruction from cached tokens and add semicolon
-                if (!builder.token_cache.empty()) {
+                // For exec scopes, don't treat semicolons as instruction boundaries
+                // Accumulate ALL content between { and } for exec blocks
+                bool inside_exec_scope = false;
+                
+                // Check if current scope is an exec scope by examining its header
+                if (builder.current_scope_index > 0 && builder.current_scope_index < builder.scopes.size()) {
+                    const auto& current_scope = builder.scopes[builder.current_scope_index];
+                    for (const auto& token : current_scope._header._tokens) {
+                        if (token._token == EToken::EXEC) {
+                            inside_exec_scope = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (inside_exec_scope) {
+                    // Inside exec scope: just accumulate the semicolon, don't create instruction boundary
                     builder.token_cache.add_token(raw_token, token_index);
-                    auto instruction = builder.token_cache.create_instruction();
-                    builder.add_instruction(instruction);
-                    builder.token_cache.clear();
                 } else {
-                    // Standalone semicolon - create empty instruction
-                    builder.token_cache.add_token(raw_token, token_index);
-                    auto instruction = builder.token_cache.create_instruction();
-                    builder.add_instruction(instruction);
-                    builder.token_cache.clear();
+                    // Regular CPrime scope: treat semicolon as instruction boundary
+                    if (!builder.token_cache.empty()) {
+                        builder.token_cache.add_token(raw_token, token_index);
+                        auto instruction = builder.token_cache.create_instruction();
+                        builder.add_instruction(instruction);
+                        builder.token_cache.clear();
+                    } else {
+                        // Standalone semicolon - create empty instruction
+                        builder.token_cache.add_token(raw_token, token_index);
+                        auto instruction = builder.token_cache.create_instruction();
+                        builder.add_instruction(instruction);
+                        builder.token_cache.clear();
+                    }
                 }
             }
             else if (raw_token._token == EToken::LEFT_BRACE) {
                 // Create header instruction from cache, enter new scope
                 auto header_instruction = builder.token_cache.create_instruction();
                 
-                // Check if this is an exec scope by examining first token in header
+                // Check if this is an exec scope by examining all tokens in header
                 bool is_exec_scope = false;
-                if (!header_instruction._tokens.empty() && 
-                    header_instruction._tokens[0]._token == EToken::EXEC) {
-                    is_exec_scope = true;
+                for (const auto& token : header_instruction._tokens) {
+                    if (token._token == EToken::EXEC) {
+                        is_exec_scope = true;
+                        // DEBUG: Exec scope detected successfully
+                        break;
+                    }
                 }
                 
-                // Enter scope (always BLOCK type in Sublayer 2A)
-                builder.enter_scope(ScopeType::BLOCK, header_instruction);
+                // Enter scope  
+                builder.enter_scope(header_instruction);
                 
                 // If this is an exec scope, register it
                 if (is_exec_scope) {
@@ -87,8 +110,25 @@ std::vector<Scope> sublayer2a(const std::map<std::string, std::vector<RawToken>>
                 builder.token_cache.clear();
             }
             else if (raw_token._token == EToken::RIGHT_BRACE) {
-                // Process any remaining tokens as footer, exit scope
-                if (!builder.token_cache.empty()) {
+                // Check if we're exiting an exec scope
+                bool exiting_exec_scope = false;
+                if (builder.current_scope_index > 0 && builder.current_scope_index < builder.scopes.size()) {
+                    const auto& current_scope = builder.scopes[builder.current_scope_index];
+                    for (const auto& token : current_scope._header._tokens) {
+                        if (token._token == EToken::EXEC) {
+                            exiting_exec_scope = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (exiting_exec_scope && !builder.token_cache.empty()) {
+                    // For exec scopes: accumulated content becomes the main instruction body
+                    auto exec_body_instruction = builder.token_cache.create_instruction();
+                    builder.add_instruction(exec_body_instruction);
+                    builder.exit_scope(Instruction{}); // Empty footer for exec scopes
+                } else if (!builder.token_cache.empty()) {
+                    // Regular scopes: remaining tokens become footer
                     auto footer_instruction = builder.token_cache.create_instruction();
                     builder.exit_scope(footer_instruction);
                 } else {
@@ -140,13 +180,12 @@ Instruction TokenCache::create_instruction() {
     return instruction;
 }
 
-void ScopeBuilder::enter_scope(ScopeType type, const Instruction& header) {
+void ScopeBuilder::enter_scope(const Instruction& header) {
     // Create new scope
     Scope new_scope;
     new_scope._header = header;
     new_scope._footer = Instruction{}; // Will be set on exit
     new_scope._parentScopeIndex = current_scope_index;
-    new_scope._scopeType = type;
     
     uint32_t new_scope_index = static_cast<uint32_t>(scopes.size());
     scopes.push_back(new_scope);

@@ -190,7 +190,8 @@ std::string TokenDetokenizer::raw_token_to_original_string(
         raw_token._token == EToken::CHAR_LITERAL ||
         raw_token._token == EToken::TRUE_LITERAL ||
         raw_token._token == EToken::FALSE_LITERAL ||
-        raw_token._token == EToken::COMMENT) {
+        raw_token._token == EToken::COMMENT ||
+        raw_token._token == EToken::EXEC_ALIAS) {
         
         return format_literal_value(raw_token._literal_value, string_table);
     }
@@ -248,6 +249,7 @@ std::string TokenDetokenizer::etoken_to_original_symbol(EToken token) {
         
         // Keywords
         case EToken::FUNCTION:       return "func";
+        case EToken::FUNC:           return "func";
         case EToken::IF:             return "if";
         case EToken::ELSE:           return "else";
         case EToken::FOR:            return "for";
@@ -295,7 +297,7 @@ std::string TokenDetokenizer::etoken_to_original_symbol(EToken token) {
         case EToken::NEWLINE:        return "\n";
         case EToken::CARRIAGE_RETURN: return "\r";
         
-        // Special tokens
+        // Special tokens  
         case EToken::EOF_TOKEN:      return "";  // EOF doesn't contribute to source
         case EToken::INVALID:        return "";  // Invalid tokens should not appear in output
         
@@ -365,10 +367,10 @@ std::string TokenDetokenizer::format_literal_value(
         }
     }
     
-    // Exec alias
+    // Exec alias - for now return a placeholder, later we should resolve from exec alias registry
     if (std::holds_alternative<ExecAliasIndex>(literal_value)) {
         ExecAliasIndex alias_idx = std::get<ExecAliasIndex>(literal_value);
-        return "EXEC_ALIAS_" + std::to_string(alias_idx.value);
+        return "code_gen";  // Placeholder - should be resolved from ExecAliasRegistry
     }
     
     return "UNKNOWN_LITERAL";

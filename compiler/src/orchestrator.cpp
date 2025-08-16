@@ -68,9 +68,14 @@ bool CompilerOrchestrator::run_layer0() {
     auto& logger = logger_; // Alias for LOG macros
     LOG_INFO("Layer 0 completed: {} input streams processed", input_streams_.size());
     
+    LOG_INFO("=== INPUT SOURCE BEFORE LAYER 1 TOKENIZATION ===");
     for (const auto& [stream_id, stream] : input_streams_) {
-        LOG_DEBUG("  Stream '{}': {} characters", stream_id, stream.str().length());
+        std::string content = stream.str();
+        LOG_INFO("Stream '{}': {} characters", stream_id, content.length());
+        LOG_INFO("Full source content:");
+        LOG_INFO("{}", content);
     }
+    LOG_INFO("=== END INPUT SOURCE ===");
     
     log_layer_end("Layer 0", true);
     return true;
@@ -178,13 +183,11 @@ bool CompilerOrchestrator::run_layer2() {
             }
         }
         
-        // Test actual detokenization functionality
-        LOG_INFO("=== DETOKENIZATION TESTING ===");
-        test_detokenization_functionality();
+        // Note: Lua script detokenization happens in sublayer2b for exec blocks only
         
-        // Multi-script testing with different inputs and execution orders
-        LOG_INFO("=== MULTI-SCRIPT TESTING ===");
-        test_multiple_lua_scripts(exec_alias_registry);
+        // Focus on exec block processing instead of multi-script testing
+        // LOG_INFO("=== MULTI-SCRIPT TESTING ===");
+        // test_multiple_lua_scripts(exec_alias_registry);
         
         // TODO: Store scopes for Layer 3
         
@@ -359,87 +362,5 @@ void CompilerOrchestrator::test_multiple_lua_scripts(ExecAliasRegistry& registry
              parameter_sets.size(), execution_orders.size());
 }
 
-void CompilerOrchestrator::test_detokenization_functionality() {
-    auto& logger = logger_; // Alias for LOG macros
-    
-    LOG_INFO("Testing detokenization with actual token data:");
-    
-    // Test detokenization for each input stream
-    for (const auto& [stream_id, raw_tokens] : token_streams_) {
-        LOG_INFO("--- Detokenizing stream: {} ---", stream_id);
-        
-        // Get original source content
-        auto stream_it = input_streams_.find(stream_id);
-        if (stream_it == input_streams_.end()) {
-            LOG_ERROR("Could not find original source for stream: {}", stream_id);
-            continue;
-        }
-        
-        std::string original_source = stream_it->second.str();
-        
-        // Perform detokenization
-        try {
-            std::string detokenized = TokenDetokenizer::detokenize_raw_tokens_to_string(raw_tokens, string_table_);
-            
-            // Log results
-            LOG_INFO("Original source ({} chars):", original_source.length());
-            LOG_INFO("\"{}\"", original_source);
-            
-            LOG_INFO("Detokenized result ({} chars):", detokenized.length());
-            LOG_INFO("\"{}\"", detokenized);
-            
-            // Compare results
-            bool exact_match = (original_source == detokenized);
-            if (exact_match) {
-                LOG_INFO("✅ Perfect match! Detokenization succeeded.");
-            } else {
-                LOG_WARN("⚠️  Mismatch detected. Analyzing differences...");
-                
-                // Show character-by-character comparison for debugging
-                size_t min_len = std::min(original_source.length(), detokenized.length());
-                size_t first_diff = 0;
-                
-                for (size_t i = 0; i < min_len; ++i) {
-                    if (original_source[i] != detokenized[i]) {
-                        first_diff = i;
-                        break;
-                    }
-                    if (i == min_len - 1) first_diff = min_len;
-                }
-                
-                LOG_WARN("First difference at position {}", first_diff);
-                if (first_diff < original_source.length()) {
-                    LOG_WARN("Original char[{}]: '{}' ({})", first_diff, 
-                            std::isprint(original_source[first_diff]) ? std::string(1, original_source[first_diff]) : "non-printable",
-                            static_cast<int>(original_source[first_diff]));
-                }
-                if (first_diff < detokenized.length()) {
-                    LOG_WARN("Detokenized char[{}]: '{}' ({})", first_diff,
-                            std::isprint(detokenized[first_diff]) ? std::string(1, detokenized[first_diff]) : "non-printable", 
-                            static_cast<int>(detokenized[first_diff]));
-                }
-            }
-            
-            // Log token-by-token breakdown for analysis
-            LOG_INFO("Token breakdown ({} tokens):", raw_tokens.size());
-            for (size_t i = 0; i < raw_tokens.size() && i < 10; ++i) {  // Show first 10 tokens
-                const auto& token = raw_tokens[i];
-                std::string token_str = TokenDetokenizer::raw_token_to_original_string(token, string_table_);
-                LOG_INFO("  [{}] {} -> \"{}\"", i, 
-                        magic_enum::enum_name(token._token), token_str);
-            }
-            if (raw_tokens.size() > 10) {
-                LOG_INFO("  ... and {} more tokens", raw_tokens.size() - 10);
-            }
-            
-        } catch (const std::exception& e) {
-            LOG_ERROR("Detokenization failed for stream '{}': {}", stream_id, e.what());
-        }
-        
-        LOG_INFO(""); // Empty line for readability
-    }
-    
-    LOG_INFO("=== DETOKENIZATION TESTING COMPLETED ===");
-}
 
 } // namespace cprime

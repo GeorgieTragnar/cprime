@@ -1,0 +1,15 @@
+// Test exec block with parameters
+exec code_gen<int, string, MyClass> {
+    print("This is Lua code inside exec block");
+    print("We should receive parameters here");
+    -- This is a Lua comment
+    local param_count = 0
+    while params[param_count] do
+        param_count = param_count + 1
+    end
+    print("Total parameters: " .. param_count)
+}
+
+int main() {
+    print("Hello from main");
+}

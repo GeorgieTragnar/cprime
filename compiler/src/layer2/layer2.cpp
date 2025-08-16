@@ -18,41 +18,11 @@ std::vector<Scope> layer2(const std::map<std::string, std::vector<RawToken>>& st
 
 namespace layer2_sublayers {
 
+// Forward declaration - implementation is in sublayer2b.cpp
 void sublayer2b(std::vector<Scope>& scopes, 
                 ExecAliasRegistry& exec_registry,
                 const StringTable& string_table,
-                const std::map<std::string, std::vector<RawToken>>& streams) {
-    
-    // Iterate through all registered exec scope indices
-    for (const auto& [scope_index, empty_lambda] : exec_registry.get_scope_to_lambda_map()) {
-        
-        // Safety check
-        if (scope_index >= scopes.size()) {
-            continue;
-        }
-        
-        const Scope& exec_scope = scopes[scope_index];
-        
-        // Extract tokens from scope's instructions
-        std::vector<Token> exec_tokens = extract_tokens_from_scope(exec_scope);
-        
-        // Find the corresponding raw tokens (we need the first stream for now)
-        if (!streams.empty()) {
-            const auto& first_stream = streams.begin()->second;
-            
-            // Detokenize exec tokens back to original source string (Lua code)
-            std::string lua_script = TokenDetokenizer::detokenize_to_string(
-                exec_tokens, string_table, first_stream);
-            
-            // Create ExecutableLambda with Lua script
-            ExecutableLambda compiled_lambda;
-            compiled_lambda.lua_script = lua_script;
-            
-            // Update the registry with the compiled lambda
-            exec_registry.update_executable_lambda(scope_index, compiled_lambda);
-        }
-    }
-}
+                const std::map<std::string, std::vector<RawToken>>& streams);
 
 std::vector<Token> extract_tokens_from_scope(const Scope& scope) {
     // Extract tokens from scope's _instructions variant

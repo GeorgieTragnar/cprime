@@ -14,20 +14,6 @@
 namespace cprime {
 namespace layer2validation {
 
-/**
- * Convert ScopeType enum to string representation
- */
-inline std::string scope_type_to_string(ScopeType type) {
-    switch (type) {
-        case ScopeType::FUNCTION: return "FUNCTION";
-        case ScopeType::BLOCK: return "BLOCK";
-        case ScopeType::EXEC: return "EXEC";
-        case ScopeType::CONDITIONAL: return "CONDITIONAL";
-        case ScopeType::LOOP: return "LOOP";
-        case ScopeType::ROOT: return "ROOT";
-        default: return "UNKNOWN";
-    }
-}
 
 /**
  * Serialize Token to human-readable format
@@ -71,7 +57,6 @@ inline std::string serialize_scope(const Scope& scope, uint32_t scope_index, int
     std::string indent_str(indent * 2, ' ');
     
     oss << indent_str << "Scope[" << scope_index << "] {\n";
-    oss << indent_str << "  type: " << scope_type_to_string(scope._scopeType) << "\n";
     oss << indent_str << "  parent: " << scope._parentScopeIndex << "\n";
     
     oss << indent_str << "  header: ";
@@ -133,28 +118,8 @@ inline std::string serialize_scope_vector(const std::vector<Scope>& scopes) {
 inline std::string serialize_scope_stats(const std::vector<Scope>& scopes) {
     std::ostringstream oss;
     
-    size_t function_count = 0, block_count = 0, exec_count = 0, 
-           conditional_count = 0, loop_count = 0, root_count = 0;
-    
-    for (const auto& scope : scopes) {
-        switch (scope._scopeType) {
-            case ScopeType::FUNCTION: function_count++; break;
-            case ScopeType::BLOCK: block_count++; break;
-            case ScopeType::EXEC: exec_count++; break;
-            case ScopeType::CONDITIONAL: conditional_count++; break;
-            case ScopeType::LOOP: loop_count++; break;
-            case ScopeType::ROOT: root_count++; break;
-        }
-    }
-    
     oss << "Scope Statistics:\n";
-    oss << "  Total: " << scopes.size() << "\n";
-    oss << "  ROOT: " << root_count << "\n";
-    oss << "  FUNCTION: " << function_count << "\n";
-    oss << "  BLOCK: " << block_count << "\n";
-    oss << "  CONDITIONAL: " << conditional_count << "\n";
-    oss << "  LOOP: " << loop_count << "\n";
-    oss << "  EXEC: " << exec_count;
+    oss << "  Total: " << scopes.size();
     
     return oss.str();
 }

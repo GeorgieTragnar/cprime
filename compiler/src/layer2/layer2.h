@@ -66,7 +66,7 @@ namespace layer2_internal {
         
         ScopeBuilder(ExecAliasRegistry& exec_reg) : exec_registry(exec_reg) {}
         
-        void enter_scope(ScopeType type, const Instruction& header);
+        void enter_scope(const Instruction& header);
         void exit_scope(const Instruction& footer);
         void add_instruction(const Instruction& instruction);
         
