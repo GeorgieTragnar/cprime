@@ -30,12 +30,17 @@ namespace layer2_sublayers {
                                   const StringTable& string_table,
                                   ExecAliasRegistry& exec_registry);
     
-    // Sublayer 2B: Exec logic compilation and resolution (future implementation)
-    // - Compile exec blocks to ExecutableLambda format
+    // Sublayer 2B: Exec logic compilation and resolution
+    // - Compile exec blocks to ExecutableLambda format with Lua scripts
     // - Link scope indices to executable logic
     // - Populate ExecAliasRegistry with compiled exec blocks
     void sublayer2b(std::vector<Scope>& scopes, 
-                    ExecAliasRegistry& exec_registry);
+                    ExecAliasRegistry& exec_registry,
+                    const StringTable& string_table,
+                    const std::map<std::string, std::vector<RawToken>>& streams);
+    
+    // Helper function to extract tokens from scope
+    std::vector<Token> extract_tokens_from_scope(const Scope& scope);
 }
 
 // Internal helper structures for Sublayer 2A

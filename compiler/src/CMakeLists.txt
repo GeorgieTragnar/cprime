@@ -32,9 +32,9 @@ add_library(cprime_commons
     commons/dirty/exec_alias_registry.cpp
 )
 
-target_include_directories(cprime_commons PUBLIC .)
+target_include_directories(cprime_commons PUBLIC . ${LUA_INCLUDE_DIR})
 target_compile_features(cprime_commons PUBLIC cxx_std_17)
-target_link_libraries(cprime_commons PUBLIC spdlog::spdlog)
+target_link_libraries(cprime_commons PUBLIC spdlog::spdlog ${LUA_LIBRARIES})
 
 # Create Layer 0 library (input processing)
 add_library(cprime_layer0
@@ -67,10 +67,14 @@ add_library(cprime_layer2
     layer2/layer2.h
     layer2/layer2.cpp
     layer2/sublayer2a.cpp
+    layer2/lua_exec_runtime.h
+    layer2/lua_exec_runtime.cpp
+    layer2/token_detokenizer.h
+    layer2/token_detokenizer.cpp
 )
 
-target_include_directories(cprime_layer2 PUBLIC .)
-target_link_libraries(cprime_layer2 PUBLIC cprime_commons cprime_layer1)
+target_include_directories(cprime_layer2 PUBLIC . ${LUA_INCLUDE_DIR})
+target_link_libraries(cprime_layer2 PUBLIC cprime_commons cprime_layer1 ${LUA_LIBRARIES})
 target_compile_features(cprime_layer2 PUBLIC cxx_std_17)
 
 # Create Layer 1 Validation library (debugging and testing support)

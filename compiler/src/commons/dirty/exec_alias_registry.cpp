@@ -2,7 +2,134 @@
 #include <stdexcept>
 #include <algorithm>
 
+// Forward declaration to avoid circular dependency
+extern "C" {
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
+}
+
 namespace cprime {
+
+// Simple Lua execution without full LuaExecRuntime to avoid circular deps
+static std::string execute_lua_inline(const std::string& script, const std::vector<std::string>& parameters) {
+    lua_State* L = luaL_newstate();
+    if (!L) {
+        return "// Error: Failed to create Lua state\n";
+    }
+    
+    std::string output_buffer;
+    
+    try {
+        // Load standard libraries
+        luaL_openlibs(L);
+        
+        // Set up parameters table
+        lua_newtable(L);
+        for (size_t i = 0; i < parameters.size(); ++i) {
+            lua_pushinteger(L, static_cast<lua_Integer>(i));
+            lua_pushstring(L, parameters[i].c_str());
+            lua_settable(L, -3);
+        }
+        lua_setglobal(L, "params");
+        
+        // Set up simple cprime API
+        lua_newtable(L);
+        
+        // cprime.emit function
+        lua_pushstring(L, "emit");
+        lua_pushlightuserdata(L, &output_buffer);
+        lua_pushcclosure(L, [](lua_State* L) -> int {
+            std::string* buffer = static_cast<std::string*>(lua_touserdata(L, lua_upvalueindex(1)));
+            if (lua_isstring(L, 1)) {
+                *buffer += lua_tostring(L, 1);
+            }
+            return 0;
+        }, 1);
+        lua_settable(L, -3);
+        
+        // cprime.emit_line function
+        lua_pushstring(L, "emit_line");
+        lua_pushlightuserdata(L, &output_buffer);
+        lua_pushcclosure(L, [](lua_State* L) -> int {
+            std::string* buffer = static_cast<std::string*>(lua_touserdata(L, lua_upvalueindex(1)));
+            if (lua_isstring(L, 1)) {
+                *buffer += lua_tostring(L, 1);
+                *buffer += "\n";
+            }
+            return 0;
+        }, 1);
+        lua_settable(L, -3);
+        
+        lua_setglobal(L, "cprime");
+        
+        // Execute the script and capture return value
+        int result = luaL_loadstring(L, script.c_str());
+        if (result != LUA_OK) {
+            std::string error = "// Lua compilation error: ";
+            error += lua_tostring(L, -1);
+            lua_close(L);
+            return error + "\n";
+        }
+        
+        result = lua_pcall(L, 0, 1, 0);  // Expect 1 return value
+        if (result != LUA_OK) {
+            std::string error = "// Lua execution error: ";
+            error += lua_tostring(L, -1);
+            lua_close(L);
+            return error + "\n";
+        }
+        
+        // Get return value from Lua script
+        std::string return_value;
+        if (lua_isstring(L, -1)) {
+            return_value = lua_tostring(L, -1);
+        } else {
+            return_value = "No return value";
+        }
+        
+        lua_close(L);
+        
+        // Combine generated output and return value
+        std::string full_result = output_buffer;
+        if (!return_value.empty()) {
+            full_result += "\n=== LUA RETURN VALUE ===\n";
+            full_result += return_value + "\n";
+        }
+        
+        return full_result;
+        
+    } catch (const std::exception& e) {
+        lua_close(L);
+        return "// Exception during Lua execution: " + std::string(e.what()) + "\n";
+    }
+}
+
+std::string ExecutableLambda::execute(const std::vector<std::string>& parameters) const {
+    if (lua_script.empty()) {
+        return "";  // Empty script returns empty string
+    }
+    
+    // Execute the actual Lua script
+    try {
+        std::string lua_output = execute_lua_inline(lua_script, parameters);
+        
+        std::string result = "=== EXEC BLOCK EXECUTION ===\n";
+        result += "Lua script executed with parameters: [";
+        for (size_t i = 0; i < parameters.size(); ++i) {
+            if (i > 0) result += ", ";
+            result += "\"" + parameters[i] + "\"";
+        }
+        result += "]\n\n";
+        result += "Generated output:\n" + lua_output + "\n";
+        result += "=== EXEC EXECUTION COMPLETE ===\n";
+        
+        return result;
+        
+    } catch (const std::exception& e) {
+        return "// Error executing exec block: " + std::string(e.what());
+    }
+}
 
 ExecAliasIndex ExecAliasRegistry::register_alias(const std::string& alias_name) {
     // Check for duplicate registration - assert for now with TODO for proper error handling
@@ -104,6 +231,15 @@ const ExecutableLambda& ExecAliasRegistry::get_executable_lambda_by_alias(ExecAl
     
     uint32_t scope_index = alias_it->second;
     return get_executable_lambda(scope_index);
+}
+
+void ExecAliasRegistry::update_executable_lambda(uint32_t scope_index, const ExecutableLambda& lambda) {
+    auto it = scope_to_lambda_.find(scope_index);
+    if (it == scope_to_lambda_.end()) {
+        throw std::out_of_range("ExecAliasRegistry: Scope index not registered as exec scope");
+    }
+    
+    it->second = lambda;
 }
 
 } // namespace cprime

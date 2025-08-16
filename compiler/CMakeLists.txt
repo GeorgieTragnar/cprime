@@ -27,6 +27,10 @@ endif()
 find_package(spdlog CONFIG REQUIRED)
 message(STATUS "spdlog found - logging will be available")
 
+# Find Lua for exec block runtime
+find_package(Lua REQUIRED)
+message(STATUS "Lua found - exec block scripting will be available")
+
 # Add the src subdirectory which contains the actual compiler implementation
 add_subdirectory(src)
 

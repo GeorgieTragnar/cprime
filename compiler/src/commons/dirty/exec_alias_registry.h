@@ -8,10 +8,17 @@
 
 namespace cprime {
 
-// Stub structure for executable lambdas created from exec blocks
-// Will be expanded in Sublayer 2B implementation
+// Structure for executable lambdas created from exec blocks
+// Contains Lua script and execution interface for exec blocks
 struct ExecutableLambda {
-    // Empty stub for now - will contain compiled exec block logic
+    std::string lua_script;                    // Converted exec block as Lua script
+    
+    // Execution interface
+    std::string execute(const std::vector<std::string>& parameters = {}) const;
+    
+    // Utilities
+    bool is_empty() const { return lua_script.empty(); }
+    bool has_script() const { return !lua_script.empty(); }
 };
 
 }
@@ -132,6 +139,18 @@ public:
      * Get the number of registered alias-to-scope mappings.
      */
     size_t get_alias_to_scope_count() const { return alias_to_scope_.size(); }
+    
+    /**
+     * Update an existing executable lambda with compiled content.
+     */
+    void update_executable_lambda(uint32_t scope_index, const ExecutableLambda& lambda);
+    
+    /**
+     * Get read-only access to scope-to-lambda map for iteration.
+     */
+    const std::unordered_map<uint32_t, ExecutableLambda>& get_scope_to_lambda_map() const { 
+        return scope_to_lambda_; 
+    }
 
 private:
     std::vector<std::string> aliases_;                                    // Indexed alias storage

@@ -162,6 +162,18 @@ bool CompilerOrchestrator::run_layer2() {
         LOG_INFO("ExecAliasRegistry Statistics: {} registered exec aliases, {} registered exec scopes, {} alias-to-scope mappings", 
                 exec_alias_registry.size(), exec_alias_registry.get_exec_scope_count(), exec_alias_registry.get_alias_to_scope_count());
         
+        // Test exec lambda execution
+        if (exec_alias_registry.get_exec_scope_count() > 0) {
+            LOG_INFO("Testing ExecutableLambda execution:");
+            for (const auto& [scope_index, executable_lambda] : exec_alias_registry.get_scope_to_lambda_map()) {
+                std::vector<std::string> test_params = {
+                    "int", "string", "float", "bool", "MyClass", "template<T>", "vector<int>"
+                };
+                std::string result = executable_lambda.execute(test_params);
+                LOG_INFO("C++ received result from Lua exec scope {}:\n{}", scope_index, result);
+            }
+        }
+        
         // TODO: Store scopes for Layer 3
         
     } catch (const std::exception& e) {
