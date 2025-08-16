@@ -221,25 +221,16 @@ void sublayer2b(std::vector<Scope>& scopes,
         LOG_INFO("Detokenized Lua script ({} chars):", cleaned_lua_script.length());
         LOG_INFO("{}", cleaned_lua_script);
         
-        // Step 3: Create ExecutableLambda with the cleaned Lua script
+        // Step 3: Create ExecutableLambda with the cleaned Lua script (preparation only)
         ExecutableLambda compiled_lambda;
         compiled_lambda.lua_script = cleaned_lua_script;
         
-        // Step 4: Execute the Lua script with extracted parameters
-        try {
-            std::string execution_result = compiled_lambda.execute(parameters);
-            
-            LOG_INFO("=== EXEC BLOCK EXECUTION RESULTS ===");
-            LOG_INFO("Scope Index: {}", scope_index);
-            LOG_INFO("Parameters: {} items", parameters.size());
-            LOG_INFO("Lua Script Length: {} chars", cleaned_lua_script.length());
-            LOG_INFO("Execution Result:");
-            LOG_INFO("{}", execution_result);
-            LOG_INFO("=== END EXEC BLOCK RESULTS ===");
-            
-        } catch (const std::exception& e) {
-            LOG_ERROR("Failed to execute Lua script for scope {}: {}", scope_index, e.what());
-        }
+        LOG_INFO("=== EXEC BLOCK PREPARED FOR EXECUTION ===");
+        LOG_INFO("Scope Index: {}", scope_index);
+        LOG_INFO("Parameters: {} items", parameters.size());
+        LOG_INFO("Lua Script Length: {} chars", cleaned_lua_script.length());
+        LOG_INFO("Status: Ready for on-demand execution");
+        LOG_INFO("=== END EXEC BLOCK PREPARATION ===");
         
         // Step 5: Update the registry with the compiled lambda
         exec_registry.update_executable_lambda(scope_index, compiled_lambda);

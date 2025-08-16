@@ -110,24 +110,68 @@ std::string ExecutableLambda::execute(const std::vector<std::string>& parameters
         return "";  // Empty script returns empty string
     }
     
-    // Execute the actual Lua script
+    // Execute the Lua script and get the return value
+    lua_State* L = luaL_newstate();
+    if (!L) {
+        throw std::runtime_error("Failed to create Lua state");
+    }
+    
     try {
-        std::string lua_output = execute_lua_inline(lua_script, parameters);
+        // Load standard libraries
+        luaL_openlibs(L);
         
-        std::string result = "=== EXEC BLOCK EXECUTION ===\n";
-        result += "Lua script executed with parameters: [";
+        // Set up parameters table
+        lua_newtable(L);
         for (size_t i = 0; i < parameters.size(); ++i) {
-            if (i > 0) result += ", ";
-            result += "\"" + parameters[i] + "\"";
+            lua_pushinteger(L, static_cast<lua_Integer>(i));
+            lua_pushstring(L, parameters[i].c_str());
+            lua_settable(L, -3);
         }
-        result += "]\n\n";
-        result += "Generated output:\n" + lua_output + "\n";
-        result += "=== EXEC EXECUTION COMPLETE ===\n";
+        lua_setglobal(L, "params");
+        
+        // Load and execute the Lua script
+        int load_result = luaL_loadstring(L, lua_script.c_str());
+        if (load_result != LUA_OK) {
+            std::string error = "Lua syntax error: ";
+            if (lua_isstring(L, -1)) {
+                error += lua_tostring(L, -1);
+            }
+            lua_close(L);
+            throw std::runtime_error(error);
+        }
+        
+        // Execute the script - expect exactly 1 return value
+        int call_result = lua_pcall(L, 0, 1, 0);  // 0 args, 1 return value, 0 error handler
+        if (call_result != LUA_OK) {
+            std::string error = "Lua execution error: ";
+            if (lua_isstring(L, -1)) {
+                error += lua_tostring(L, -1);
+            }
+            lua_close(L);
+            throw std::runtime_error(error);
+        }
+        
+        // Check that we got exactly 1 return value and it's a string
+        int return_count = lua_gettop(L);
+        if (return_count != 1) {
+            lua_close(L);
+            throw std::runtime_error("Lua script must return exactly 1 value, got " + std::to_string(return_count));
+        }
+        
+        if (!lua_isstring(L, -1)) {
+            lua_close(L);
+            throw std::runtime_error("Lua script must return a string value");
+        }
+        
+        // Extract the single string return value
+        std::string result = lua_tostring(L, -1);
+        lua_close(L);
         
         return result;
         
-    } catch (const std::exception& e) {
-        return "// Error executing exec block: " + std::string(e.what());
+    } catch (...) {
+        lua_close(L);
+        throw;  // Re-throw the exception
     }
 }
 

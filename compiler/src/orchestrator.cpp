@@ -171,15 +171,21 @@ bool CompilerOrchestrator::run_layer2() {
         LOG_INFO("ExecAliasRegistry Statistics: {} registered exec aliases, {} registered exec scopes, {} alias-to-scope mappings", 
                 exec_alias_registry.size(), exec_alias_registry.get_exec_scope_count(), exec_alias_registry.get_alias_to_scope_count());
         
-        // Test exec lambda execution with multiple scripts and varying inputs
+        // Test on-demand execution of prepared Lua scripts
         if (exec_alias_registry.get_exec_scope_count() > 0) {
-            LOG_INFO("Testing ExecutableLambda execution:");
+            LOG_INFO("Testing on-demand ExecutableLambda execution:");
             for (const auto& [scope_index, executable_lambda] : exec_alias_registry.get_scope_to_lambda_map()) {
-                std::vector<std::string> test_params = {
-                    "int", "string", "float", "bool", "MyClass", "template<T>", "vector<int>"
-                };
-                std::string result = executable_lambda.execute(test_params);
-                LOG_INFO("C++ received result from Lua exec scope {}:\n{}", scope_index, result);
+                std::vector<std::string> test_params = {"int", "string", "MyClass"};
+                LOG_INFO("=== ON-DEMAND EXECUTION TEST ===");
+                LOG_INFO("Executing prepared Lua script for scope {}", scope_index);
+                try {
+                    std::string result = executable_lambda.execute(test_params);
+                    LOG_INFO("Lua script returned: \"{}\"", result);
+                    LOG_INFO("Return value length: {} chars", result.length());
+                } catch (const std::exception& e) {
+                    LOG_ERROR("Execution failed: {}", e.what());
+                }
+                LOG_INFO("=== END ON-DEMAND EXECUTION ===");
             }
         }
         
