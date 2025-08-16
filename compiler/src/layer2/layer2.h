@@ -43,9 +43,11 @@ namespace layer2_sublayers {
     // - Sequential iteration through all scope instructions
     // - Flat logging format for debugging and analysis
     // - No hierarchical traversal, simple scope-by-scope processing
+    // - Exec execution processing and code generation (single pass)
     void sublayer2c(std::vector<Scope>& scopes, 
                     const StringTable& string_table,
-                    const std::map<std::string, std::vector<RawToken>>& streams);
+                    const std::map<std::string, std::vector<RawToken>>& streams,
+                    ExecAliasRegistry& exec_registry);
     
     // Helper function to extract tokens from scope
     std::vector<Token> extract_tokens_from_scope(const Scope& scope);
@@ -55,13 +57,22 @@ namespace layer2_sublayers {
 namespace layer2_contextualization {
     
     // Header contextualization - processes scope headers to populate _contextualTokens
-    void contextualize_header(Instruction& header_instruction);
+    // Returns true if header contains exec execution that needs processing
+    bool contextualize_header(Instruction& header_instruction);
     
     // Footer contextualization - processes scope footers to populate _contextualTokens  
-    void contextualize_footer(Instruction& footer_instruction);
+    // Returns true if footer contains exec execution that needs processing
+    bool contextualize_footer(Instruction& footer_instruction);
     
     // Instruction contextualization - processes body instructions to populate _contextualTokens
-    void contextualize_instruction(Instruction& body_instruction);
+    // Returns true if instruction contains exec execution that needs processing
+    bool contextualize_instruction(Instruction& body_instruction);
+    
+    // Process exec execution and return global scope index of generated code (single pass)
+    uint32_t process_exec_execution(const Instruction& exec_instruction,
+                                   std::vector<Scope>& master_scopes,
+                                   const StringTable& string_table,
+                                   ExecAliasRegistry& exec_registry);
 }
 
 // Internal helper structures for Sublayer 2A

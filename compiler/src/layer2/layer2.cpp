@@ -14,7 +14,7 @@ std::vector<Scope> layer2(const std::map<std::string, std::vector<RawToken>>& st
     layer2_sublayers::sublayer2b(scopes, exec_registry, string_table, streams);
     
     // Sublayer 2C: Instruction contextualization and analysis
-    layer2_sublayers::sublayer2c(scopes, string_table, streams);
+    layer2_sublayers::sublayer2c(scopes, string_table, streams, exec_registry);
     
     return scopes;
 }
@@ -29,7 +29,8 @@ void sublayer2b(std::vector<Scope>& scopes,
 
 void sublayer2c(std::vector<Scope>& scopes, 
                 const StringTable& string_table,
-                const std::map<std::string, std::vector<RawToken>>& streams);
+                const std::map<std::string, std::vector<RawToken>>& streams,
+                ExecAliasRegistry& exec_registry);
 
 std::vector<Token> extract_tokens_from_scope(const Scope& scope) {
     // Extract tokens from scope's _instructions vector of variants
