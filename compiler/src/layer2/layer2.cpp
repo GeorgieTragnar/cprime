@@ -13,14 +13,21 @@ std::vector<Scope> layer2(const std::map<std::string, std::vector<RawToken>>& st
     // Sublayer 2B: Exec logic compilation with Lua
     layer2_sublayers::sublayer2b(scopes, exec_registry, string_table, streams);
     
+    // Sublayer 2C: Instruction contextualization and analysis
+    layer2_sublayers::sublayer2c(scopes, string_table, streams);
+    
     return scopes;
 }
 
 namespace layer2_sublayers {
 
-// Forward declaration - implementation is in sublayer2b.cpp
+// Forward declarations - implementations are in separate files
 void sublayer2b(std::vector<Scope>& scopes, 
                 ExecAliasRegistry& exec_registry,
+                const StringTable& string_table,
+                const std::map<std::string, std::vector<RawToken>>& streams);
+
+void sublayer2c(std::vector<Scope>& scopes, 
                 const StringTable& string_table,
                 const std::map<std::string, std::vector<RawToken>>& streams);
 

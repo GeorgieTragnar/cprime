@@ -68,6 +68,10 @@ add_library(cprime_layer2
     layer2/layer2.cpp
     layer2/sublayer2a.cpp
     layer2/sublayer2b.cpp
+    layer2/sublayer2c.cpp
+    layer2/contextualization/header_contextualization.cpp
+    layer2/contextualization/footer_contextualization.cpp
+    layer2/contextualization/instruction_contextualization.cpp
     layer2/lua_exec_runtime.h
     layer2/lua_exec_runtime.cpp
     layer2/token_detokenizer.h

@@ -39,8 +39,29 @@ namespace layer2_sublayers {
                     const StringTable& string_table,
                     const std::map<std::string, std::vector<RawToken>>& streams);
     
+    // Sublayer 2C: Instruction contextualization and sequential analysis
+    // - Sequential iteration through all scope instructions
+    // - Flat logging format for debugging and analysis
+    // - No hierarchical traversal, simple scope-by-scope processing
+    void sublayer2c(std::vector<Scope>& scopes, 
+                    const StringTable& string_table,
+                    const std::map<std::string, std::vector<RawToken>>& streams);
+    
     // Helper function to extract tokens from scope
     std::vector<Token> extract_tokens_from_scope(const Scope& scope);
+}
+
+// Layer 2 contextualization functions
+namespace layer2_contextualization {
+    
+    // Header contextualization - processes scope headers to populate _contextualTokens
+    void contextualize_header(Instruction& header_instruction);
+    
+    // Footer contextualization - processes scope footers to populate _contextualTokens  
+    void contextualize_footer(Instruction& footer_instruction);
+    
+    // Instruction contextualization - processes body instructions to populate _contextualTokens
+    void contextualize_instruction(Instruction& body_instruction);
 }
 
 // Internal helper structures for Sublayer 2A
