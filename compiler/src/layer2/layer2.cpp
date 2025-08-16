@@ -25,15 +25,19 @@ void sublayer2b(std::vector<Scope>& scopes,
                 const std::map<std::string, std::vector<RawToken>>& streams);
 
 std::vector<Token> extract_tokens_from_scope(const Scope& scope) {
-    // Extract tokens from scope's _instructions variant
+    // Extract tokens from scope's _instructions vector of variants
     std::vector<Token> tokens;
     
-    if (std::holds_alternative<Instruction>(scope._instructions)) {
-        const Instruction& instruction = std::get<Instruction>(scope._instructions);
-        tokens = instruction._tokens;
+    // Iterate through all instruction variants in the vector
+    for (const auto& instruction_variant : scope._instructions) {
+        if (std::holds_alternative<Instruction>(instruction_variant)) {
+            const Instruction& instruction = std::get<Instruction>(instruction_variant);
+            // Append tokens from this instruction to the result
+            tokens.insert(tokens.end(), instruction._tokens.begin(), instruction._tokens.end());
+        }
+        // If variant contains uint32_t (nested scope index), we'd handle that here
+        // For now, just handle the Instruction case
     }
-    // If variant contains uint32_t (nested scope index), we'd handle that here
-    // For now, just handle the Instruction case
     
     return tokens;
 }

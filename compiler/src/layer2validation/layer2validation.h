@@ -74,16 +74,26 @@ inline std::string serialize_scope(const Scope& scope, uint32_t scope_index, int
     }
     
     oss << indent_str << "  instructions: ";
-    if (std::holds_alternative<Instruction>(scope._instructions)) {
-        const auto& instr = std::get<Instruction>(scope._instructions);
-        if (instr._tokens.empty()) {
-            oss << "EMPTY\n";
-        } else {
-            oss << "\n" << serialize_instruction(instr, indent + 2) << "\n";
-        }
+    if (scope._instructions.empty()) {
+        oss << "EMPTY\n";
     } else {
-        uint32_t nested_scope = std::get<uint32_t>(scope._instructions);
-        oss << "NESTED_SCOPE[" << nested_scope << "]\n";
+        oss << "\n";
+        for (size_t i = 0; i < scope._instructions.size(); ++i) {
+            const auto& instruction_variant = scope._instructions[i];
+            oss << indent_str << "  [" << i << "] ";
+            
+            if (std::holds_alternative<Instruction>(instruction_variant)) {
+                const auto& instr = std::get<Instruction>(instruction_variant);
+                if (instr._tokens.empty()) {
+                    oss << "EMPTY_INSTRUCTION\n";
+                } else {
+                    oss << "\n" << serialize_instruction(instr, indent + 2) << "\n";
+                }
+            } else {
+                uint32_t nested_scope = std::get<uint32_t>(instruction_variant);
+                oss << "NESTED_SCOPE[" << nested_scope << "]\n";
+            }
+        }
     }
     
     oss << indent_str << "  contexts: " << scope._contexts.size() << "\n";

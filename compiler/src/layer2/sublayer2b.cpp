@@ -139,32 +139,35 @@ std::vector<std::string> extract_parameter_identifiers(const Scope& scope, const
 std::vector<RawToken> extract_scope_body_tokens(const Scope& scope, const std::map<std::string, std::vector<RawToken>>& streams) {
     std::vector<RawToken> body_tokens;
     
-    // Check if instructions contains an Instruction variant
-    if (std::holds_alternative<Instruction>(scope._instructions)) {
-        const Instruction& instruction = std::get<Instruction>(scope._instructions);
-        for (const auto& token : instruction._tokens) {
-            // Get the actual RawToken from streams
-            if (token._stringstreamId >= streams.size()) continue;
-            
-            // Find the stream by matching the ID
-            const std::vector<RawToken>* target_stream = nullptr;
-            uint32_t stream_index = 0;
-            for (const auto& [stream_name, raw_tokens] : streams) {
-                if (stream_index == token._stringstreamId) {
-                    target_stream = &raw_tokens;
-                    break;
+    // Iterate through all instruction variants in the vector
+    for (const auto& instruction_variant : scope._instructions) {
+        // Check if this variant contains an Instruction
+        if (std::holds_alternative<Instruction>(instruction_variant)) {
+            const Instruction& instruction = std::get<Instruction>(instruction_variant);
+            for (const auto& token : instruction._tokens) {
+                // Get the actual RawToken from streams
+                if (token._stringstreamId >= streams.size()) continue;
+                
+                // Find the stream by matching the ID
+                const std::vector<RawToken>* target_stream = nullptr;
+                uint32_t stream_index = 0;
+                for (const auto& [stream_name, raw_tokens] : streams) {
+                    if (stream_index == token._stringstreamId) {
+                        target_stream = &raw_tokens;
+                        break;
+                    }
+                    stream_index++;
                 }
-                stream_index++;
+                
+                if (!target_stream || token._tokenIndex >= target_stream->size()) continue;
+                
+                const RawToken& raw_token = (*target_stream)[token._tokenIndex];
+                body_tokens.push_back(raw_token);
             }
-            
-            if (!target_stream || token._tokenIndex >= target_stream->size()) continue;
-            
-            const RawToken& raw_token = (*target_stream)[token._tokenIndex];
-            body_tokens.push_back(raw_token);
         }
+        // Handle the case where instruction_variant contains a nested scope index
+        // For now, we'll just process Instruction variants
     }
-    // Handle the case where _instructions contains a nested scope index
-    // For now, we'll just process single-level instructions
     
     return body_tokens;
 }

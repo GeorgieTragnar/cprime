@@ -69,6 +69,7 @@ namespace layer2_internal {
         void enter_scope(const Instruction& header);
         void exit_scope(const Instruction& footer);
         void add_instruction(const Instruction& instruction);
+        void add_nested_scope_reference(uint32_t nested_scope_index);
         
         // Scope type detection removed - semantic analysis belongs in later layers
     };

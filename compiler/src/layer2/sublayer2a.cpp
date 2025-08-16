@@ -181,14 +181,20 @@ Instruction TokenCache::create_instruction() {
 }
 
 void ScopeBuilder::enter_scope(const Instruction& header) {
+    // Store current parent scope index before creating new scope
+    uint32_t parent_scope_index = current_scope_index;
+    
     // Create new scope
     Scope new_scope;
     new_scope._header = header;
     new_scope._footer = Instruction{}; // Will be set on exit
-    new_scope._parentScopeIndex = current_scope_index;
+    new_scope._parentScopeIndex = parent_scope_index;
     
     uint32_t new_scope_index = static_cast<uint32_t>(scopes.size());
     scopes.push_back(new_scope);
+    
+    // Add reference to the nested scope in parent's instructions vector
+    add_nested_scope_reference(new_scope_index);
     
     // Update current scope to point to new child scope
     current_scope_index = new_scope_index;
@@ -203,9 +209,14 @@ void ScopeBuilder::exit_scope(const Instruction& footer) {
 }
 
 void ScopeBuilder::add_instruction(const Instruction& instruction) {
-    // For now, just store instructions in the variant
-    // TODO: Implement proper instruction management
-    scopes[current_scope_index]._instructions = instruction;
+    // Add instruction to the vector of variants
+    scopes[current_scope_index]._instructions.emplace_back(instruction);
+}
+
+void ScopeBuilder::add_nested_scope_reference(uint32_t nested_scope_index) {
+    // Add nested scope index to parent scope's instructions vector
+    // Note: current_scope_index is still pointing to parent when this is called
+    scopes[current_scope_index]._instructions.emplace_back(nested_scope_index);
 }
 
 } // namespace layer2_internal

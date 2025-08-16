@@ -11,7 +11,7 @@ struct Scope {
 	Instruction _header; // it can hold parent var in case of lambda
 	Instruction _footer; // semicolon-terminated instructions at scope end
 	uint32_t _parentScopeIndex;
-	std::variant<Instruction, uint32_t> _instructions; // it holds instructions or index for nested scope
+	std::vector<std::variant<Instruction, uint32_t>> _instructions; // it holds instructions or index for nested scope
 	std::vector<std::shared_ptr<Context>> _contexts;
 };
 
