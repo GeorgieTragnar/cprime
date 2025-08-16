@@ -1,0 +1,24 @@
+// Test header exec execution
+exec var_gen<type, name, value> {
+    -- Generate variable declaration
+    local var_type = params[0] or "int"
+    local var_name = params[1] or "defaultVar" 
+    local var_value = params[2] or "0"
+    
+    return var_type .. " " .. var_name .. " = " .. var_value .. ";"
+}
+
+// Test header execution with named exec alias
+if var_gen<string, headerVar, "Header Value"> {
+    print("Inside if with header exec");
+}
+
+// Test header execution with another call
+while var_gen<int, counter, 10> {
+    print("Inside while with header exec");
+    break;
+}
+
+int main() {
+    print("Main function");
+}

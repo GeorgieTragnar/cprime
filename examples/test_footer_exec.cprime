@@ -1,0 +1,13 @@
+// Test noname exec with footer execution
+exec <type, name, value> {
+    -- Generate variable declaration with initialization  
+    local var_type = params[0] or "int"
+    local var_name = params[1] or "defaultVar"
+    local var_value = params[2] or "0"
+    
+    return var_type .. " " .. var_name .. " = " .. var_value .. ";"
+}<string, message, "Hello Footer Exec">
+
+int main() {
+    print("Main function");
+}

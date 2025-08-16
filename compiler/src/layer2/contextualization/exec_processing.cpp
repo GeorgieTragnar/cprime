@@ -5,6 +5,33 @@
 
 namespace cprime::layer2_contextualization {
 
+// Helper function to extract template parameters from tokens between < >
+std::vector<std::string> extract_template_parameters(const std::vector<Token>& tokens, size_t start_idx, size_t end_idx) {
+    std::vector<std::string> parameters;
+    
+    // Simple parameter extraction - look for IDENTIFIER and STRING_LITERAL tokens
+    // Skip LESS_THAN and GREATER_THAN tokens
+    for (size_t i = start_idx + 1; i < end_idx; ++i) {
+        const auto& token = tokens[i];
+        
+        if (token._token == EToken::IDENTIFIER || 
+            token._token == EToken::STRING_LITERAL ||
+            token._token == EToken::INT_LITERAL) {
+            // For now, create placeholder parameter names
+            // TODO: Extract actual parameter values from tokens
+            if (token._token == EToken::IDENTIFIER) {
+                parameters.push_back("identifier");
+            } else if (token._token == EToken::STRING_LITERAL) {
+                parameters.push_back("string_literal");
+            } else if (token._token == EToken::INT_LITERAL) {
+                parameters.push_back("int_literal");
+            }
+        }
+    }
+    
+    return parameters;
+}
+
 // Helper structures for exec execution info
 struct ExecExecutionInfo {
     enum Type { ALIAS_CALL, NONAME_EXEC, DIRECT_CALL };
@@ -31,15 +58,33 @@ ExecExecutionInfo extract_exec_info(const Instruction& exec_instruction,
     for (size_t i = 0; i < tokens.size(); ++i) {
         const auto& token = tokens[i];
         
-        // Pattern 1: Noname exec execution - "exec { lua_code }"
+        // Pattern 1: Noname exec declaration - "exec <params> { lua_code }" (should not be processed here)
         if (token._token == EToken::EXEC) {
-            info.type = ExecExecutionInfo::NONAME_EXEC;
-            LOG_DEBUG("Detected noname exec execution");
-            
-            // TODO: Extract Lua code between braces
-            // For now, placeholder
-            info.inline_lua_code = "return 'noname exec not implemented yet'";
-            return info;
+            // This is exec declaration header, not execution
+            // Skip this - we're looking for the execution pattern, not the declaration
+            // The execution pattern is just "<args>" without "exec" keyword
+            LOG_DEBUG("Skipping EXEC token - this is declaration, not execution");
+            continue;
+        }
+        
+        // Pattern 1b: Noname exec footer execution - "<args>"
+        if (token._token == EToken::LESS_THAN) {
+            // Look for matching GREATER_THAN to confirm <args> pattern
+            for (size_t j = i + 1; j < tokens.size(); ++j) {
+                if (tokens[j]._token == EToken::GREATER_THAN) {
+                    info.type = ExecExecutionInfo::NONAME_EXEC;
+                    LOG_INFO("Detected noname exec footer execution: <args>");
+                    
+                    // Extract parameters between < >
+                    info.parameters = extract_template_parameters(tokens, i, j);
+                    LOG_INFO("Extracted {} parameters from footer", info.parameters.size());
+                    
+                    // For noname exec, we need to find the corresponding exec block
+                    // This will be handled in get_executable_lambda by looking up the current scope
+                    info.alias_name = "NONAME_EXEC";  // Special marker for noname exec
+                    return info;
+                }
+            }
         }
         
         // Pattern 2: Exec alias call - "EXEC_ALIAS<params>()"
@@ -101,13 +146,34 @@ ExecExecutionInfo extract_exec_info(const Instruction& exec_instruction,
 }
 
 // Get ExecutableLambda based on exec execution info
-const ExecutableLambda& get_executable_lambda(const ExecExecutionInfo& exec_info, const ExecAliasRegistry& exec_registry) {
+const ExecutableLambda& get_executable_lambda(const ExecExecutionInfo& exec_info, const ExecAliasRegistry& exec_registry, uint32_t current_scope_index) {
     auto logger = cprime::LoggerFactory::get_logger("exec_processing");
     
     switch (exec_info.type) {
         case ExecExecutionInfo::NONAME_EXEC:
-            // TODO: Create temporary ExecutableLambda with inline Lua code
-            throw std::runtime_error("Noname exec execution not implemented yet");
+            // For noname exec, the execution scope contains <args> but the exec block
+            // is in the preceding scope. Look for exec block in previous scopes.
+            LOG_INFO("Looking up noname exec for execution scope {}", current_scope_index);
+            
+            // Try current scope first
+            try {
+                return exec_registry.get_executable_lambda(current_scope_index);
+            } catch (const std::exception&) {
+                LOG_DEBUG("No exec block in current scope {}, trying previous scopes", current_scope_index);
+            }
+            
+            // Try previous scopes (typically the immediately preceding scope)
+            for (int32_t scope_idx = static_cast<int32_t>(current_scope_index) - 1; scope_idx >= 0; --scope_idx) {
+                try {
+                    LOG_DEBUG("Trying scope {} for noname exec block", scope_idx);
+                    return exec_registry.get_executable_lambda(static_cast<uint32_t>(scope_idx));
+                } catch (const std::exception&) {
+                    LOG_DEBUG("No exec block in scope {}", scope_idx);
+                    continue;
+                }
+            }
+            
+            throw std::runtime_error("No exec block found in current or previous scopes for noname execution");
             
         case ExecExecutionInfo::ALIAS_CALL:
         case ExecExecutionInfo::DIRECT_CALL:
@@ -134,13 +200,39 @@ const ExecutableLambda& get_executable_lambda(const ExecExecutionInfo& exec_info
 void validate_pure_cprime_output(const std::string& generated_code) {
     auto logger = cprime::LoggerFactory::get_logger("exec_processing");
     
-    // Simple validation: check for forbidden exec constructs
-    if (generated_code.find("exec") != std::string::npos) {
-        LOG_ERROR("Generated code contains forbidden 'exec' construct");
-        throw std::runtime_error("Generated code cannot contain exec constructs (single pass only)");
+    // More sophisticated validation: check for actual exec keywords, not just string content
+    // Look for "exec" as a keyword (not inside string literals)
+    bool in_string = false;
+    char quote_char = '\0';
+    
+    for (size_t i = 0; i < generated_code.length(); ++i) {
+        char c = generated_code[i];
+        
+        // Handle string literals
+        if (!in_string && (c == '"' || c == '\'')) {
+            in_string = true;
+            quote_char = c;
+            continue;
+        }
+        if (in_string && c == quote_char) {
+            in_string = false;
+            quote_char = '\0';
+            continue;
+        }
+        
+        // Skip checking inside string literals
+        if (in_string) continue;
+        
+        // Check for "exec" keyword outside of strings
+        if (i + 4 <= generated_code.length() && 
+            generated_code.substr(i, 4) == "exec" &&
+            (i == 0 || !std::isalnum(generated_code[i-1])) &&
+            (i + 4 >= generated_code.length() || !std::isalnum(generated_code[i+4]))) {
+            LOG_ERROR("Generated code contains forbidden 'exec' keyword at position {}", i);
+            throw std::runtime_error("Generated code cannot contain exec constructs (single pass only)");
+        }
     }
     
-    // Additional validation can be added here
     LOG_DEBUG("Generated code validation passed - pure CPrime output confirmed");
 }
 
@@ -197,7 +289,8 @@ uint32_t process_exec_execution(const Instruction& exec_instruction,
                                std::vector<Scope>& master_scopes,
                                const StringTable& string_table,
                                ExecAliasRegistry& exec_registry,
-                               const std::map<std::string, std::vector<RawToken>>& streams) {
+                               const std::map<std::string, std::vector<RawToken>>& streams,
+                               uint32_t current_scope_index) {
     
     auto logger = cprime::LoggerFactory::get_logger("exec_processing");
     LOG_INFO("Processing exec execution (single pass)...");
@@ -207,7 +300,7 @@ uint32_t process_exec_execution(const Instruction& exec_instruction,
         ExecExecutionInfo exec_info = extract_exec_info(exec_instruction, exec_registry, streams);
         
         // Step 2: Get ExecutableLambda and execute Lua script
-        const ExecutableLambda& lambda = get_executable_lambda(exec_info, exec_registry);
+        const ExecutableLambda& lambda = get_executable_lambda(exec_info, exec_registry, current_scope_index);
         std::string generated_cprime_code = lambda.execute(exec_info.parameters);
         
         LOG_INFO("Generated CPrime code ({} chars): {}", generated_cprime_code.length(), generated_cprime_code);

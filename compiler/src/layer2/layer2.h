@@ -73,7 +73,8 @@ namespace layer2_contextualization {
                                    std::vector<Scope>& master_scopes,
                                    const StringTable& string_table,
                                    ExecAliasRegistry& exec_registry,
-                                   const std::map<std::string, std::vector<RawToken>>& streams);
+                                   const std::map<std::string, std::vector<RawToken>>& streams,
+                                   uint32_t current_scope_index);
 }
 
 // Internal helper structures for Sublayer 2A
