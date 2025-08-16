@@ -25,8 +25,10 @@ namespace layer2_sublayers {
     // - Convert RawTokens to lightweight Token references
     // - Build flat scope vector with parent/child indexing
     // - Use mandatory semicolons for unambiguous parsing
+    // - Register exec scopes in ExecAliasRegistry
     std::vector<Scope> sublayer2a(const std::map<std::string, std::vector<RawToken>>& streams,
-                                  const StringTable& string_table);
+                                  const StringTable& string_table,
+                                  ExecAliasRegistry& exec_registry);
     
     // Sublayer 2B: Exec logic compilation and resolution (future implementation)
     // - Compile exec blocks to ExecutableLambda format
@@ -55,6 +57,9 @@ namespace layer2_internal {
         std::vector<Scope> scopes;
         uint32_t current_scope_index;
         TokenCache token_cache;
+        ExecAliasRegistry& exec_registry;
+        
+        ScopeBuilder(ExecAliasRegistry& exec_reg) : exec_registry(exec_reg) {}
         
         void enter_scope(ScopeType type, const Instruction& header);
         void exit_scope(const Instruction& footer);

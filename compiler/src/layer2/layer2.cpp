@@ -7,7 +7,7 @@ std::vector<Scope> layer2(const std::map<std::string, std::vector<RawToken>>& st
                          const StringTable& string_table, 
                          ExecAliasRegistry& exec_registry) {
     // Sublayer 2A: Pure structural scope building
-    auto scopes = layer2_sublayers::sublayer2a(streams, string_table);
+    auto scopes = layer2_sublayers::sublayer2a(streams, string_table, exec_registry);
     
     // Sublayer 2B: Exec logic compilation (future implementation)
     layer2_sublayers::sublayer2b(scopes, exec_registry);

@@ -8,6 +8,16 @@
 
 namespace cprime {
 
+// Stub structure for executable lambdas created from exec blocks
+// Will be expanded in Sublayer 2B implementation
+struct ExecutableLambda {
+    // Empty stub for now - will contain compiled exec block logic
+};
+
+}
+
+namespace cprime {
+
 /**
  * Exec alias index wrapper - distinct type for variant compatibility.
  */
@@ -92,10 +102,44 @@ public:
      * Get all registered aliases as a map (for debugging).
      */
     std::unordered_map<std::string, ExecAliasIndex> get_all_aliases() const;
+    
+    /**
+     * Register a scope index as an exec scope with empty ExecutableLambda.
+     */
+    void register_scope_index(uint32_t scope_index);
+    
+    /**
+     * Register a scope index to an exec alias using alias index value.
+     */
+    void register_scope_index_to_exec_alias(ExecAliasIndex alias_idx, uint32_t scope_index);
+    
+    /**
+     * Get executable lambda by scope index.
+     */
+    const ExecutableLambda& get_executable_lambda(uint32_t scope_index) const;
+    
+    /**
+     * Get executable lambda by exec alias index (two-step lookup).
+     */
+    const ExecutableLambda& get_executable_lambda_by_alias(ExecAliasIndex alias_idx) const;
+    
+    /**
+     * Get the number of registered exec scopes.
+     */
+    size_t get_exec_scope_count() const { return scope_to_lambda_.size(); }
+    
+    /**
+     * Get the number of registered alias-to-scope mappings.
+     */
+    size_t get_alias_to_scope_count() const { return alias_to_scope_.size(); }
 
 private:
     std::vector<std::string> aliases_;                                    // Indexed alias storage
     std::unordered_map<std::string, ExecAliasIndex> alias_to_index_;      // Fast lookup for registration
+    
+    // Exec scope registration maps
+    std::unordered_map<uint32_t, ExecutableLambda> scope_to_lambda_;      // Scope indices → executable lambdas
+    std::unordered_map<uint32_t, uint32_t> alias_to_scope_;              // Exec alias indices → scope indices
 };
 
 } // namespace cprime

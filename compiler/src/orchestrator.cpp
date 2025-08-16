@@ -158,6 +158,10 @@ bool CompilerOrchestrator::run_layer2() {
         std::string full_structure = layer2validation::serialize_scope_vector(scopes);
         LOG_INFO("Layer 2 Full Structure:\n{}", full_structure);
         
+        // Log exec scope registration statistics
+        LOG_INFO("ExecAliasRegistry Statistics: {} registered exec aliases, {} registered exec scopes, {} alias-to-scope mappings", 
+                exec_alias_registry.size(), exec_alias_registry.get_exec_scope_count(), exec_alias_registry.get_alias_to_scope_count());
+        
         // TODO: Store scopes for Layer 3
         
     } catch (const std::exception& e) {

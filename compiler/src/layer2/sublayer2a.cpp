@@ -7,12 +7,13 @@ namespace cprime {
 namespace layer2_sublayers {
 
 std::vector<Scope> sublayer2a(const std::map<std::string, std::vector<RawToken>>& streams,
-                              const StringTable& string_table) {
+                              const StringTable& string_table,
+                              ExecAliasRegistry& exec_registry) {
     using namespace layer2_internal;
     
     (void)string_table; // Suppress unused warning - no semantic analysis in Sublayer 2A
     
-    ScopeBuilder builder;
+    ScopeBuilder builder(exec_registry);
     
     // Initialize global scope - we start parsing inside the global scope body
     builder.scopes.emplace_back();
@@ -50,7 +51,39 @@ std::vector<Scope> sublayer2a(const std::map<std::string, std::vector<RawToken>>
             else if (raw_token._token == EToken::LEFT_BRACE) {
                 // Create header instruction from cache, enter new scope
                 auto header_instruction = builder.token_cache.create_instruction();
-                builder.enter_scope(ScopeType::BLOCK, header_instruction); // All scopes are BLOCK in Sublayer 2A
+                
+                // Check if this is an exec scope by examining first token in header
+                bool is_exec_scope = false;
+                if (!header_instruction._tokens.empty() && 
+                    header_instruction._tokens[0]._token == EToken::EXEC) {
+                    is_exec_scope = true;
+                }
+                
+                // Enter scope (always BLOCK type in Sublayer 2A)
+                builder.enter_scope(ScopeType::BLOCK, header_instruction);
+                
+                // If this is an exec scope, register it
+                if (is_exec_scope) {
+                    uint32_t new_scope_index = static_cast<uint32_t>(builder.scopes.size() - 1);
+                    builder.exec_registry.register_scope_index(new_scope_index);
+                    
+                    // Check if any token is EXEC_ALIAS and register alias mapping
+                    for (size_t i = 0; i < header_instruction._tokens.size(); ++i) {
+                        if (header_instruction._tokens[i]._token == EToken::EXEC_ALIAS) {
+                            // Get the ExecAliasIndex from the raw token
+                            uint32_t raw_token_index = header_instruction._tokens[i]._tokenIndex;
+                            if (raw_token_index < raw_tokens.size()) {
+                                const auto& raw_token_ref = raw_tokens[raw_token_index];
+                                if (std::holds_alternative<ExecAliasIndex>(raw_token_ref._literal_value)) {
+                                    ExecAliasIndex alias_idx = std::get<ExecAliasIndex>(raw_token_ref._literal_value);
+                                    builder.exec_registry.register_scope_index_to_exec_alias(alias_idx, new_scope_index);
+                                }
+                            }
+                            break; // Found EXEC_ALIAS, stop looking
+                        }
+                    }
+                }
+                
                 builder.token_cache.clear();
             }
             else if (raw_token._token == EToken::RIGHT_BRACE) {
