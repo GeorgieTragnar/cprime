@@ -2,6 +2,7 @@
 
 #include "layer0/compilation_parameters.h"
 #include "commons/dirty/string_table.h"
+#include "commons/dirty/exec_alias_registry.h"
 #include "commons/rawToken.h"
 #include "commons/logger.h"
 #include <map>
@@ -77,6 +78,12 @@ private:
     void log_compilation_end(bool success);
     void log_layer_start(const std::string& layer_name);
     void log_layer_end(const std::string& layer_name, bool success);
+    
+    // Detokenization testing
+    void test_detokenization_functionality();
+    
+    // Multi-script testing
+    void test_multiple_lua_scripts(ExecAliasRegistry& registry);
 };
 
 } // namespace cprime

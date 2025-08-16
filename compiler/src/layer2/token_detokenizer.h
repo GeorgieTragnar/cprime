@@ -26,6 +26,31 @@ public:
         const std::vector<Token>& tokens,
         const StringTable& string_table,
         const std::vector<RawToken>& raw_tokens);
+    
+    /**
+     * Convert a vector of raw tokens directly back to original source string.
+     * @param raw_tokens The raw tokens to detokenize
+     * @param string_table String table for resolving identifiers and literals
+     * @return Reconstructed source string
+     */
+    static std::string detokenize_raw_tokens_to_string(
+        const std::vector<RawToken>& raw_tokens,
+        const StringTable& string_table);
+    
+    /**
+     * Test scripts for demonstrating different Lua execution behaviors.
+     */
+    static std::string get_test_script_1();  // Type Analysis Engine
+    static std::string get_test_script_2();  // Code Generator with Statistics
+    static std::string get_test_script_3();  // Interface Builder with Validation
+    
+    /**
+     * Convert a single raw token back to its original string representation.
+     * Public for testing purposes.
+     */
+    static std::string raw_token_to_original_string(
+        const RawToken& raw_token,
+        const StringTable& string_table);
 
 private:
     /**

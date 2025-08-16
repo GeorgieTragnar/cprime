@@ -9,61 +9,194 @@ std::string TokenDetokenizer::detokenize_to_string(
     const StringTable& string_table,
     const std::vector<RawToken>& raw_tokens) {
     
-    // Simplified implementation for now - just return placeholder Lua script
-    (void)tokens;
-    (void)string_table;
-    (void)raw_tokens;
+    if (tokens.empty()) {
+        return "";
+    }
     
-    // Return a simple Lua script that demonstrates the functionality
+    std::string result;
+    result.reserve(1024); // Pre-allocate some space for efficiency
+    
+    for (size_t i = 0; i < tokens.size(); ++i) {
+        const Token& token = tokens[i];
+        
+        // Convert this token back to its original string
+        std::string token_string = token_to_original_string(token, string_table, raw_tokens);
+        
+        // Append to result
+        result += token_string;
+        
+        // Debug: Log individual token reconstruction (can be disabled in production)
+        // std::cout << "[" << i << "] " << token_string << std::endl;
+    }
+    
+    return result;
+}
+
+std::string TokenDetokenizer::detokenize_raw_tokens_to_string(
+    const std::vector<RawToken>& raw_tokens,
+    const StringTable& string_table) {
+    
+    if (raw_tokens.empty()) {
+        return "";
+    }
+    
+    std::string result;
+    result.reserve(1024); // Pre-allocate some space for efficiency
+    
+    for (size_t i = 0; i < raw_tokens.size(); ++i) {
+        const RawToken& raw_token = raw_tokens[i];
+        
+        // Convert this raw token back to its original string
+        std::string token_string = raw_token_to_original_string(raw_token, string_table);
+        
+        // Append to result
+        result += token_string;
+        
+        // Debug: Log individual token reconstruction (can be disabled in production)
+        // std::cout << "[" << i << "] " << token_string << std::endl;
+    }
+    
+    return result;
+}
+
+std::string TokenDetokenizer::get_test_script_1() {
     return R"LUA(
--- Dynamic Lua script for processing string vector
-print("🚀 Lua exec block is RUNNING!")
-print("📝 Processing dynamic parameter vector...")
-
--- Get parameter count dynamically
+-- Test Script 1: Type Analysis and Class Generation
+print("🔍 SCRIPT 1: Type Analysis Engine")
 local param_count = 0
-while params[param_count] do
-    param_count = param_count + 1
-end
+while params[param_count] do param_count = param_count + 1 end
 
-print("📦 Parameters received:", param_count)
+math.randomseed(os.time())
+local analysis_id = math.random(1000, 9999)
+print("📊 Analysis ID:", analysis_id)
 
--- Process each parameter dynamically
-local processed_types = {}
+local categories = {primitives = {}, objects = {}, templates = {}}
 for i = 0, param_count - 1 do
     if params[i] then
         local param = params[i]
-        print("   [" .. i .. "] Processing:", param)
-        
-        -- Store for later use
-        table.insert(processed_types, param)
-        
-        -- Generate code based on parameter
-        if string.find(param, "template") then
-            cprime.emit_line("// Template type detected: " .. param)
-        elseif string.find(param, "<") then
-            cprime.emit_line("// Generic type detected: " .. param)  
+        if string.find(param, "int") or string.find(param, "float") or string.find(param, "bool") then
+            table.insert(categories.primitives, param)
+        elseif string.find(param, "template") or string.find(param, "<") then
+            table.insert(categories.templates, param)
         else
-            cprime.emit_line("// Basic type detected: " .. param)
+            table.insert(categories.objects, param)
         end
+        print("   🎯 Categorized:", param)
     end
 end
 
--- Generate summary function
-cprime.emit_line("")
-cprime.emit_line("// Auto-generated function from " .. param_count .. " parameters")
-cprime.emit_line("func<void> process_types() {")
-for i, type_name in ipairs(processed_types) do
-    cprime.emit_line("    // Process " .. type_name .. " (param " .. tostring(i-1) .. ")")
-end
+cprime.emit_line("// Type Analysis Report #" .. analysis_id)
+cprime.emit_line("namespace analysis_" .. analysis_id .. " {")
+cprime.emit_line("    const int primitive_count = " .. #categories.primitives .. ";")
+cprime.emit_line("    const int template_count = " .. #categories.templates .. ";")
+cprime.emit_line("    const int object_count = " .. #categories.objects .. ";")
 cprime.emit_line("}")
 
-print("✅ Lua processing completed!")
-print("🎯 Generated code for " .. param_count .. " types")
-
--- Return result string to C++
-return "SUCCESS: Processed " .. param_count .. " parameters: " .. table.concat(processed_types, ", ")
+return "ANALYSIS_" .. analysis_id .. ": Found " .. #categories.primitives .. " primitives, " .. #categories.templates .. " templates, " .. #categories.objects .. " objects"
 )LUA";
+}
+
+std::string TokenDetokenizer::get_test_script_2() {
+    return R"LUA(
+-- Test Script 2: Code Generator with Statistics
+print("⚙️ SCRIPT 2: Code Generator")
+local param_count = 0
+while params[param_count] do param_count = param_count + 1 end
+
+math.randomseed(os.time() + 123)
+local generator_id = math.random(2000, 2999)
+print("🏭 Generator ID:", generator_id)
+
+local total_complexity = 0
+local function_count = 0
+for i = 0, param_count - 1 do
+    if params[i] then
+        local param = params[i]
+        local complexity = string.len(param) + math.random(1, 10)
+        total_complexity = total_complexity + complexity
+        function_count = function_count + 1
+        
+        print("   🛠️ Generating for:", param, "(complexity:", complexity .. ")")
+        cprime.emit_line("func<auto> process_" .. string.gsub(param, "[^%w]", "_") .. "_" .. i .. "() {")
+        cprime.emit_line("    // Generated function for " .. param .. " (complexity: " .. complexity .. ")")
+        cprime.emit_line("    return create_" .. string.gsub(param, "[^%w]", "_") .. "();")
+        cprime.emit_line("}")
+    end
+end
+
+local avg_complexity = function_count > 0 and (total_complexity / function_count) or 0
+cprime.emit_line("")
+cprime.emit_line("// Generator Statistics")
+cprime.emit_line("constexpr int TOTAL_FUNCTIONS = " .. function_count .. ";")
+cprime.emit_line("constexpr int TOTAL_COMPLEXITY = " .. total_complexity .. ";")
+cprime.emit_line("constexpr double AVG_COMPLEXITY = " .. string.format("%.2f", avg_complexity) .. ";")
+
+return "GENERATOR_" .. generator_id .. ": Generated " .. function_count .. " functions with total complexity " .. total_complexity .. " (avg: " .. string.format("%.2f", avg_complexity) .. ")"
+)LUA";
+}
+
+std::string TokenDetokenizer::get_test_script_3() {
+    return R"LUA(
+-- Test Script 3: Interface Builder with Validation
+print("🏗️ SCRIPT 3: Interface Builder")
+local param_count = 0
+while params[param_count] do param_count = param_count + 1 end
+
+math.randomseed(os.time() + 456)
+local interface_id = math.random(3000, 3999)
+print("🎨 Interface ID:", interface_id)
+
+local validation_rules = {}
+local interface_methods = {}
+for i = 0, param_count - 1 do
+    if params[i] then
+        local param = params[i]
+        local method_name = "handle_" .. string.gsub(param, "[^%w]", "_")
+        local validation_level = math.random(1, 5)
+        
+        table.insert(interface_methods, method_name)
+        table.insert(validation_rules, validation_level)
+        
+        print("   🎭 Building interface for:", param, "(validation level:", validation_level .. ")")
+    end
+end
+
+cprime.emit_line("// Interface Definition #" .. interface_id)
+cprime.emit_line("class IProcessor" .. interface_id .. " {")
+cprime.emit_line("public:")
+for i, method in ipairs(interface_methods) do
+    local validation = validation_rules[i]
+    cprime.emit_line("    virtual bool " .. method .. "() = 0;  // Validation level: " .. validation)
+end
+cprime.emit_line("    virtual ~IProcessor" .. interface_id .. "() = default;")
+cprime.emit_line("};")
+
+local total_validation = 0
+for _, v in ipairs(validation_rules) do total_validation = total_validation + v end
+
+return "INTERFACE_" .. interface_id .. ": Built " .. #interface_methods .. " methods with total validation score " .. total_validation
+)LUA";
+}
+
+std::string TokenDetokenizer::raw_token_to_original_string(
+    const RawToken& raw_token,
+    const StringTable& string_table) {
+    
+    // For identifiers and literals, resolve from the literal value
+    if (raw_token._token == EToken::IDENTIFIER ||
+        raw_token._token == EToken::STRING_LITERAL ||
+        raw_token._token == EToken::INT_LITERAL ||
+        raw_token._token == EToken::FLOAT_LITERAL ||
+        raw_token._token == EToken::CHAR_LITERAL ||
+        raw_token._token == EToken::TRUE_LITERAL ||
+        raw_token._token == EToken::FALSE_LITERAL ||
+        raw_token._token == EToken::COMMENT) {
+        
+        return format_literal_value(raw_token._literal_value, string_table);
+    }
+    
+    // For keywords and operators, convert back to original symbol
+    return etoken_to_original_symbol(raw_token._token);
 }
 
 std::string TokenDetokenizer::token_to_original_string(
@@ -156,9 +289,15 @@ std::string TokenDetokenizer::etoken_to_original_symbol(EToken token) {
         case EToken::COLON:          return ":";
         case EToken::ARROW:          return "->";
         
-        // Whitespace
+        // Whitespace and line endings
         case EToken::SPACE:          return " ";
         case EToken::TAB:            return "\t";
+        case EToken::NEWLINE:        return "\n";
+        case EToken::CARRIAGE_RETURN: return "\r";
+        
+        // Special tokens
+        case EToken::EOF_TOKEN:      return "";  // EOF doesn't contribute to source
+        case EToken::INVALID:        return "";  // Invalid tokens should not appear in output
         
         default:                     return "UNKNOWN_TOKEN";
     }
