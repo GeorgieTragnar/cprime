@@ -1,0 +1,16 @@
+// Test exec alias call execution
+exec code_gen<int, string, MyClass> {
+    -- This is a Lua comment
+    local param_count = 0
+    while params[param_count] do
+        param_count = param_count + 1
+    end
+    return "int generated_var = 42; string msg = \"Generated with \" .. param_count .. \" params\";"
+}
+
+int main() {
+    // This should trigger exec execution processing
+    code_gen<int, string>();
+    
+    print("Hello from main");
+}

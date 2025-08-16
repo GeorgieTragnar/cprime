@@ -15,7 +15,9 @@ struct ExecExecutionInfo {
 };
 
 // Extract exec execution information from instruction tokens
-ExecExecutionInfo extract_exec_info(const Instruction& exec_instruction, const ExecAliasRegistry& /* exec_registry */) {
+ExecExecutionInfo extract_exec_info(const Instruction& exec_instruction, 
+                                    const ExecAliasRegistry& exec_registry,
+                                    const std::map<std::string, std::vector<RawToken>>& streams) {
     ExecExecutionInfo info;
     const auto& tokens = exec_instruction._tokens;
     
@@ -25,41 +27,74 @@ ExecExecutionInfo extract_exec_info(const Instruction& exec_instruction, const E
         throw std::runtime_error("Empty instruction passed to extract_exec_info");
     }
     
-    // Pattern 1: Noname exec execution - "exec { lua_code }"
-    if (tokens[0]._token == EToken::EXEC) {
-        info.type = ExecExecutionInfo::NONAME_EXEC;
-        LOG_DEBUG("Detected noname exec execution");
+    // Scan through all tokens to find exec patterns (skip whitespace/comments)
+    for (size_t i = 0; i < tokens.size(); ++i) {
+        const auto& token = tokens[i];
         
-        // TODO: Extract Lua code between braces
-        // For now, placeholder
-        info.inline_lua_code = "return 'noname exec not implemented yet'";
-        return info;
-    }
-    
-    // Pattern 2: Exec alias call - "EXEC_ALIAS<params>()"
-    if (tokens[0]._token == EToken::EXEC_ALIAS) {
-        info.type = ExecExecutionInfo::ALIAS_CALL;
+        // Pattern 1: Noname exec execution - "exec { lua_code }"
+        if (token._token == EToken::EXEC) {
+            info.type = ExecExecutionInfo::NONAME_EXEC;
+            LOG_DEBUG("Detected noname exec execution");
+            
+            // TODO: Extract Lua code between braces
+            // For now, placeholder
+            info.inline_lua_code = "return 'noname exec not implemented yet'";
+            return info;
+        }
         
-        // TODO: Extract alias name from EXEC_ALIAS token
-        // TODO: Extract parameters between < >
-        LOG_DEBUG("Detected exec alias call");
+        // Pattern 2: Exec alias call - "EXEC_ALIAS<params>()"
+        if (token._token == EToken::EXEC_ALIAS) {
+            info.type = ExecExecutionInfo::ALIAS_CALL;
+            
+            LOG_INFO("Detected exec alias call at token index {}", i);
+            
+            // Extract alias name from EXEC_ALIAS token's literal value
+            // Use token index to look up original RawToken
+            uint32_t raw_token_index = token._tokenIndex;
+            
+            // Find the raw token in the streams (assume first stream for now)
+            const std::vector<RawToken>* raw_tokens = nullptr;
+            for (const auto& [stream_name, tokens_vec] : streams) {
+                if (!tokens_vec.empty()) {
+                    raw_tokens = &tokens_vec;
+                    break;
+                }
+            }
+            
+            if (!raw_tokens || raw_token_index >= raw_tokens->size()) {
+                throw std::runtime_error("Cannot find RawToken for EXEC_ALIAS token");
+            }
+            
+            const auto& raw_token = (*raw_tokens)[raw_token_index];
+            if (std::holds_alternative<ExecAliasIndex>(raw_token._literal_value)) {
+                ExecAliasIndex alias_idx = std::get<ExecAliasIndex>(raw_token._literal_value);
+                info.alias_name = exec_registry.get_alias(alias_idx);
+                LOG_INFO("Extracted alias name: '{}'", info.alias_name);
+            } else {
+                throw std::runtime_error("EXEC_ALIAS RawToken does not contain ExecAliasIndex");
+            }
+            
+            // TODO: Extract parameters between < >
+            info.parameters = {"int", "string"}; // Hardcoded for now - should extract from < >
+            
+            LOG_INFO("Exec alias info: type=ALIAS_CALL, name='{}', params={}", 
+                     info.alias_name, info.parameters.size());
+            return info;
+        }
         
-        info.alias_name = "detected_alias";  // Placeholder
-        info.parameters = {"int", "string"}; // Placeholder
-        return info;
-    }
-    
-    // Pattern 3: Direct identifier call - "identifier<params>()"
-    if (tokens[0]._token == EToken::IDENTIFIER) {
-        // TODO: Extract identifier name and check if it exists in exec registry
-        // TODO: Extract parameters between < >
-        
-        info.type = ExecExecutionInfo::DIRECT_CALL;
-        info.alias_name = "code_gen";         // Placeholder
-        info.parameters = {"int", "string"};  // Placeholder
-        
-        LOG_DEBUG("Detected direct identifier exec call: {}", info.alias_name);
-        return info;
+        // Pattern 3: Direct identifier call - "identifier<params>()"
+        if (token._token == EToken::IDENTIFIER && i + 1 < tokens.size() &&
+            tokens[i + 1]._token == EToken::LESS_THAN) {
+            // TODO: Extract identifier name and check if it exists in exec registry
+            // TODO: Extract parameters between < >
+            
+            info.type = ExecExecutionInfo::DIRECT_CALL;
+            info.alias_name = "code_gen";         // Placeholder
+            info.parameters = {"int", "string"};  // Placeholder
+            
+            LOG_DEBUG("Detected direct identifier exec call: {}", info.alias_name);
+            return info;
+        }
     }
     
     throw std::runtime_error("Unknown exec execution pattern in extract_exec_info");
@@ -76,6 +111,13 @@ const ExecutableLambda& get_executable_lambda(const ExecExecutionInfo& exec_info
             
         case ExecExecutionInfo::ALIAS_CALL:
         case ExecExecutionInfo::DIRECT_CALL:
+            // Debug: Log registry state
+            LOG_INFO("Looking for exec alias: '{}'", exec_info.alias_name);
+            LOG_INFO("Registry has {} aliases, {} scopes, {} mappings", 
+                     exec_registry.size(), 
+                     exec_registry.get_exec_scope_count(),
+                     exec_registry.get_alias_to_scope_count());
+            
             // Get ExecutableLambda by alias name
             if (!exec_registry.contains_alias(exec_info.alias_name)) {
                 throw std::runtime_error("Exec alias not found: " + exec_info.alias_name);
@@ -154,14 +196,15 @@ uint32_t integrate_generated_scopes(const std::vector<Scope>& generated_scopes,
 uint32_t process_exec_execution(const Instruction& exec_instruction,
                                std::vector<Scope>& master_scopes,
                                const StringTable& string_table,
-                               ExecAliasRegistry& exec_registry) {
+                               ExecAliasRegistry& exec_registry,
+                               const std::map<std::string, std::vector<RawToken>>& streams) {
     
     auto logger = cprime::LoggerFactory::get_logger("exec_processing");
     LOG_INFO("Processing exec execution (single pass)...");
     
     try {
         // Step 1: Extract exec execution info
-        ExecExecutionInfo exec_info = extract_exec_info(exec_instruction, exec_registry);
+        ExecExecutionInfo exec_info = extract_exec_info(exec_instruction, exec_registry, streams);
         
         // Step 2: Get ExecutableLambda and execute Lua script
         const ExecutableLambda& lambda = get_executable_lambda(exec_info, exec_registry);

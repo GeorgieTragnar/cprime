@@ -99,11 +99,9 @@ bool CompilerOrchestrator::run_layer1() {
         LOG_DEBUG("Tokenizing stream: {}", stream_id);
         
         try {
-            // Create ExecAliasRegistry for exec alias detection
-            ExecAliasRegistry exec_alias_registry;
-            
+            // Use persistent exec alias registry for exec alias detection
             // Call the new standardized layer1 function
-            auto tokens = layer1(stream, string_table_, exec_alias_registry);
+            auto tokens = layer1(stream, string_table_, exec_alias_registry_);
             
             LOG_INFO("Stream '{}' tokenized: {} tokens generated", stream_id, tokens.size());
             
@@ -152,11 +150,9 @@ bool CompilerOrchestrator::run_layer2() {
     LOG_DEBUG("Starting structure building of {} token streams", token_streams_.size());
     
     try {
-        // Create ExecAliasRegistry for exec alias processing
-        ExecAliasRegistry exec_alias_registry;
-        
+        // Use persistent exec alias registry for exec alias processing
         // Call Layer 2 to build scope structure
-        auto scopes = layer2(token_streams_, string_table_, exec_alias_registry);
+        auto scopes = layer2(token_streams_, string_table_, exec_alias_registry_);
         
         LOG_INFO("Layer 2 completed: {} scopes built", scopes.size());
         
@@ -169,12 +165,12 @@ bool CompilerOrchestrator::run_layer2() {
         
         // Log exec scope registration statistics
         LOG_INFO("ExecAliasRegistry Statistics: {} registered exec aliases, {} registered exec scopes, {} alias-to-scope mappings", 
-                exec_alias_registry.size(), exec_alias_registry.get_exec_scope_count(), exec_alias_registry.get_alias_to_scope_count());
+                exec_alias_registry_.size(), exec_alias_registry_.get_exec_scope_count(), exec_alias_registry_.get_alias_to_scope_count());
         
         // Test on-demand execution of prepared Lua scripts
-        if (exec_alias_registry.get_exec_scope_count() > 0) {
+        if (exec_alias_registry_.get_exec_scope_count() > 0) {
             LOG_INFO("Testing on-demand ExecutableLambda execution:");
-            for (const auto& [scope_index, executable_lambda] : exec_alias_registry.get_scope_to_lambda_map()) {
+            for (const auto& [scope_index, executable_lambda] : exec_alias_registry_.get_scope_to_lambda_map()) {
                 std::vector<std::string> test_params = {"int", "string", "MyClass"};
                 LOG_INFO("=== ON-DEMAND EXECUTION TEST ===");
                 LOG_INFO("Executing prepared Lua script for scope {}", scope_index);
@@ -193,7 +189,7 @@ bool CompilerOrchestrator::run_layer2() {
         
         // Focus on exec block processing instead of multi-script testing
         // LOG_INFO("=== MULTI-SCRIPT TESTING ===");
-        // test_multiple_lua_scripts(exec_alias_registry);
+        // test_multiple_lua_scripts(exec_alias_registry_);
         
         // TODO: Store scopes for Layer 3
         

@@ -72,7 +72,8 @@ namespace layer2_contextualization {
     uint32_t process_exec_execution(const Instruction& exec_instruction,
                                    std::vector<Scope>& master_scopes,
                                    const StringTable& string_table,
-                                   ExecAliasRegistry& exec_registry);
+                                   ExecAliasRegistry& exec_registry,
+                                   const std::map<std::string, std::vector<RawToken>>& streams);
 }
 
 // Internal helper structures for Sublayer 2A

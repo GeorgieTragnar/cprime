@@ -41,38 +41,49 @@ bool is_exec_execution_pattern(const Instruction& instruction) {
     const auto& tokens = instruction._tokens;
     if (tokens.empty()) return false;
     
-    // Pattern 1: Noname exec execution - "exec { ... }"
-    // Look for: EXEC + LEFT_BRACE
-    if (tokens.size() >= 2 && 
-        tokens[0]._token == EToken::EXEC && 
-        tokens[1]._token == EToken::LEFT_BRACE) {
-        return true;
-    }
-    
-    // Pattern 2: Exec alias call - "EXEC_ALIAS<params>()"
-    // Look for: EXEC_ALIAS + LESS_THAN + ... + GREATER_THAN + LEFT_PAREN + RIGHT_PAREN
-    if (tokens.size() >= 4 && 
-        tokens[0]._token == EToken::EXEC_ALIAS) {
-        // Find template parameters and function call syntax
-        for (size_t i = 1; i < tokens.size() - 1; ++i) {
-            if (tokens[i]._token == EToken::LEFT_PAREN && 
-                i > 0 && tokens[i-1]._token == EToken::GREATER_THAN) {
-                return true;
+    // Scan through all tokens to find exec patterns (skip whitespace/comments)
+    for (size_t i = 0; i < tokens.size(); ++i) {
+        const auto& token = tokens[i];
+        
+        // Pattern 1: Noname exec execution - "exec { ... }"
+        // Look for: EXEC + LEFT_BRACE
+        if (token._token == EToken::EXEC && i + 1 < tokens.size()) {
+            // Look for LEFT_BRACE after EXEC (may have whitespace in between)
+            for (size_t j = i + 1; j < tokens.size(); ++j) {
+                if (tokens[j]._token == EToken::LEFT_BRACE) {
+                    return true;
+                }
+                // Stop if we hit non-whitespace/non-space tokens
+                if (tokens[j]._token != EToken::SPACE && 
+                    tokens[j]._token != EToken::NEWLINE) {
+                    break;
+                }
             }
         }
-    }
-    
-    // Pattern 3: Direct identifier exec call - "identifier<params>()"
-    // Look for: IDENTIFIER + LESS_THAN + ... + GREATER_THAN + LEFT_PAREN + RIGHT_PAREN
-    // Note: This requires checking if identifier exists in exec registry (will be done in process_exec_execution)
-    if (tokens.size() >= 4 && 
-        tokens[0]._token == EToken::IDENTIFIER &&
-        tokens[1]._token == EToken::LESS_THAN) {
-        // Find template parameters and function call syntax
-        for (size_t i = 2; i < tokens.size() - 1; ++i) {
-            if (tokens[i]._token == EToken::LEFT_PAREN && 
-                i > 0 && tokens[i-1]._token == EToken::GREATER_THAN) {
-                return true;  // Potential exec call (will validate in processing)
+        
+        // Pattern 2: Exec alias call - "EXEC_ALIAS<params>()"
+        // Look for: EXEC_ALIAS + LESS_THAN + ... + GREATER_THAN + LEFT_PAREN + RIGHT_PAREN
+        if (token._token == EToken::EXEC_ALIAS) {
+            // Find template parameters and function call syntax
+            for (size_t j = i + 1; j < tokens.size() - 1; ++j) {
+                if (tokens[j]._token == EToken::LEFT_PAREN && 
+                    j > 0 && tokens[j-1]._token == EToken::GREATER_THAN) {
+                    return true;
+                }
+            }
+        }
+        
+        // Pattern 3: Direct identifier exec call - "identifier<params>()"
+        // Look for: IDENTIFIER + LESS_THAN + ... + GREATER_THAN + LEFT_PAREN + RIGHT_PAREN
+        // Note: This requires checking if identifier exists in exec registry (will be done in process_exec_execution)
+        if (token._token == EToken::IDENTIFIER && i + 1 < tokens.size() &&
+            tokens[i + 1]._token == EToken::LESS_THAN) {
+            // Find template parameters and function call syntax
+            for (size_t j = i + 2; j < tokens.size() - 1; ++j) {
+                if (tokens[j]._token == EToken::LEFT_PAREN && 
+                    j > 0 && tokens[j-1]._token == EToken::GREATER_THAN) {
+                    return true;  // Potential exec call (will validate in processing)
+                }
             }
         }
     }

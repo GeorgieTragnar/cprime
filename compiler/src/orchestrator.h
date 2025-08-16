@@ -57,6 +57,9 @@ private:
     // Token data from Layer 1 (passed to Layer 2)
     std::map<std::string, std::vector<RawToken>> token_streams_;
     
+    // Exec alias registry (shared across all layers)
+    ExecAliasRegistry exec_alias_registry_;
+    
     // TODO: Add CompilationContext ownership and management
     // TODO: Add proper error handling system
     

@@ -44,7 +44,7 @@ using namespace cprime::layer2_contextualization;
 // Sublayer 2C: Sequential instruction iteration and contextualization
 void sublayer2c(std::vector<Scope>& scopes, 
                 const StringTable& string_table,
-                const std::map<std::string, std::vector<RawToken>>& /* streams */,
+                const std::map<std::string, std::vector<RawToken>>& streams,
                 ExecAliasRegistry& exec_registry) {
     
     auto logger = cprime::LoggerFactory::get_logger("sublayer2c");
@@ -86,7 +86,7 @@ void sublayer2c(std::vector<Scope>& scopes,
                     LOG_INFO("exec execution detected - processing...");
                     
                     uint32_t generated_scope_index = process_exec_execution(
-                        instruction, scopes, string_table, exec_registry);
+                        instruction, scopes, string_table, exec_registry, streams);
                     
                     // Replace instruction with scope reference to generated code
                     instruction_variant = generated_scope_index;
