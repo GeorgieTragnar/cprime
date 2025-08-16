@@ -1,6 +1,7 @@
 #include "exec_alias_registry.h"
 #include <stdexcept>
 #include <algorithm>
+#include <sstream>
 
 // Forward declaration to avoid circular dependency
 extern "C" {
@@ -235,6 +236,8 @@ ExecAliasRegistry::Statistics ExecAliasRegistry::get_statistics() const {
 void ExecAliasRegistry::clear() {
     aliases_.clear();
     alias_to_index_.clear();
+    namespace_paths_.clear();
+    alias_reverse_map_.clear();
     scope_to_lambda_.clear();
     alias_to_scope_.clear();
 }
@@ -284,6 +287,150 @@ void ExecAliasRegistry::update_executable_lambda(uint32_t scope_index, const Exe
     }
     
     it->second = lambda;
+}
+
+// Namespace path system with anti-shadowing
+
+ExecAliasIndex ExecAliasRegistry::register_namespaced_alias(const std::vector<std::string>& namespace_path) {
+    if (namespace_path.empty()) {
+        throw std::invalid_argument("Namespace path cannot be empty");
+    }
+    
+    std::string alias_name = extract_alias_name(namespace_path);
+    
+    // Anti-shadowing protection: Check if alias exists in global scope
+    if (!is_global_namespace(namespace_path)) {
+        // Check if global alias already exists
+        for (ExecAliasIndex global_idx : alias_reverse_map_[alias_name]) {
+            if (is_global_namespace(namespace_paths_[global_idx.value])) {
+                throw std::runtime_error("Cannot register namespaced alias '" + alias_name + 
+                                       "' - global alias with same name already exists (anti-shadowing protection)");
+            }
+        }
+    }
+    
+    // Check for exact duplicate path
+    for (ExecAliasIndex existing_idx : alias_reverse_map_[alias_name]) {
+        if (namespace_paths_[existing_idx.value] == namespace_path) {
+            throw std::runtime_error("Duplicate namespace path registration: alias '" + alias_name + "'");
+        }
+    }
+    
+    // Create new index
+    ExecAliasIndex new_index;
+    new_index.value = static_cast<uint32_t>(namespace_paths_.size());
+    
+    // Store namespace path
+    namespace_paths_.push_back(namespace_path);
+    
+    // Update reverse map
+    alias_reverse_map_[alias_name].push_back(new_index);
+    
+    // Backward compatibility: also register simple alias if global scope
+    if (is_global_namespace(namespace_path)) {
+        if (alias_to_index_.find(alias_name) == alias_to_index_.end()) {
+            aliases_.push_back(alias_name);
+            alias_to_index_[alias_name] = new_index;
+        }
+    }
+    
+    return new_index;
+}
+
+bool ExecAliasRegistry::lookup_alias_with_context(const std::string& alias_name, 
+                                                 const std::vector<std::string>& current_namespace_context,
+                                                 std::vector<std::string>& found_namespace_path) const {
+    
+    // Get all namespace paths containing this alias name using reverse map
+    auto reverse_it = alias_reverse_map_.find(alias_name);
+    if (reverse_it == alias_reverse_map_.end()) {
+        // Fallback to backward compatibility
+        if (contains_alias(alias_name)) {
+            found_namespace_path = {alias_name};
+            return true;
+        }
+        return false;
+    }
+    
+    const std::vector<ExecAliasIndex>& candidate_indices = reverse_it->second;
+    
+    // Anti-shadowing rule: If global alias exists, always prefer it
+    for (ExecAliasIndex idx : candidate_indices) {
+        const std::vector<std::string>& candidate_path = namespace_paths_[idx.value];
+        if (is_global_namespace(candidate_path)) {
+            found_namespace_path = candidate_path;
+            return true;
+        }
+    }
+    
+    // Upward traversal: Try current namespace context from most specific to least specific
+    for (int i = static_cast<int>(current_namespace_context.size()); i >= 0; --i) {
+        std::vector<std::string> target_context(current_namespace_context.begin(), current_namespace_context.begin() + i);
+        
+        // Check if any candidate path matches this namespace level
+        for (ExecAliasIndex idx : candidate_indices) {
+            const std::vector<std::string>& candidate_path = namespace_paths_[idx.value];
+            if (namespace_path_matches(candidate_path, target_context)) {
+                found_namespace_path = candidate_path;
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
+
+ExecAliasIndex ExecAliasRegistry::get_alias_index_with_context(const std::string& alias_name,
+                                                              const std::vector<std::string>& current_namespace_context) const {
+    std::vector<std::string> found_namespace_path;
+    if (lookup_alias_with_context(alias_name, current_namespace_context, found_namespace_path)) {
+        // Find the ExecAliasIndex for this exact namespace path
+        std::string found_alias_name = extract_alias_name(found_namespace_path);
+        auto reverse_it = alias_reverse_map_.find(found_alias_name);
+        if (reverse_it != alias_reverse_map_.end()) {
+            for (ExecAliasIndex idx : reverse_it->second) {
+                if (namespace_paths_[idx.value] == found_namespace_path) {
+                    return idx;
+                }
+            }
+        }
+        // Fallback to backward compatibility
+        return get_alias_index(alias_name);
+    }
+    
+    // Return invalid index
+    ExecAliasIndex invalid_index;
+    invalid_index.value = UINT32_MAX;
+    return invalid_index;
+}
+
+// Anti-shadowing lookup helper methods
+
+bool ExecAliasRegistry::is_global_namespace(const std::vector<std::string>& namespace_path) const {
+    // Global namespace has only one element (the alias name)
+    return namespace_path.size() == 1;
+}
+
+std::string ExecAliasRegistry::extract_alias_name(const std::vector<std::string>& namespace_path) const {
+    if (namespace_path.empty()) {
+        throw std::invalid_argument("Cannot extract alias name from empty namespace path");
+    }
+    // Alias name is always the last element
+    return namespace_path.back();
+}
+
+bool ExecAliasRegistry::namespace_path_matches(const std::vector<std::string>& candidate_path, 
+                                              const std::vector<std::string>& current_context) const {
+    // candidate_path = [namespace_parts..., alias_name]
+    // current_context = [namespace_parts...]
+    
+    if (candidate_path.empty()) return false;
+    
+    // Extract namespace part (all but last element)
+    std::vector<std::string> candidate_namespace(candidate_path.begin(), candidate_path.end() - 1);
+    
+    // Check if candidate namespace matches current context exactly
+    return candidate_namespace == current_context;
 }
 
 } // namespace cprime

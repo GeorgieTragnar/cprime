@@ -69,16 +69,32 @@ void sublayer2c(std::vector<Scope>& scopes,
         // Contextualize scope header
         bool header_needs_exec = contextualize_header(scope._header);
         if (header_needs_exec) {
-            LOG_INFO("exec execution detected in header - processing...");
+            // Extract header exec alias information
+            HeaderExecAliasInfo exec_info = extract_header_exec_alias_info(scope._header, scope_index);
             
-            uint32_t generated_scope_index = process_exec_execution(
-                scope._header, scopes, string_table, exec_registry, streams, scope_index, true);
-            
-            // For header execution, this typically means the current scope should
-            // be replaced with or modified to reference the generated code.
-            // For noname exec headers, this is the primary execution pattern.
-            LOG_INFO("header exec execution: generated scope {}", generated_scope_index);
-            LOG_INFO("Header exec processing completed - scope generated successfully");
+            if (exec_info.is_header_exec) {
+                LOG_INFO("Header exec alias registration - creating namespaced alias");
+                LOG_INFO("Base alias: '{}', Namespaced alias components: {}", 
+                         exec_info.base_alias_name, exec_info.namespace_and_alias.size());
+                
+                // Register the new namespaced alias in the registry
+                ExecAliasIndex new_alias_index = exec_registry.register_namespaced_alias(exec_info.namespace_and_alias);
+                
+                // TODO: Store prefilled parameters and scope content requirement
+                // TODO: Link new alias to base executable lambda
+                
+                LOG_INFO("Registered namespaced alias with index: {}", new_alias_index.value);
+                LOG_INFO("Header exec alias registration completed successfully");
+            } else {
+                // Fallback to old execution logic for backward compatibility
+                LOG_INFO("exec execution detected in header - processing...");
+                
+                uint32_t generated_scope_index = process_exec_execution(
+                    scope._header, scopes, string_table, exec_registry, streams, scope_index, true);
+                
+                LOG_INFO("header exec execution: generated scope {}", generated_scope_index);
+                LOG_INFO("Header exec processing completed - scope generated successfully");
+            }
         }
         
         // Log scope body start

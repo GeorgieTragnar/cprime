@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <map>
 #include <cstdint>
 #include <cassert>
 
@@ -50,15 +51,42 @@ public:
     ExecAliasIndex register_alias(const std::string& alias_name);
     
     /**
+     * Register a namespace-qualified exec alias using namespace path.
+     * Examples: {"ns1", "ns2", "foo"} registers foo in ns1::ns2 namespace
+     * Single item {"foo"} registers in global scope
+     * Anti-shadowing: Global aliases are forever unique, namespace aliases can coexist
+     */
+    ExecAliasIndex register_namespaced_alias(const std::vector<std::string>& namespace_path);
+    
+    /**
      * Check if an alias name is already registered.
      */
     bool contains_alias(const std::string& alias_name) const;
+    
+    /**
+     * Smart namespace-aware alias lookup with anti-shadowing.
+     * Searches for alias_name with upward traversal:
+     * 1. Walk up current namespace hierarchy (most specific first)
+     * 2. Prefer global scope if exists (anti-shadowing protection)
+     * 3. Return most specific match found
+     * Returns true if found, sets found_namespace_path to the matching entry.
+     */
+    bool lookup_alias_with_context(const std::string& alias_name, 
+                                  const std::vector<std::string>& current_namespace_context,
+                                  std::vector<std::string>& found_namespace_path) const;
     
     /**
      * Get the index of a registered alias name.
      * Returns invalid index if alias is not registered.
      */
     ExecAliasIndex get_alias_index(const std::string& alias_name) const;
+    
+    /**
+     * Get the index of a namespace-qualified alias with anti-shadowing lookup.
+     * Returns invalid index if alias is not found in the context.
+     */
+    ExecAliasIndex get_alias_index_with_context(const std::string& alias_name,
+                                               const std::vector<std::string>& current_namespace_context) const;
     
     /**
      * Get the alias name associated with the given index.
@@ -153,12 +181,22 @@ public:
     }
 
 private:
-    std::vector<std::string> aliases_;                                    // Indexed alias storage
-    std::unordered_map<std::string, ExecAliasIndex> alias_to_index_;      // Fast lookup for registration
+    std::vector<std::string> aliases_;                                    // Indexed alias storage (for backward compatibility)
+    std::unordered_map<std::string, ExecAliasIndex> alias_to_index_;      // Fast lookup for registration (for backward compatibility)
+    
+    // Namespace path storage with reverse map for efficient lookup
+    std::vector<std::vector<std::string>> namespace_paths_;              // namespace paths, indexed by ExecAliasIndex
+    std::unordered_map<std::string, std::vector<ExecAliasIndex>> alias_reverse_map_;  // alias_name → indices of namespace paths containing it
     
     // Exec scope registration maps
     std::unordered_map<uint32_t, ExecutableLambda> scope_to_lambda_;      // Scope indices → executable lambdas
     std::unordered_map<uint32_t, uint32_t> alias_to_scope_;              // Exec alias indices → scope indices
+    
+    // Anti-shadowing lookup helpers
+    bool is_global_namespace(const std::vector<std::string>& namespace_path) const;
+    std::string extract_alias_name(const std::vector<std::string>& namespace_path) const;
+    bool namespace_path_matches(const std::vector<std::string>& candidate_path, 
+                               const std::vector<std::string>& current_context) const;
 };
 
 } // namespace cprime

@@ -56,6 +56,17 @@ namespace layer2_sublayers {
 // Layer 2 contextualization functions
 namespace layer2_contextualization {
     
+    // Structure for header exec alias information extraction
+    struct HeaderExecAliasInfo {
+        bool is_header_exec = false;
+        std::string base_alias_name;                    // e.g., "scope_analyzer"
+        std::vector<std::string> template_parameters;   // e.g., {"detailed"}
+        std::vector<std::string> namespace_and_alias;   // e.g., {"current_namespace", "scope_analyzer", "detailed"}
+    };
+    
+    // Extract header exec alias information for namespace registration
+    HeaderExecAliasInfo extract_header_exec_alias_info(const Instruction& header_instruction, uint32_t scope_index = 0);
+    
     // Header contextualization - processes scope headers to populate _contextualTokens
     // Returns true if header contains exec execution that needs processing
     bool contextualize_header(Instruction& header_instruction);
