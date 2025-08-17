@@ -102,6 +102,18 @@ inline std::string serialize_scope(const Scope& scope, uint32_t scope_index, int
         }
     }
     
+    // Display namespace context for deferred semantic tokenization debugging
+    oss << indent_str << "  namespace_context: [";
+    if (scope.namespace_context.empty()) {
+        oss << "GLOBAL";
+    } else {
+        for (size_t i = 0; i < scope.namespace_context.size(); ++i) {
+            if (i > 0) oss << "::";
+            oss << scope.namespace_context[i];
+        }
+    }
+    oss << "]\n";
+    
     oss << indent_str << "  contexts: " << scope._contexts.size() << "\n";
     oss << indent_str << "}";
     
@@ -141,4 +153,29 @@ inline std::string serialize_scope_stats(const std::vector<Scope>& scopes) {
 }
 
 } // namespace layer2validation
+
+// Compatibility layer for test generation that expects layer2_sublayers::validation
+namespace layer2_sublayers {
+namespace validation {
+
+// Re-export functions for compatibility
+using layer2validation::serialize_scope_vector;
+
+// Serialize function for test compatibility
+inline std::string serialize(const std::vector<Scope>& scopes) {
+    return layer2validation::serialize_scope_vector(scopes);
+}
+
+// Deserialize function for test compatibility 
+inline std::map<std::string, std::vector<RawToken>> deserialize(std::stringstream& input) {
+    // For now, this is a stub - Layer 2 input deserialization is complex
+    // since it takes the output of Layer 1 (map of RawToken vectors)
+    std::map<std::string, std::vector<RawToken>> empty_map;
+    (void)input; // Suppress unused parameter warning
+    return empty_map;
+}
+
+} // namespace validation
+} // namespace layer2_sublayers
+
 } // namespace cprime

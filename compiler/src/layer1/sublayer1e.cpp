@@ -17,6 +17,19 @@ static RawToken create_raw_token(EToken token, ERawToken raw_token, uint32_t lin
     return result;
 }
 
+// Helper function to create RawToken with unresolved content for deferred tokenization
+static RawToken create_unresolved_token(ERawToken raw_token, uint32_t line, uint32_t column, uint32_t position, const std::string& content) {
+    RawToken result;
+    result._token = EToken::CHUNK;  // Explicit token for unresolved chunks awaiting context-aware resolution
+    result._raw_token = raw_token;
+    result._line = line;
+    result._column = column;
+    result._position = position;
+    result.unresolved_content = content;
+    result._literal_value = std::monostate{};
+    return result;
+}
+
 // Helper function to create RawToken with value
 template<typename T>
 static RawToken create_raw_token_with_value(EToken token, ERawToken raw_token, uint32_t line, uint32_t column, uint32_t position, T value) {
@@ -30,7 +43,9 @@ static RawToken create_raw_token_with_value(EToken token, ERawToken raw_token, u
     return result;
 }
 
-// Layer 1E: Extract keywords and convert remaining strings to identifiers
+// Layer 1E: Preserve identifier chunks as ERawToken for deferred semantic tokenization
+// ARCHITECTURAL CHANGE: No longer does keyword/identifier/exec_alias resolution in Layer 1
+// All identifier-like strings are preserved as unresolved content for Layer 2 context-aware resolution
 std::vector<RawToken> sublayer1e(const std::vector<ProcessingChunk>& input, StringTable& string_table, ExecAliasRegistry& exec_alias_registry) {
     
     std::vector<RawToken> result;
@@ -79,51 +94,11 @@ std::vector<RawToken> sublayer1e(const std::vector<ProcessingChunk>& input, Stri
                 
                 std::string identifier = str.substr(id_start, id_end - id_start);
                 
-                // Check if it's a keyword using centralized lookup
-                EToken token_type = string_to_etoken(identifier);
-                if (token_type != EToken::INVALID) {
-                    ERawToken raw_type;
-                    
-                    // Determine ERawToken category
-                    if (token_type == EToken::TRUE_LITERAL || 
-                        token_type == EToken::FALSE_LITERAL || 
-                        token_type == EToken::NULLPTR_LITERAL) {
-                        raw_type = ERawToken::LITERAL;
-                        
-                        // Create appropriate literal value
-                        RawToken token;
-                        if (token_type == EToken::TRUE_LITERAL) {
-                            token = create_raw_token_with_value(token_type, raw_type, current_line, 
-                                                              current_column, chunk.start_pos + id_start, true);
-                        } else if (token_type == EToken::FALSE_LITERAL) {
-                            token = create_raw_token_with_value(token_type, raw_type, current_line, 
-                                                              current_column, chunk.start_pos + id_start, false);
-                        } else { // NULLPTR_LITERAL
-                            token = create_raw_token(token_type, raw_type, current_line, 
-                                                   current_column, chunk.start_pos + id_start);
-                        }
-                        result.push_back(std::move(token));
-                    } else {
-                        raw_type = ERawToken::KEYWORD;
-                        RawToken token = create_raw_token(token_type, raw_type, current_line, 
-                                                        current_column, chunk.start_pos + id_start);
-                        result.push_back(std::move(token));
-                    }
-                } else if (exec_alias_registry.contains_alias(identifier)) {
-                    // It's a registered exec alias - create EXEC_ALIAS token
-                    ExecAliasIndex alias_index = exec_alias_registry.get_alias_index(identifier);
-                    RawToken token = create_raw_token_with_value(EToken::EXEC_ALIAS, ERawToken::KEYWORD, 
-                                                               current_line, current_column, 
-                                                               chunk.start_pos + id_start, alias_index);
-                    result.push_back(std::move(token));
-                } else {
-                    // It's a regular identifier - intern the identifier string
-                    StringIndex identifier_index = string_table.intern(identifier);
-                    RawToken token = create_raw_token_with_value(EToken::IDENTIFIER, ERawToken::IDENTIFIER, 
-                                                               current_line, current_column, 
-                                                               chunk.start_pos + id_start, identifier_index);
-                    result.push_back(std::move(token));
-                }
+                // DEFERRED SEMANTIC TOKENIZATION: Preserve all identifier-like chunks
+                // Layer 2 will resolve these with proper namespace context
+                RawToken token = create_unresolved_token(ERawToken::IDENTIFIER, current_line, 
+                                                       current_column, chunk.start_pos + id_start, identifier);
+                result.push_back(std::move(token));
                 
                 pos = id_end;
             } else {

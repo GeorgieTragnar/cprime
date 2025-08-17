@@ -18,6 +18,9 @@ struct RawToken {
 	uint32_t _column = UINT32_MAX;
 	uint32_t _position = UINT32_MAX;
 	
+	// For deferred semantic tokenization - preserves unresolved identifier chunks
+	std::string unresolved_content;
+	
 	std::variant<
 		std::monostate,                // No value (for non-literal tokens)
 		// Integer literal types

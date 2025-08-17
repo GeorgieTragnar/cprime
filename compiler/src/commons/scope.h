@@ -2,6 +2,8 @@
 
 #include <variant>
 #include <memory>
+#include <vector>
+#include <string>
 #include "instruction.h"
 #include "context.h"
 
@@ -13,6 +15,9 @@ struct Scope {
 	uint32_t _parentScopeIndex;
 	std::vector<std::variant<Instruction, uint32_t>> _instructions; // it holds instructions or index for nested scope
 	std::vector<std::shared_ptr<Context>> _contexts;
+	
+	// For deferred semantic tokenization - hierarchical namespace context
+	std::vector<std::string> namespace_context; // e.g., ["std", "containers"] for nested namespaces
 };
 
 } // namespace cprime

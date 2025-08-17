@@ -1,5 +1,6 @@
 #include "layer2.h"
 #include "../commons/enum/token.h"
+#include "../commons/dirty/string_table.h"
 #include <cassert>
 #include <iostream>
 
@@ -195,6 +196,41 @@ Instruction TokenCache::create_instruction() {
     return instruction;
 }
 
+// Namespace detection logic for hierarchical processing
+std::string detect_namespace_creation(const Instruction& header) {
+    // PHASE 4: Detect what namespace this scope creates by examining header patterns
+    // Legal namespace-creating declarations:
+    // 1. "namespace IdentifierName" - creates named namespace
+    // 2. "class ClassName" - creates ClassName:: namespace  
+    // 3. "struct StructName" - creates StructName:: namespace
+    // 4. ":: IdentifierName" - namespace operator prepending (TODO: future)
+    
+    const auto& tokens = header._tokens;
+    
+    // Look for CHUNK + SPACE + CHUNK patterns (keyword + identifier)
+    for (size_t i = 0; i < tokens.size(); ++i) {
+        if (tokens[i]._token == EToken::CHUNK && 
+            i + 2 < tokens.size() && 
+            tokens[i + 1]._token == EToken::SPACE &&
+            tokens[i + 2]._token == EToken::CHUNK) {
+            
+            // This is a CHUNK SPACE CHUNK pattern
+            // We need to check what the first CHUNK contains to determine if it's namespace-creating
+            // TODO: Access unresolved_content from RawToken to check actual content
+            
+            // For now, we know this could be a namespace-creating scope
+            // Return the second CHUNK's content as the namespace name (placeholder)
+            // In Phase 4 implementation, we'll resolve: 
+            // - First CHUNK: check if it's "namespace", "class", "struct"
+            // - Second CHUNK: extract the identifier name
+            
+            return "detected_scope_name"; // Placeholder - will be actual name from second CHUNK
+        }
+    }
+    
+    return ""; // No namespace-creating pattern detected
+}
+
 void ScopeBuilder::enter_scope(const Instruction& header) {
     // Store current parent scope index before creating new scope
     uint32_t parent_scope_index = current_scope_index;
@@ -204,6 +240,17 @@ void ScopeBuilder::enter_scope(const Instruction& header) {
     new_scope._header = header;
     new_scope._footer = Instruction{}; // Will be set on exit
     new_scope._parentScopeIndex = parent_scope_index;
+    
+    // HIERARCHICAL NAMESPACE PROCESSING: Inherit namespace context from parent
+    if (parent_scope_index < scopes.size()) {
+        new_scope.namespace_context = scopes[parent_scope_index].namespace_context;
+    }
+    
+    // Check if this scope creates a new namespace and update context
+    std::string detected_namespace = detect_namespace_creation(header);
+    if (!detected_namespace.empty()) {
+        new_scope.namespace_context.push_back(detected_namespace);
+    }
     
     uint32_t new_scope_index = static_cast<uint32_t>(scopes.size());
     scopes.push_back(new_scope);

@@ -161,6 +161,7 @@ enum class EToken : uint16_t {
     
     // Special
     IDENTIFIER = 420,
+    CHUNK,              // Unresolved identifier chunk awaiting context-aware resolution
     COMMENT,
     NEWLINE,
     EOF_TOKEN

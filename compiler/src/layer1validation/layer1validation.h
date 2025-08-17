@@ -86,6 +86,7 @@ inline std::string etoken_to_string(EToken token) {
         case EToken::SCOPE_RESOLUTION: return "SCOPE_RESOLUTION";
         case EToken::FIELD_LINK: return "FIELD_LINK";
         case EToken::IDENTIFIER: return "IDENTIFIER";
+        case EToken::CHUNK: return "CHUNK";
         case EToken::COMMENT: return "COMMENT";
         case EToken::EOF_TOKEN: return "EOF_TOKEN";
         // Primitive type keywords
