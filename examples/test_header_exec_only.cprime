@@ -1,0 +1,29 @@
+// Meta-template for processing other exec declarations
+exec template<...> {};
+
+// Template declaration using meta-template
+exec template<...> scope_analyzer<analysis_type> {
+    -- Header template: analyze scope content 
+    local scope_content = params[0]  -- Detokenized scope
+    local analysis = params[1] or "basic"
+    
+    -- Count int variables in scope
+    local int_count = 0
+    for _ in string.gmatch(scope_content, "int%s+%w+") do
+        int_count = int_count + 1
+    end
+    
+    return "int analysis_result = " .. int_count .. "; // Found " .. int_count .. " int vars"
+};
+
+// Template usage - creates specialized exec  
+exec scope_analyzer<detailed> {
+    int var1 = 10;
+    int var2 = 20;
+    print("This scope has variables");
+}
+
+// Regular code - no exec at all
+int main() {
+    return 0;
+}
