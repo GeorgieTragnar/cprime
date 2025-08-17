@@ -95,27 +95,8 @@ std::vector<Scope> sublayer2a(const std::map<std::string, std::vector<RawToken>>
                 // Enter scope  
                 builder.enter_scope(header_instruction);
                 
-                // If this is an exec scope, register it
-                if (is_exec_scope) {
-                    uint32_t new_scope_index = static_cast<uint32_t>(builder.scopes.size() - 1);
-                    builder.exec_registry.register_scope_index(new_scope_index);
-                    
-                    // Check if any token is EXEC_ALIAS and register alias mapping
-                    for (size_t i = 0; i < header_instruction._tokens.size(); ++i) {
-                        if (header_instruction._tokens[i]._token == EToken::EXEC_ALIAS) {
-                            // Get the ExecAliasIndex from the raw token
-                            uint32_t raw_token_index = header_instruction._tokens[i]._tokenIndex;
-                            if (raw_token_index < raw_tokens.size()) {
-                                const auto& raw_token_ref = raw_tokens[raw_token_index];
-                                if (std::holds_alternative<ExecAliasIndex>(raw_token_ref._literal_value)) {
-                                    ExecAliasIndex alias_idx = std::get<ExecAliasIndex>(raw_token_ref._literal_value);
-                                    builder.exec_registry.register_scope_index_to_exec_alias(alias_idx, new_scope_index);
-                                }
-                            }
-                            break; // Found EXEC_ALIAS, stop looking
-                        }
-                    }
-                }
+                // NOTE: Exec scope registration now handled in enter_scope() method with namespace-aware detection
+                // Old EXEC_ALIAS token detection system removed to prevent conflicts with CHUNK-based approach
                 
                 builder.token_cache.clear();
             }
@@ -208,49 +189,8 @@ std::string get_chunk_content(const Token& token, const std::map<std::string, st
     return ""; // Not found or not a chunk
 }
 
-// Structure to hold exec alias detection results
-struct ExecAliasDetection {
-    bool is_exec_alias = false;
-    std::string alias_name;
-    std::vector<std::string> template_params; // For future use
-};
-
-// Helper function to detect exec alias declarations
-ExecAliasDetection detect_exec_alias_declaration(const Instruction& header, const std::map<std::string, std::vector<RawToken>>& streams, const StringTable& string_table) {
-    ExecAliasDetection result;
-    const auto& tokens = header._tokens;
-    
-    // Look for pattern: "exec" + SPACE + "template" + "<...>" + SPACE + CHUNK + SPACE + "{}"
-    // Or simpler: "exec" + SPACE + CHUNK + SPACE + "{}"
-    for (size_t i = 0; i < tokens.size(); ++i) {
-        if (tokens[i]._token == EToken::CHUNK) {
-            std::string chunk_content = get_chunk_content(tokens[i], streams, string_table);
-            
-            if (chunk_content == "exec") {
-                // Found exec keyword, look for alias name
-                // Skip over "template<...>" if present, find the actual alias name
-                size_t alias_pos = i;
-                
-                // Look for the next CHUNK that could be the alias name
-                for (size_t j = i + 1; j < tokens.size(); ++j) {
-                    if (tokens[j]._token == EToken::CHUNK) {
-                        std::string potential_alias = get_chunk_content(tokens[j], streams, string_table);
-                        
-                        // Skip "template" keyword, look for actual alias
-                        if (potential_alias != "template") {
-                            result.is_exec_alias = true;
-                            result.alias_name = potential_alias;
-                            break;
-                        }
-                    }
-                }
-                break;
-            }
-        }
-    }
-    
-    return result;
-}
+// Sublayer 2A now only does simple exec keyword detection
+// All complex alias parsing and registration is handled in Sublayer 2B
 
 // Namespace detection logic for hierarchical processing
 std::string detect_namespace_creation(const Instruction& header, const std::map<std::string, std::vector<RawToken>>& streams, const StringTable& string_table) {
@@ -306,38 +246,25 @@ void ScopeBuilder::enter_scope(const Instruction& header) {
         new_scope.namespace_context.push_back(detected_namespace);
     }
     
-    // Check for exec alias declarations and register with anti-shadowing protection
-    ExecAliasDetection exec_detection = detect_exec_alias_declaration(header, streams, string_table);
-    if (exec_detection.is_exec_alias) {
-        // Build full namespace path for this alias
-        std::vector<std::string> alias_namespace_path = new_scope.namespace_context;
-        alias_namespace_path.push_back(exec_detection.alias_name);
-        
-        // Anti-shadowing check: Assert if trying to shadow a more global alias
-        std::vector<std::string> found_namespace_path;
-        if (exec_registry.lookup_alias_with_context(exec_detection.alias_name, {}, found_namespace_path)) {
-            // Found an existing alias - check if it's in a more global (shorter) namespace path
-            if (found_namespace_path.size() < alias_namespace_path.size()) {
-                // The existing alias is in a more global namespace (shorter path)
-                // This would be shadowing - forbidden!
-                assert(false && "ANTI-SHADOWING VIOLATION: Attempting to register exec alias that shadows a more global alias");
-            } else if (found_namespace_path.size() == alias_namespace_path.size() && found_namespace_path == alias_namespace_path) {
-                // Exact duplicate registration - also forbidden
-                assert(false && "DUPLICATE REGISTRATION: Attempting to register exec alias that already exists at this exact namespace path");
+    // Check for exec keyword in header - simple detection only
+    bool contains_exec = false;
+    for (const auto& token : header._tokens) {
+        if (token._token == EToken::CHUNK) {
+            std::string chunk_content = get_chunk_content(token, streams, string_table);
+            if (chunk_content == "exec") {
+                contains_exec = true;
+                break;
             }
-            // If found_namespace_path.size() >= alias_namespace_path.size() and not exact duplicate, it's allowed
-            // (registering in more global namespace than existing more specific ones)
         }
-        
-        // Register the namespaced exec alias
-        ExecAliasIndex new_alias_index = exec_registry.register_namespaced_alias(alias_namespace_path);
-        
-        // TODO: Link to executable logic (Sublayer 2B will handle this)
-        // For now, we've successfully registered the namespaced alias with anti-shadowing protection
     }
     
     uint32_t new_scope_index = static_cast<uint32_t>(scopes.size());
     scopes.push_back(new_scope);
+    
+    // If this scope contains exec keyword, register it for processing in sublayer2b
+    if (contains_exec) {
+        exec_registry.register_scope_index(new_scope_index);
+    }
     
     // Add reference to the nested scope in parent's instructions vector
     add_nested_scope_reference(new_scope_index);

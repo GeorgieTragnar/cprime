@@ -52,7 +52,7 @@ void sublayer2c(std::vector<Scope>& scopes,
                 const StringTable& string_table,
                 const std::map<std::string, std::vector<RawToken>>& streams,
                 ExecAliasRegistry& exec_registry) {
-    
+    return;
     auto logger = cprime::LoggerFactory::get_logger("sublayer2c");
     
     LOG_INFO("=== Sublayer 2C: Instruction Contextualization ===");
