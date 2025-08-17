@@ -18,14 +18,14 @@ static RawToken create_raw_token(EToken token, ERawToken raw_token, uint32_t lin
 }
 
 // Helper function to create RawToken with unresolved content for deferred tokenization
-static RawToken create_unresolved_token(ERawToken raw_token, uint32_t line, uint32_t column, uint32_t position, const std::string& content) {
+static RawToken create_unresolved_token(ERawToken raw_token, uint32_t line, uint32_t column, uint32_t position, const std::string& content, StringTable& string_table) {
     RawToken result;
     result._token = EToken::CHUNK;  // Explicit token for unresolved chunks awaiting context-aware resolution
     result._raw_token = raw_token;
     result._line = line;
     result._column = column;
     result._position = position;
-    result.unresolved_content = content;
+    result.chunk_content_index = string_table.intern(content);  // Store StringTable index instead of raw string
     result._literal_value = std::monostate{};
     return result;
 }
@@ -47,6 +47,8 @@ static RawToken create_raw_token_with_value(EToken token, ERawToken raw_token, u
 // ARCHITECTURAL CHANGE: No longer does keyword/identifier/exec_alias resolution in Layer 1
 // All identifier-like strings are preserved as unresolved content for Layer 2 context-aware resolution
 std::vector<RawToken> sublayer1e(const std::vector<ProcessingChunk>& input, StringTable& string_table, ExecAliasRegistry& exec_alias_registry) {
+    // Note: exec_alias_registry is intentionally unused in this deferred tokenization approach
+    (void)exec_alias_registry; // Suppress unused warning
     
     std::vector<RawToken> result;
     
@@ -97,7 +99,7 @@ std::vector<RawToken> sublayer1e(const std::vector<ProcessingChunk>& input, Stri
                 // DEFERRED SEMANTIC TOKENIZATION: Preserve all identifier-like chunks
                 // Layer 2 will resolve these with proper namespace context
                 RawToken token = create_unresolved_token(ERawToken::IDENTIFIER, current_line, 
-                                                       current_column, chunk.start_pos + id_start, identifier);
+                                                       current_column, chunk.start_pos + id_start, identifier, string_table);
                 result.push_back(std::move(token));
                 
                 pos = id_end;

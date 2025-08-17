@@ -13,9 +13,7 @@ std::vector<Scope> sublayer2a(const std::map<std::string, std::vector<RawToken>>
                               ExecAliasRegistry& exec_registry) {
     using namespace layer2_internal;
     
-    (void)string_table; // Suppress unused warning - no semantic analysis in Sublayer 2A
-    
-    ScopeBuilder builder(exec_registry);
+    ScopeBuilder builder(exec_registry, streams, string_table);
     
     // Initialize global scope - we start parsing inside the global scope body
     builder.scopes.emplace_back();
@@ -196,8 +194,22 @@ Instruction TokenCache::create_instruction() {
     return instruction;
 }
 
+// Helper function to get chunk content from Token via StringTable lookup
+std::string get_chunk_content(const Token& token, const std::map<std::string, std::vector<RawToken>>& streams, const StringTable& string_table) {
+    // Find the RawToken that this Token references
+    for (const auto& [stream_name, raw_tokens] : streams) {
+        if (token._stringstreamId == 0 && token._tokenIndex < raw_tokens.size()) { // TODO: Map stream names to IDs
+            const RawToken& raw_token = raw_tokens[token._tokenIndex];
+            if (raw_token._token == EToken::CHUNK) {
+                return string_table.get_string(raw_token.chunk_content_index);
+            }
+        }
+    }
+    return ""; // Not found or not a chunk
+}
+
 // Namespace detection logic for hierarchical processing
-std::string detect_namespace_creation(const Instruction& header) {
+std::string detect_namespace_creation(const Instruction& header, const std::map<std::string, std::vector<RawToken>>& streams, const StringTable& string_table) {
     // PHASE 4: Detect what namespace this scope creates by examining header patterns
     // Legal namespace-creating declarations:
     // 1. "namespace IdentifierName" - creates named namespace
@@ -214,17 +226,15 @@ std::string detect_namespace_creation(const Instruction& header) {
             tokens[i + 1]._token == EToken::SPACE &&
             tokens[i + 2]._token == EToken::CHUNK) {
             
-            // This is a CHUNK SPACE CHUNK pattern
-            // We need to check what the first CHUNK contains to determine if it's namespace-creating
-            // TODO: Access unresolved_content from RawToken to check actual content
+            // Get the actual content of both CHUNKs
+            std::string first_chunk = get_chunk_content(tokens[i], streams, string_table);
+            std::string second_chunk = get_chunk_content(tokens[i + 2], streams, string_table);
             
-            // For now, we know this could be a namespace-creating scope
-            // Return the second CHUNK's content as the namespace name (placeholder)
-            // In Phase 4 implementation, we'll resolve: 
-            // - First CHUNK: check if it's "namespace", "class", "struct"
-            // - Second CHUNK: extract the identifier name
-            
-            return "detected_scope_name"; // Placeholder - will be actual name from second CHUNK
+            // Check if first chunk is a namespace-creating keyword
+            if (first_chunk == "namespace" || first_chunk == "class" || first_chunk == "struct") {
+                // Return the identifier name from the second chunk
+                return second_chunk;
+            }
         }
     }
     
@@ -247,7 +257,7 @@ void ScopeBuilder::enter_scope(const Instruction& header) {
     }
     
     // Check if this scope creates a new namespace and update context
-    std::string detected_namespace = detect_namespace_creation(header);
+    std::string detected_namespace = detect_namespace_creation(header, streams, string_table);
     if (!detected_namespace.empty()) {
         new_scope.namespace_context.push_back(detected_namespace);
     }

@@ -109,9 +109,12 @@ namespace layer2_internal {
         uint32_t current_scope_index;
         TokenCache token_cache;
         ExecAliasRegistry& exec_registry;
+        const std::map<std::string, std::vector<RawToken>>& streams;
+        const StringTable& string_table;
         bool awaiting_exec_footer = false; // Flag for exec footer collection
         
-        ScopeBuilder(ExecAliasRegistry& exec_reg) : exec_registry(exec_reg) {}
+        ScopeBuilder(ExecAliasRegistry& exec_reg, const std::map<std::string, std::vector<RawToken>>& input_streams, const StringTable& str_table) 
+            : exec_registry(exec_reg), streams(input_streams), string_table(str_table) {}
         
         void enter_scope(const Instruction& header);
         void exit_scope(const Instruction& footer);
