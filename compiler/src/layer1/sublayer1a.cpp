@@ -116,10 +116,9 @@ std::vector<ProcessingChunk> sublayer1a(std::stringstream& stream, ExecAliasRegi
             
             // Valid exec template pattern: "exec alias_name<...>" or "exec alias_name {"
             if (alias_end < source.size() && (source[alias_end] == '<' || source[alias_end] == '{')) {
-                // Register the alias
-                LOG_DEBUG("check_exec_alias: registering alias '{}'", alias_name);
-                exec_alias_registry.register_alias(alias_name);
-                LOG_DEBUG("check_exec_alias: successfully registered alias '{}'", alias_name);
+                // DEFERRED SEMANTIC TOKENIZATION: Exec alias registration now handled in Layer 2 with namespace context
+                // Old Layer 1 registration disabled to prevent conflicts with namespace-aware system
+                LOG_DEBUG("check_exec_alias: detected valid exec pattern '{}' - registration deferred to Layer 2", alias_name);
                 return true;
             } else {
                 LOG_DEBUG("check_exec_alias: invalid pattern - expected '<' or '{{' after alias name, got '{}'", next_char);

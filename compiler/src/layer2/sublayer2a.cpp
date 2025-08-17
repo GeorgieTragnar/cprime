@@ -208,6 +208,50 @@ std::string get_chunk_content(const Token& token, const std::map<std::string, st
     return ""; // Not found or not a chunk
 }
 
+// Structure to hold exec alias detection results
+struct ExecAliasDetection {
+    bool is_exec_alias = false;
+    std::string alias_name;
+    std::vector<std::string> template_params; // For future use
+};
+
+// Helper function to detect exec alias declarations
+ExecAliasDetection detect_exec_alias_declaration(const Instruction& header, const std::map<std::string, std::vector<RawToken>>& streams, const StringTable& string_table) {
+    ExecAliasDetection result;
+    const auto& tokens = header._tokens;
+    
+    // Look for pattern: "exec" + SPACE + "template" + "<...>" + SPACE + CHUNK + SPACE + "{}"
+    // Or simpler: "exec" + SPACE + CHUNK + SPACE + "{}"
+    for (size_t i = 0; i < tokens.size(); ++i) {
+        if (tokens[i]._token == EToken::CHUNK) {
+            std::string chunk_content = get_chunk_content(tokens[i], streams, string_table);
+            
+            if (chunk_content == "exec") {
+                // Found exec keyword, look for alias name
+                // Skip over "template<...>" if present, find the actual alias name
+                size_t alias_pos = i;
+                
+                // Look for the next CHUNK that could be the alias name
+                for (size_t j = i + 1; j < tokens.size(); ++j) {
+                    if (tokens[j]._token == EToken::CHUNK) {
+                        std::string potential_alias = get_chunk_content(tokens[j], streams, string_table);
+                        
+                        // Skip "template" keyword, look for actual alias
+                        if (potential_alias != "template") {
+                            result.is_exec_alias = true;
+                            result.alias_name = potential_alias;
+                            break;
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
+    
+    return result;
+}
+
 // Namespace detection logic for hierarchical processing
 std::string detect_namespace_creation(const Instruction& header, const std::map<std::string, std::vector<RawToken>>& streams, const StringTable& string_table) {
     // PHASE 4: Detect what namespace this scope creates by examining header patterns
@@ -260,6 +304,36 @@ void ScopeBuilder::enter_scope(const Instruction& header) {
     std::string detected_namespace = detect_namespace_creation(header, streams, string_table);
     if (!detected_namespace.empty()) {
         new_scope.namespace_context.push_back(detected_namespace);
+    }
+    
+    // Check for exec alias declarations and register with anti-shadowing protection
+    ExecAliasDetection exec_detection = detect_exec_alias_declaration(header, streams, string_table);
+    if (exec_detection.is_exec_alias) {
+        // Build full namespace path for this alias
+        std::vector<std::string> alias_namespace_path = new_scope.namespace_context;
+        alias_namespace_path.push_back(exec_detection.alias_name);
+        
+        // Anti-shadowing check: Assert if trying to shadow a more global alias
+        std::vector<std::string> found_namespace_path;
+        if (exec_registry.lookup_alias_with_context(exec_detection.alias_name, {}, found_namespace_path)) {
+            // Found an existing alias - check if it's in a more global (shorter) namespace path
+            if (found_namespace_path.size() < alias_namespace_path.size()) {
+                // The existing alias is in a more global namespace (shorter path)
+                // This would be shadowing - forbidden!
+                assert(false && "ANTI-SHADOWING VIOLATION: Attempting to register exec alias that shadows a more global alias");
+            } else if (found_namespace_path.size() == alias_namespace_path.size() && found_namespace_path == alias_namespace_path) {
+                // Exact duplicate registration - also forbidden
+                assert(false && "DUPLICATE REGISTRATION: Attempting to register exec alias that already exists at this exact namespace path");
+            }
+            // If found_namespace_path.size() >= alias_namespace_path.size() and not exact duplicate, it's allowed
+            // (registering in more global namespace than existing more specific ones)
+        }
+        
+        // Register the namespaced exec alias
+        ExecAliasIndex new_alias_index = exec_registry.register_namespaced_alias(alias_namespace_path);
+        
+        // TODO: Link to executable logic (Sublayer 2B will handle this)
+        // For now, we've successfully registered the namespaced alias with anti-shadowing protection
     }
     
     uint32_t new_scope_index = static_cast<uint32_t>(scopes.size());

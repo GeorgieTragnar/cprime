@@ -1,0 +1,47 @@
+// Test namespace-aware exec alias registration with anti-shadowing protection
+
+// Global exec alias - this should be allowed
+exec template<...> global_helper<T> {
+    return "global helper";
+};
+
+namespace utils {
+    // Namespaced exec alias - should be allowed (utils::local_helper)
+    exec template<...> local_helper<T> {
+        return "utils local helper";
+    };
+    
+    // This would shadow the global global_helper - FORBIDDEN by anti-shadowing!
+    // exec template<...> global_helper<T> {
+    //     return "this would shadow global::global_helper - FORBIDDEN!";
+    // };
+    
+    // Instead, use a different name that doesn't shadow global aliases
+    exec template<...> utils_helper<T> {
+        return "utils specific helper - allowed!";
+    };
+    
+    namespace nested {
+        // Nested namespace exec alias - should be allowed (utils::nested::deep_helper)
+        exec template<...> deep_helper<T> {
+            return "deeply nested helper";
+        };
+        
+        // This would shadow utils::local_helper - should trigger anti-shadowing assertion
+        // exec template<...> local_helper<T> {
+        //     return "this shadows parent namespace - FORBIDDEN!";
+        // };
+    };
+};
+
+class MyClass {
+    // Class-scoped exec alias - should be allowed (MyClass::class_helper)
+    exec template<...> class_helper<T> {
+        return "class scoped helper";
+    };
+};
+
+int main() {
+    // Regular code - no exec aliases
+    return 0;
+}
