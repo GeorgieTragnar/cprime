@@ -5,15 +5,20 @@
 #include "../commons/instruction.h"
 #include "../commons/dirty/string_table.h"
 #include "../commons/dirty/exec_alias_registry.h"
+#include "../commons/contextualizationError.h"
 #include <vector>
 #include <map>
 #include <string>
 
 namespace cprime {
 
+// Forward declarations
+class ErrorHandler;
+
 // Layer 2 main function - Structure Building
 // Input: Map of file streams to RawToken vectors from Layer 1
 // Output: Flat vector of structured Scopes with Instructions
+// Note: ErrorHandler will be used internally for contextualization error reporting
 std::vector<Scope> layer2(const std::map<std::string, std::vector<RawToken>>& streams, 
                          const StringTable& string_table, 
                          ExecAliasRegistry& exec_registry);
@@ -44,10 +49,12 @@ namespace layer2_sublayers {
     // - Flat logging format for debugging and analysis
     // - No hierarchical traversal, simple scope-by-scope processing
     // - Exec execution processing and code generation (single pass)
+    // - Error handling with ErrorReporter lambdas for contextualization
     std::vector<Scope> sublayer2c(const std::vector<Scope>& scopes, 
                                   const StringTable& string_table,
                                   const std::map<std::string, std::vector<RawToken>>& streams,
-                                  ExecAliasRegistry& exec_registry);
+                                  ExecAliasRegistry& exec_registry,
+                                  ErrorHandler& error_handler);
     
     // Helper function to extract tokens from scope
     std::vector<Token> extract_tokens_from_scope(const Scope& scope);
@@ -69,15 +76,15 @@ namespace layer2_contextualization {
     
     // Header contextualization - processes scope headers to populate _contextualTokens
     // Returns true if header contains exec execution that needs processing
-    bool contextualize_header(Instruction& header_instruction);
+    bool contextualize_header(Instruction& header_instruction, ErrorReporter report_error);
     
     // Footer contextualization - processes scope footers to populate _contextualTokens  
     // Returns true if footer contains exec execution that needs processing
-    bool contextualize_footer(Instruction& footer_instruction);
+    bool contextualize_footer(Instruction& footer_instruction, ErrorReporter report_error);
     
     // Instruction contextualization - processes body instructions to populate _contextualTokens
     // Returns true if instruction contains exec execution that needs processing
-    bool contextualize_instruction(Instruction& body_instruction);
+    bool contextualize_instruction(Instruction& body_instruction, ErrorReporter report_error);
     
     // Process exec execution and return global scope index of generated code (single pass)
     uint32_t process_exec_execution(const Instruction& exec_instruction,

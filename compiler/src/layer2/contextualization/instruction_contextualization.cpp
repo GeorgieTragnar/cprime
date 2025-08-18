@@ -1,5 +1,6 @@
 #include "../layer2.h"
 #include "../../commons/logger.h"
+#include "../../commons/contextualizationError.h"
 
 namespace cprime::layer2_contextualization {
 
@@ -7,7 +8,7 @@ namespace cprime::layer2_contextualization {
 bool is_exec_execution_pattern(const Instruction& instruction);
 void mark_as_exec_execution(Instruction& instruction);
 
-bool contextualize_instruction(Instruction& body_instruction) {
+bool contextualize_instruction(Instruction& body_instruction, ErrorReporter report_error) {
     auto logger = cprime::LoggerFactory::get_logger("instruction_contextualization");
     
     if (body_instruction._tokens.empty()) {
@@ -32,6 +33,30 @@ bool contextualize_instruction(Instruction& body_instruction) {
     // - Function calls: print("hello");
     // - Expressions: calculations, operations
     // - Control flow statements: break, continue, return
+    
+    // For now, generate INVALID contextual tokens for all non-exec instruction patterns
+    // This demonstrates the error reporting system
+    if (!body_instruction._tokens.empty()) {
+        // Collect token indices for error reporting
+        std::vector<uint32_t> token_indices;
+        for (size_t i = 0; i < body_instruction._tokens.size(); ++i) {
+            token_indices.push_back(body_instruction._tokens[i]._tokenIndex);
+        }
+        
+        // Report unsupported pattern error
+        report_error(ContextualizationErrorType::UNSUPPORTED_TOKEN_PATTERN,
+                    "Instruction contextualization not yet implemented for this pattern",
+                    token_indices);
+        
+        // Generate INVALID contextual tokens for all tokens
+        body_instruction._contextualTokens.clear();
+        for (const auto& token : body_instruction._tokens) {
+            ContextualToken ctx_token;
+            ctx_token._contextualToken = EContextualToken::INVALID;
+            ctx_token._parentTokenIndices.push_back(token._tokenIndex);
+            body_instruction._contextualTokens.push_back(ctx_token);
+        }
+    }
     
     return false;  // Regular instruction, no exec processing needed
 }

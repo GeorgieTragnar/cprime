@@ -1,5 +1,6 @@
 #include "../layer2.h"
 #include "../../commons/logger.h"
+#include "../../commons/contextualizationError.h"
 
 namespace cprime::layer2_contextualization {
 
@@ -44,7 +45,7 @@ bool is_footer_exec_execution_pattern(const Instruction& footer_instruction) {
     return false;
 }
 
-bool contextualize_footer(Instruction& footer_instruction) {
+bool contextualize_footer(Instruction& footer_instruction, ErrorReporter report_error) {
     auto logger = cprime::LoggerFactory::get_logger("footer_contextualization");
     
     if (footer_instruction._tokens.empty()) {
@@ -65,6 +66,30 @@ bool contextualize_footer(Instruction& footer_instruction) {
     // - Scope closure patterns
     // - Return statements at scope end
     // - Cleanup code before scope exit
+    
+    // For now, generate INVALID contextual tokens for all non-exec footer patterns
+    // This demonstrates the error reporting system
+    if (!footer_instruction._tokens.empty()) {
+        // Collect token indices for error reporting
+        std::vector<uint32_t> token_indices;
+        for (size_t i = 0; i < footer_instruction._tokens.size(); ++i) {
+            token_indices.push_back(footer_instruction._tokens[i]._tokenIndex);
+        }
+        
+        // Report unsupported pattern error
+        report_error(ContextualizationErrorType::UNSUPPORTED_TOKEN_PATTERN,
+                    "Footer contextualization not yet implemented for this pattern",
+                    token_indices);
+        
+        // Generate INVALID contextual tokens for all tokens
+        footer_instruction._contextualTokens.clear();
+        for (const auto& token : footer_instruction._tokens) {
+            ContextualToken ctx_token;
+            ctx_token._contextualToken = EContextualToken::INVALID;
+            ctx_token._parentTokenIndices.push_back(token._tokenIndex);
+            footer_instruction._contextualTokens.push_back(ctx_token);
+        }
+    }
     
     return false;  // Regular footer, no exec processing needed
 }

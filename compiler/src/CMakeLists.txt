@@ -21,6 +21,10 @@ add_library(cprime_commons
     commons/enum/token.cpp
     commons/enum/rawToken.h
     commons/enum/contextualToken.h
+    commons/enum/contextualizationError.h
+    commons/contextualizationError.h
+    commons/errorHandler.h
+    commons/errorHandler.cpp
     commons/logger.h
     commons/logger.cpp
     commons/dirty/selective_buffer_sink.h

@@ -1,5 +1,6 @@
 #include "layer2.h"
 #include "token_detokenizer.h"
+#include "../commons/errorHandler.h"
 
 namespace cprime {
 
@@ -13,8 +14,14 @@ std::vector<Scope> layer2(const std::map<std::string, std::vector<RawToken>>& st
     // Sublayer 2B: Exec logic compilation with Lua
     auto retVal2 = layer2_sublayers::sublayer2b(retVal1, exec_registry, string_table, streams);
     
-    // Sublayer 2C: Instruction contextualization and analysis
-    auto retVal3 = layer2_sublayers::sublayer2c(retVal2, string_table, streams, exec_registry);
+    // Sublayer 2C: Instruction contextualization and analysis with error handling
+    ErrorHandler error_handler;
+    auto retVal3 = layer2_sublayers::sublayer2c(retVal2, string_table, streams, exec_registry, error_handler);
+    
+    // TODO: In the future, the orchestrator will handle error resolution and reporting
+    // For now, resolve source locations and report errors immediately within Layer 2
+    error_handler.resolve_source_locations(retVal3, streams, string_table);
+    error_handler.report_errors();
     
     return retVal3;
 }
@@ -30,7 +37,8 @@ std::vector<Scope> sublayer2b(const std::vector<Scope>& scopes,
 std::vector<Scope> sublayer2c(const std::vector<Scope>& scopes, 
                               const StringTable& string_table,
                               const std::map<std::string, std::vector<RawToken>>& streams,
-                              ExecAliasRegistry& exec_registry);
+                              ExecAliasRegistry& exec_registry,
+                              ErrorHandler& error_handler);
 
 std::vector<Token> extract_tokens_from_scope(const Scope& scope) {
     // Extract tokens from scope's _instructions vector of variants

@@ -1,5 +1,6 @@
 #include "../layer2.h"
 #include "../../commons/logger.h"
+#include "../../commons/contextualizationError.h"
 
 namespace cprime::layer2_contextualization {
 
@@ -149,7 +150,7 @@ bool is_header_exec_execution_pattern(const Instruction& header_instruction) {
     return false;
 }
 
-bool contextualize_header(Instruction& header_instruction) {
+bool contextualize_header(Instruction& header_instruction, ErrorReporter report_error) {
     auto logger = cprime::LoggerFactory::get_logger("header_contextualization");
     
     if (header_instruction._tokens.empty()) {
@@ -181,6 +182,30 @@ bool contextualize_header(Instruction& header_instruction) {
     // - Function declarations: int main(), exec code_gen<...>
     // - Control flow headers: if (...), while (...)
     // - Class/struct declarations
+    
+    // For now, generate INVALID contextual tokens for all non-exec header patterns
+    // This demonstrates the error reporting system
+    if (!header_instruction._tokens.empty()) {
+        // Collect token indices for error reporting
+        std::vector<uint32_t> token_indices;
+        for (size_t i = 0; i < header_instruction._tokens.size(); ++i) {
+            token_indices.push_back(header_instruction._tokens[i]._tokenIndex);
+        }
+        
+        // Report unsupported pattern error
+        report_error(ContextualizationErrorType::UNSUPPORTED_TOKEN_PATTERN,
+                    "Header contextualization not yet implemented for this pattern",
+                    token_indices);
+        
+        // Generate INVALID contextual tokens for all tokens
+        header_instruction._contextualTokens.clear();
+        for (const auto& token : header_instruction._tokens) {
+            ContextualToken ctx_token;
+            ctx_token._contextualToken = EContextualToken::INVALID;
+            ctx_token._parentTokenIndices.push_back(token._tokenIndex);
+            header_instruction._contextualTokens.push_back(ctx_token);
+        }
+    }
     
     return false;  // Regular header, no exec processing needed
 }

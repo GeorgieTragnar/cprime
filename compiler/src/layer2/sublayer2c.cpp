@@ -1,5 +1,7 @@
 #include "layer2.h"
 #include "../commons/logger.h"
+#include "../commons/errorHandler.h"
+#include "../commons/contextualizationError.h"
 #include <sstream>
 
 namespace cprime::layer2_sublayers {
@@ -51,13 +53,12 @@ using namespace cprime::layer2_contextualization;
 std::vector<Scope> sublayer2c(const std::vector<Scope>& input_scopes, 
                               const StringTable& string_table,
                               const std::map<std::string, std::vector<RawToken>>& streams,
-                              ExecAliasRegistry& exec_registry) {
+                              ExecAliasRegistry& exec_registry,
+                              ErrorHandler& error_handler) {
     
     // Create a mutable copy of the input scopes for processing
     std::vector<Scope> scopes = input_scopes;
     
-    // For now, just return the scopes as-is (early return was here before)
-    return scopes;
     auto logger = cprime::LoggerFactory::get_logger("sublayer2c");
     
     LOG_INFO("=== Sublayer 2C: Instruction Contextualization ===");
@@ -71,8 +72,23 @@ std::vector<Scope> sublayer2c(const std::vector<Scope>& input_scopes,
         
         // Log scope header
         log_scope_header(scope, logger);
+        
+        // Create ErrorReporter lambda for header contextualization
+        auto report_header_error = [&](ContextualizationErrorType error_type,
+                                       const std::string& extra_info,
+                                       const std::vector<uint32_t>& token_indices) {
+            ContextualizationError error;
+            error.error_type = error_type;
+            error.extra_info = extra_info;
+            error.token_indices = token_indices;
+            error.scope_index = static_cast<uint32_t>(scope_index);
+            error.instruction_index = 0; // Header is always instruction 0
+            error.instruction_type = InstructionType::HEADER;
+            error_handler.register_contextualization_error(error);
+        };
+        
         // Contextualize scope header
-        bool header_needs_exec = contextualize_header(scope._header);
+        bool header_needs_exec = contextualize_header(scope._header, report_header_error);
         if (header_needs_exec) {
             // Extract header exec alias information
             HeaderExecAliasInfo exec_info = extract_header_exec_alias_info(scope._header, scope_index);
@@ -113,8 +129,22 @@ std::vector<Scope> sublayer2c(const std::vector<Scope>& input_scopes,
                 Instruction& instruction = std::get<Instruction>(instruction_variant);  // Mutable reference
                 log_instruction(instruction, logger);
                 
+                // Create ErrorReporter lambda for body instruction contextualization
+                auto report_instruction_error = [&](ContextualizationErrorType error_type,
+                                                    const std::string& extra_info,
+                                                    const std::vector<uint32_t>& token_indices) {
+                    ContextualizationError error;
+                    error.error_type = error_type;
+                    error.extra_info = extra_info;
+                    error.token_indices = token_indices;
+                    error.scope_index = static_cast<uint32_t>(scope_index);
+                    error.instruction_index = static_cast<uint32_t>(instr_index);
+                    error.instruction_type = InstructionType::BODY;
+                    error_handler.register_contextualization_error(error);
+                };
+                
                 // Contextualize body instruction and check for exec processing
-                bool needs_exec_processing = contextualize_instruction(instruction);
+                bool needs_exec_processing = contextualize_instruction(instruction, report_instruction_error);
                 
                 if (needs_exec_processing) {
                     LOG_INFO("exec execution detected - processing...");
@@ -139,7 +169,22 @@ std::vector<Scope> sublayer2c(const std::vector<Scope>& input_scopes,
         // Contextualize scope footer (only if it's an instruction)
         if (std::holds_alternative<Instruction>(scope._footer)) {
             Instruction& footer_instruction = std::get<Instruction>(scope._footer);
-            bool footer_needs_exec = contextualize_footer(footer_instruction);
+            
+            // Create ErrorReporter lambda for footer contextualization
+            auto report_footer_error = [&](ContextualizationErrorType error_type,
+                                           const std::string& extra_info,
+                                           const std::vector<uint32_t>& token_indices) {
+                ContextualizationError error;
+                error.error_type = error_type;
+                error.extra_info = extra_info;
+                error.token_indices = token_indices;
+                error.scope_index = static_cast<uint32_t>(scope_index);
+                error.instruction_index = static_cast<uint32_t>(scope._instructions.size()); // Footer is after all body instructions
+                error.instruction_type = InstructionType::FOOTER;
+                error_handler.register_contextualization_error(error);
+            };
+            
+            bool footer_needs_exec = contextualize_footer(footer_instruction, report_footer_error);
             
             if (footer_needs_exec) {
                 LOG_INFO("exec execution detected in footer - processing...");
@@ -162,6 +207,7 @@ std::vector<Scope> sublayer2c(const std::vector<Scope>& input_scopes,
     }
     
     LOG_INFO("=== Sublayer 2C Complete ===");
+    return scopes;
 }
 
 } // namespace cprime::layer2_sublayers
