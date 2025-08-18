@@ -280,10 +280,13 @@ std::vector<RawToken> extract_scope_body_tokens(const Scope& scope, const std::m
     return body_tokens;
 }
 
-void sublayer2b(std::vector<Scope>& scopes, 
-                ExecAliasRegistry& exec_registry,
-                const StringTable& string_table,
-                const std::map<std::string, std::vector<RawToken>>& streams) {
+std::vector<Scope> sublayer2b(const std::vector<Scope>& input_scopes, 
+                              ExecAliasRegistry& exec_registry,
+                              const StringTable& string_table,
+                              const std::map<std::string, std::vector<RawToken>>& streams) {
+    
+    // Create a mutable copy of the input scopes for processing
+    std::vector<Scope> scopes = input_scopes;
     
     auto logger = cprime::LoggerFactory::get_logger("sublayer2b");
     
@@ -458,6 +461,8 @@ void sublayer2b(std::vector<Scope>& scopes,
     LOG_INFO("=== Sublayer 2B Processing Complete ===");
     LOG_INFO("Processed {} parent scopes and {} specialization scopes", parent_scopes.size(), specialization_scopes.size());
     LOG_INFO("Total exec scopes: {}", exec_registry.get_exec_scope_count());
+    
+    return scopes;
 }
 
 } // namespace cprime::layer2_sublayers

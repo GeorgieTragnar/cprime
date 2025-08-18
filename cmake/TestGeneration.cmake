@@ -261,8 +261,8 @@ function(extract_complete_function_body FUNCTION_NAME SOURCE_FILE OUTPUT_VAR)
             set(SEARCH_START 0)
         endif()
         
-        # Extract a chunk around the function position
-        string(SUBSTRING "${FILE_CONTENT}" ${SEARCH_START} 200 FUNCTION_CHUNK)
+        # Extract a larger chunk around the function position to handle multi-line signatures
+        string(SUBSTRING "${FILE_CONTENT}" ${SEARCH_START} 500 FUNCTION_CHUNK)
         message(STATUS "    Function chunk: ${FUNCTION_CHUNK}")
         
         # Look for the opening brace in this chunk

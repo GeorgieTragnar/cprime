@@ -54,13 +54,23 @@ function(discover_layer_functions SOURCE_DIR OUTPUT_REGISTRY)
                         list(APPEND SUBLAYER_CALLS "${SUBLAYER_MATCH}")
                     endforeach()
                     
-                    # Uniform parameters for all layers - all layers receive ExecAliasRegistry
-                    set(LAYER_PARAMS "std::stringstream& stream, StringTable& string_table, ExecAliasRegistry& exec_alias_registry")
+                    # Hardcoded parameters per layer - major architectural signatures
+                    if(LAYER_NUMBER EQUAL 1)
+                        set(LAYER_PARAMS "std::stringstream& stream, cprime::StringTable& string_table, cprime::ExecAliasRegistry& exec_alias_registry")
+                        set(RETURN_TYPE "std::vector<cprime::RawToken>")
+                    elseif(LAYER_NUMBER EQUAL 2)
+                        set(LAYER_PARAMS "const std::map<std::string, std::vector<cprime::RawToken>>& streams, const cprime::StringTable& string_table, cprime::ExecAliasRegistry& exec_registry")
+                        set(RETURN_TYPE "std::vector<cprime::Scope>")
+                    else()
+                        # Default for future layers - can be updated as needed
+                        set(LAYER_PARAMS "/* UNKNOWN_LAYER_SIGNATURE */")
+                        set(RETURN_TYPE "/* UNKNOWN_RETURN_TYPE */")
+                    endif()
                     
-                    # Store basic function info for now
+                    # Store function info with correct return type per layer
                     string(REPLACE ";" "," SUBLAYER_CALLS_STR "${SUBLAYER_CALLS}")
                     list(APPEND DISCOVERED_FUNCTIONS 
-                         "LAYER:${LAYER_NUMBER};RETURN:std::vector<RawToken>;PARAMS:${LAYER_PARAMS};BODY:${FUNCTION_BODY};SUBLAYERS:${SUBLAYER_CALLS_STR};FILE:${SOURCE_FILE}")
+                         "LAYER:${LAYER_NUMBER};RETURN:${RETURN_TYPE};PARAMS:${LAYER_PARAMS};BODY:${FUNCTION_BODY};SUBLAYERS:${SUBLAYER_CALLS_STR};FILE:${SOURCE_FILE}")
                     
                     math(EXPR TOTAL_FUNCTIONS_FOUND "${TOTAL_FUNCTIONS_FOUND} + 1")
                 endif()

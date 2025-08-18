@@ -48,11 +48,16 @@ void log_scope_footer(const Scope& scope, cprime::Logger& logger) {
 using namespace cprime::layer2_contextualization;
 
 // Sublayer 2C: Sequential instruction iteration and contextualization
-void sublayer2c(std::vector<Scope>& scopes, 
-                const StringTable& string_table,
-                const std::map<std::string, std::vector<RawToken>>& streams,
-                ExecAliasRegistry& exec_registry) {
-    return;
+std::vector<Scope> sublayer2c(const std::vector<Scope>& input_scopes, 
+                              const StringTable& string_table,
+                              const std::map<std::string, std::vector<RawToken>>& streams,
+                              ExecAliasRegistry& exec_registry) {
+    
+    // Create a mutable copy of the input scopes for processing
+    std::vector<Scope> scopes = input_scopes;
+    
+    // For now, just return the scopes as-is (early return was here before)
+    return scopes;
     auto logger = cprime::LoggerFactory::get_logger("sublayer2c");
     
     LOG_INFO("=== Sublayer 2C: Instruction Contextualization ===");

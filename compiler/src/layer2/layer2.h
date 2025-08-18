@@ -34,20 +34,20 @@ namespace layer2_sublayers {
     // - Compile exec blocks to ExecutableLambda format with Lua scripts
     // - Link scope indices to executable logic
     // - Populate ExecAliasRegistry with compiled exec blocks
-    void sublayer2b(std::vector<Scope>& scopes, 
-                    ExecAliasRegistry& exec_registry,
-                    const StringTable& string_table,
-                    const std::map<std::string, std::vector<RawToken>>& streams);
+    std::vector<Scope> sublayer2b(const std::vector<Scope>& scopes, 
+                                  ExecAliasRegistry& exec_registry,
+                                  const StringTable& string_table,
+                                  const std::map<std::string, std::vector<RawToken>>& streams);
     
     // Sublayer 2C: Instruction contextualization and sequential analysis
     // - Sequential iteration through all scope instructions
     // - Flat logging format for debugging and analysis
     // - No hierarchical traversal, simple scope-by-scope processing
     // - Exec execution processing and code generation (single pass)
-    void sublayer2c(std::vector<Scope>& scopes, 
-                    const StringTable& string_table,
-                    const std::map<std::string, std::vector<RawToken>>& streams,
-                    ExecAliasRegistry& exec_registry);
+    std::vector<Scope> sublayer2c(const std::vector<Scope>& scopes, 
+                                  const StringTable& string_table,
+                                  const std::map<std::string, std::vector<RawToken>>& streams,
+                                  ExecAliasRegistry& exec_registry);
     
     // Helper function to extract tokens from scope
     std::vector<Token> extract_tokens_from_scope(const Scope& scope);

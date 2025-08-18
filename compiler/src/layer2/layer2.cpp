@@ -8,29 +8,29 @@ std::vector<Scope> layer2(const std::map<std::string, std::vector<RawToken>>& st
                          const StringTable& string_table, 
                          ExecAliasRegistry& exec_registry) {
     // Sublayer 2A: Pure structural scope building
-    auto scopes = layer2_sublayers::sublayer2a(streams, string_table, exec_registry);
+    auto retVal1 = layer2_sublayers::sublayer2a(streams, string_table, exec_registry);
     
     // Sublayer 2B: Exec logic compilation with Lua
-    layer2_sublayers::sublayer2b(scopes, exec_registry, string_table, streams);
+    auto retVal2 = layer2_sublayers::sublayer2b(retVal1, exec_registry, string_table, streams);
     
     // Sublayer 2C: Instruction contextualization and analysis
-    layer2_sublayers::sublayer2c(scopes, string_table, streams, exec_registry);
+    auto retVal3 = layer2_sublayers::sublayer2c(retVal2, string_table, streams, exec_registry);
     
-    return scopes;
+    return retVal3;
 }
 
 namespace layer2_sublayers {
 
 // Forward declarations - implementations are in separate files
-void sublayer2b(std::vector<Scope>& scopes, 
-                ExecAliasRegistry& exec_registry,
-                const StringTable& string_table,
-                const std::map<std::string, std::vector<RawToken>>& streams);
+std::vector<Scope> sublayer2b(const std::vector<Scope>& scopes, 
+                              ExecAliasRegistry& exec_registry,
+                              const StringTable& string_table,
+                              const std::map<std::string, std::vector<RawToken>>& streams);
 
-void sublayer2c(std::vector<Scope>& scopes, 
-                const StringTable& string_table,
-                const std::map<std::string, std::vector<RawToken>>& streams,
-                ExecAliasRegistry& exec_registry);
+std::vector<Scope> sublayer2c(const std::vector<Scope>& scopes, 
+                              const StringTable& string_table,
+                              const std::map<std::string, std::vector<RawToken>>& streams,
+                              ExecAliasRegistry& exec_registry);
 
 std::vector<Token> extract_tokens_from_scope(const Scope& scope) {
     // Extract tokens from scope's _instructions vector of variants
