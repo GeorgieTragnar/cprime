@@ -19,21 +19,11 @@ static RawToken create_raw_token(EToken token, ERawToken raw_token, uint32_t lin
 
 // Layer 1C: Extract operators that can never be part of identifiers (longest match)
 std::vector<ProcessingChunk> sublayer1c(const std::vector<ProcessingChunk>& input) {
-    // Operator mapping (longest first for proper matching)
-    // Only using existing EToken values for now
+    // LAYER 1 ARCHITECTURAL PRINCIPLE: Only single-character operators
+    // Multi-character operators (==, !=, <=, >=, &&, ||, ->, ::) should be 
+    // resolved in Layer 2C contextualization by combining adjacent single operators
     static const std::vector<std::pair<std::string, EToken>> operators = {
-        // Two-character operators  
-        {"==", EToken::EQUALS},
-        {"!=", EToken::NOT_EQUALS},
-        {"<=", EToken::LESS_EQUAL},
-        {">=", EToken::GREATER_EQUAL},
-        {"&&", EToken::LOGICAL_AND},
-        {"||", EToken::LOGICAL_OR},
-        {"->", EToken::ARROW},
-        {"::", EToken::SCOPE_RESOLUTION},
-        {"<-", EToken::FIELD_LINK},
-        
-        // Single-character operators
+        // Single-character operators only
         {"+", EToken::PLUS},
         {"-", EToken::MINUS},
         {"*", EToken::MULTIPLY},        // Also DEREFERENCE (context-dependent)

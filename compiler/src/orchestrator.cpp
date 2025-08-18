@@ -170,12 +170,12 @@ bool CompilerOrchestrator::run_layer2() {
         // Test on-demand execution of prepared Lua scripts
         if (exec_alias_registry_.get_exec_scope_count() > 0) {
             LOG_INFO("Testing on-demand ExecutableLambda execution:");
-            for (const auto& [scope_index, executable_lambda] : exec_alias_registry_.get_scope_to_lambda_map()) {
+            for (auto& [scope_index, executable_lambda] : exec_alias_registry_.get_scope_to_lambda_map()) {
                 std::vector<std::string> test_params = {"int", "string", "MyClass"};
                 LOG_INFO("=== ON-DEMAND EXECUTION TEST ===");
                 LOG_INFO("Executing prepared Lua script for scope {}", scope_index);
                 try {
-                    std::string result = executable_lambda.execute(test_params);
+                    std::string result = executable_lambda.execute(test_params, &exec_alias_registry_, scope_index);
                     LOG_INFO("Lua script returned: \"{}\"", result);
                     LOG_INFO("Return value length: {} chars", result.length());
                 } catch (const std::exception& e) {

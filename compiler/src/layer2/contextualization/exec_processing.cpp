@@ -394,7 +394,7 @@ uint32_t process_exec_execution(const Instruction& exec_instruction,
         }
         
         // Step 3: Get ExecutableLambda and execute Lua script
-        const ExecutableLambda& lambda = get_executable_lambda(exec_info, exec_registry, current_scope_index);
+        ExecutableLambda& lambda = const_cast<ExecutableLambda&>(get_executable_lambda(exec_info, exec_registry, current_scope_index));
         std::string generated_cprime_code = lambda.execute(lua_parameters);
         
         LOG_INFO("Generated CPrime code ({} chars): {}", generated_cprime_code.length(), generated_cprime_code);

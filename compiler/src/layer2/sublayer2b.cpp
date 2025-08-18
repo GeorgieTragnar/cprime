@@ -8,19 +8,14 @@
 
 namespace cprime::layer2_sublayers {
 
-// Helper function to determine if an exec scope is a specialization (has multiple identifiers after exec)
-bool is_exec_specialization(const Scope& scope, const StringTable& string_table, const std::map<std::string, std::vector<RawToken>>& streams) {
+// Extract the parent alias name from a specialization exec scope header
+// For "exec helper<...> scope_analyzer<...>", returns "helper"
+std::string extract_parent_alias_name(const Scope& scope, const StringTable& string_table, const std::map<std::string, std::vector<RawToken>>& streams) {
     const auto& tokens = scope._header._tokens;
     
-    // Look for pattern: "exec" + multiple identifiers
-    // Parent: "exec helper<...>"  (1 identifier after exec)
-    // Specialization: "exec helper<...> scope_analyzer<...>" (2+ identifiers after exec)
-    
     bool found_exec = false;
-    int identifier_count = 0;
     
     for (const auto& token : tokens) {
-        // Get the RawToken to check if it's a CHUNK
         if (token._token == EToken::CHUNK) {
             // Find the RawToken from streams
             for (const auto& [stream_name, raw_tokens] : streams) {
@@ -32,7 +27,54 @@ bool is_exec_specialization(const Scope& scope, const StringTable& string_table,
                         if (chunk_content == "exec") {
                             found_exec = true;
                         } else if (found_exec) {
-                            // Count identifiers after exec (skip template parameters)
+                            // This is the first identifier after exec - the parent alias name
+                            return chunk_content;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    
+    return ""; // No parent alias found
+}
+
+// Helper function to determine if an exec scope is a specialization (has multiple identifiers after exec)
+bool is_exec_specialization(const Scope& scope, const StringTable& string_table, const std::map<std::string, std::vector<RawToken>>& streams) {
+    const auto& tokens = scope._header._tokens;
+    
+    // Look for pattern: "exec" + multiple identifiers (excluding template parameters)
+    // Parent: "exec helper<...>"  (1 identifier after exec)
+    // Specialization: "exec helper<...> scope_analyzer<...>" (2+ identifiers after exec)
+    
+    bool found_exec = false;
+    int identifier_count = 0;
+    bool inside_template_brackets = false;
+    
+    for (const auto& token : tokens) {
+        // Track template brackets to skip identifiers inside them
+        if (token._token == EToken::LESS_THAN) {
+            inside_template_brackets = true;
+            continue;
+        } else if (token._token == EToken::GREATER_THAN) {
+            inside_template_brackets = false;
+            continue;
+        }
+        
+        // Get the RawToken to check if it's a CHUNK
+        if (token._token == EToken::CHUNK && !inside_template_brackets) {
+            // Find the RawToken from streams
+            for (const auto& [stream_name, raw_tokens] : streams) {
+                if (token._stringstreamId == 0 && token._tokenIndex < raw_tokens.size()) { // TODO: Map stream names to IDs
+                    const RawToken& raw_token = raw_tokens[token._tokenIndex];
+                    if (raw_token._token == EToken::CHUNK) {
+                        std::string chunk_content = string_table.get_string(raw_token.chunk_content_index);
+                        
+                        if (chunk_content == "exec") {
+                            found_exec = true;
+                        } else if (found_exec) {
+                            // Count only identifiers outside template brackets
                             identifier_count++;
                         }
                     }
@@ -42,8 +84,8 @@ bool is_exec_specialization(const Scope& scope, const StringTable& string_table,
         }
     }
     
-    // Specialization has 2+ identifiers after exec
-    // Parent has 1 identifier after exec
+    // Specialization has 2+ identifiers after exec (outside template brackets)
+    // Parent has 1 identifier after exec (outside template brackets)
     return found_exec && identifier_count >= 2;
 }
 
@@ -279,6 +321,24 @@ void sublayer2b(std::vector<Scope>& scopes,
         const Scope& scope = scopes[scope_index];
         LOG_INFO("--- Processing parent exec scope {} ---", scope_index);
         
+        // Step 0: Extract and register the parent alias name
+        std::string parent_alias_name = extract_parent_alias_name(scope, string_table, streams);
+        if (!parent_alias_name.empty()) {
+            // Check if parent alias is already registered, if not register it
+            ExecAliasIndex parent_alias_index;
+            if (exec_registry.contains_alias(parent_alias_name)) {
+                parent_alias_index = exec_registry.get_alias_index(parent_alias_name);
+                LOG_INFO("Parent alias '{}' already registered with index {}", parent_alias_name, parent_alias_index.value);
+            } else {
+                parent_alias_index = exec_registry.register_alias(parent_alias_name);
+                LOG_INFO("Registered new parent alias '{}' with index {}", parent_alias_name, parent_alias_index.value);
+            }
+            exec_registry.register_scope_index_to_exec_alias(parent_alias_index, scope_index);
+            LOG_INFO("Linked parent alias '{}' to scope {}", parent_alias_name, scope_index);
+        } else {
+            LOG_WARN("Could not extract parent alias name from parent scope {}", scope_index);
+        }
+        
         // Step 1: Extract parameter identifiers between < > tokens
         std::vector<std::string> parameters = extract_parameter_identifiers(scope, string_table, streams);
         LOG_INFO("Extracted {} parameters: [{}]", parameters.size(), 
@@ -349,7 +409,7 @@ void sublayer2b(std::vector<Scope>& scopes,
                     return result;
                 }());
         
-        // Step 2: Extract scope body tokens and detokenize to Lua script
+        // Step 2: Extract scope body tokens and detokenize to CPrime content (not Lua)
         std::vector<RawToken> body_tokens = extract_scope_body_tokens(scope, streams);
         LOG_INFO("Extracted {} body tokens from specialization scope", body_tokens.size());
         
@@ -358,28 +418,38 @@ void sublayer2b(std::vector<Scope>& scopes,
             continue;
         }
         
-        // Detokenize body to get Lua script
-        std::string lua_script = TokenDetokenizer::detokenize_raw_tokens_to_string(body_tokens, string_table);
+        // Detokenize body to get CPrime content (this will be passed to parent's Lua script)
+        std::string cprime_content = TokenDetokenizer::detokenize_raw_tokens_to_string(body_tokens, string_table);
         
-        // Clean up CPrime formatting artifacts from Lua script
-        std::string cleaned_lua_script = clean_lua_script_formatting(lua_script);
+        // Clean up formatting for CPrime content
+        std::string cleaned_cprime_content = clean_lua_script_formatting(cprime_content);
         
-        LOG_INFO("Detokenized specialization Lua script ({} chars):", cleaned_lua_script.length());
-        LOG_INFO("{}", cleaned_lua_script);
+        LOG_INFO("Detokenized specialization CPrime content ({} chars):", cleaned_cprime_content.length());
+        LOG_INFO("{}", cleaned_cprime_content);
         
-        // Step 3: Create ExecutableLambda with the cleaned Lua script
-        ExecutableLambda compiled_lambda;
-        compiled_lambda.lua_script = cleaned_lua_script;
+        // Step 3: Extract parent alias name and register the parent-specialization relationship
+        std::string parent_alias_name = extract_parent_alias_name(scope, string_table, streams);
+        if (!parent_alias_name.empty()) {
+            exec_registry.register_specialization_to_parent(scope_index, parent_alias_name);
+            LOG_INFO("Registered specialization {} to parent alias '{}'", scope_index, parent_alias_name);
+        } else {
+            LOG_WARN("Could not extract parent alias name from specialization scope {}", scope_index);
+        }
+        
+        // Step 4: Create SpecializationLambda that stores CPrime content and parent reference
+        // For now, we'll store the CPrime content in lua_script field with a special marker
+        ExecutableLambda specialization_lambda;
+        specialization_lambda.lua_script = "SPECIALIZATION:" + cleaned_cprime_content;
         
         LOG_INFO("=== SPECIALIZATION EXEC BLOCK PREPARED ===");
         LOG_INFO("Scope Index: {}", scope_index);
         LOG_INFO("Parameters: {} items", parameters.size());
-        LOG_INFO("Lua Script Length: {} chars", cleaned_lua_script.length());
-        LOG_INFO("Status: Ready for on-demand execution");
+        LOG_INFO("CPrime Content Length: {} chars", cleaned_cprime_content.length());
+        LOG_INFO("Status: Ready for parent script execution");
         LOG_INFO("=== END SPECIALIZATION EXEC BLOCK PREPARATION ===");
         
-        // Update the registry with the compiled lambda
-        exec_registry.update_executable_lambda(scope_index, compiled_lambda);
+        // Update the registry with the specialization lambda
+        exec_registry.update_executable_lambda(scope_index, specialization_lambda);
         
         LOG_INFO("Completed processing specialization exec scope {}", scope_index);
         LOG_INFO(""); // Empty line for readability

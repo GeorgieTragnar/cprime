@@ -9,13 +9,17 @@
 
 namespace cprime {
 
+// Forward declaration
+class ExecAliasRegistry;
+
 // Structure for executable lambdas created from exec blocks
 // Contains Lua script and execution interface for exec blocks
 struct ExecutableLambda {
     std::string lua_script;                    // Converted exec block as Lua script
     
     // Execution interface
-    std::string execute(const std::vector<std::string>& parameters = {}) const;
+    std::string execute(const std::vector<std::string>& parameters = {});
+    std::string execute(const std::vector<std::string>& parameters, ExecAliasRegistry* registry, uint32_t scope_index);
     
     // Utilities
     bool is_empty() const { return lua_script.empty(); }
@@ -179,6 +183,25 @@ public:
     const std::unordered_map<uint32_t, ExecutableLambda>& get_scope_to_lambda_map() const { 
         return scope_to_lambda_; 
     }
+    
+    /**
+     * Get mutable access to scope-to-lambda map for execution.
+     */
+    std::unordered_map<uint32_t, ExecutableLambda>& get_scope_to_lambda_map() { 
+        return scope_to_lambda_; 
+    }
+    
+    /**
+     * Register a parent-specialization relationship.
+     * Links a specialization scope to its parent exec alias.
+     */
+    void register_specialization_to_parent(uint32_t specialization_scope_index, const std::string& parent_alias_name);
+    
+    /**
+     * Get the parent alias name for a specialization scope.
+     * Returns empty string if not a specialization or parent not found.
+     */
+    std::string get_parent_alias_name(uint32_t specialization_scope_index) const;
 
 private:
     std::vector<std::string> aliases_;                                    // Indexed alias storage (for backward compatibility)
@@ -191,6 +214,9 @@ private:
     // Exec scope registration maps
     std::unordered_map<uint32_t, ExecutableLambda> scope_to_lambda_;      // Scope indices → executable lambdas
     std::unordered_map<uint32_t, uint32_t> alias_to_scope_;              // Exec alias indices → scope indices
+    
+    // Parent-specialization relationship tracking
+    std::unordered_map<uint32_t, std::string> specialization_to_parent_; // Specialization scope indices → parent alias names
     
     // Anti-shadowing lookup helpers
     bool is_global_namespace(const std::vector<std::string>& namespace_path) const;

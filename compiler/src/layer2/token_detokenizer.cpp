@@ -182,6 +182,11 @@ std::string TokenDetokenizer::raw_token_to_original_string(
     const RawToken& raw_token,
     const StringTable& string_table) {
     
+    // Handle CHUNK tokens specially - extract content from StringTable
+    if (raw_token._token == EToken::CHUNK) {
+        return string_table.get_string(raw_token.chunk_content_index);
+    }
+    
     // For identifiers and literals, resolve from the literal value
     if (raw_token._token == EToken::IDENTIFIER ||
         raw_token._token == EToken::STRING_LITERAL ||
@@ -260,23 +265,32 @@ std::string TokenDetokenizer::etoken_to_original_symbol(EToken token) {
         case EToken::TRUE_LITERAL:   return "true";
         case EToken::FALSE_LITERAL:  return "false";
         
-        // Operators
-        case EToken::ASSIGN:         return "=";
+        // Single-character operators (Layer 1 architecture)
         case EToken::PLUS:           return "+";
         case EToken::MINUS:          return "-";
         case EToken::MULTIPLY:       return "*";
         case EToken::DIVIDE:         return "/";
         case EToken::MODULO:         return "%";
-        case EToken::EQUALS:         return "==";
-        case EToken::NOT_EQUALS:     return "!=";
+        case EToken::ASSIGN:         return "=";
         case EToken::LESS_THAN:      return "<";
         case EToken::GREATER_THAN:   return ">";
-        case EToken::LESS_EQUAL:     return "<=";
-        case EToken::GREATER_EQUAL:  return ">=";
-        case EToken::LOGICAL_AND:    return "&&";
-        case EToken::LOGICAL_OR:     return "||";
         case EToken::LOGICAL_NOT:    return "!";
-        case EToken::SCOPE_RESOLUTION: return "::";
+        case EToken::BITWISE_AND:    return "&";
+        case EToken::BITWISE_OR:     return "|";
+        case EToken::BITWISE_XOR:    return "^";
+        case EToken::BITWISE_NOT:    return "~";
+        case EToken::DOT:            return ".";
+        case EToken::COLON:          return ":";
+        
+        // Multi-character operators should not appear in Layer 1 output
+        // These will be formed in Layer 2C by combining adjacent single operators
+        case EToken::EQUALS:         return "INVALID_MULTI_CHAR_TOKEN_==";
+        case EToken::NOT_EQUALS:     return "INVALID_MULTI_CHAR_TOKEN_!=";
+        case EToken::LESS_EQUAL:     return "INVALID_MULTI_CHAR_TOKEN_<=";
+        case EToken::GREATER_EQUAL:  return "INVALID_MULTI_CHAR_TOKEN_>=";
+        case EToken::LOGICAL_AND:    return "INVALID_MULTI_CHAR_TOKEN_&&";
+        case EToken::LOGICAL_OR:     return "INVALID_MULTI_CHAR_TOKEN_||";
+        case EToken::SCOPE_RESOLUTION: return "INVALID_MULTI_CHAR_TOKEN_::";
         
         // Delimiters
         case EToken::SEMICOLON:      return ";";
@@ -287,9 +301,7 @@ std::string TokenDetokenizer::etoken_to_original_symbol(EToken token) {
         case EToken::LEFT_BRACKET:   return "[";
         case EToken::RIGHT_BRACKET:  return "]";
         case EToken::COMMA:          return ",";
-        case EToken::DOT:            return ".";
-        case EToken::COLON:          return ":";
-        case EToken::ARROW:          return "->";
+        case EToken::ARROW:          return "INVALID_MULTI_CHAR_TOKEN_->";
         
         // Whitespace and line endings
         case EToken::SPACE:          return " ";

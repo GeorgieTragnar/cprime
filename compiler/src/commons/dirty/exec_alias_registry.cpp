@@ -106,9 +106,19 @@ static std::string execute_lua_inline(const std::string& script, const std::vect
     }
 }
 
-std::string ExecutableLambda::execute(const std::vector<std::string>& parameters) const {
+std::string ExecutableLambda::execute(const std::vector<std::string>& parameters) {
     if (lua_script.empty()) {
         return "";  // Empty script returns empty string
+    }
+    
+    // Check if this is a specialization (not a direct Lua script)
+    if (lua_script.substr(0, 15) == "SPECIALIZATION:") {
+        // Extract CPrime content from specialization
+        std::string cprime_content = lua_script.substr(15); // Remove "SPECIALIZATION:" prefix
+        
+        // For the basic execute method, just return the content directly
+        // The registry-aware execute method will handle parent delegation
+        return "SPECIALIZATION_EXECUTED: " + cprime_content;
     }
     
     // Execute the Lua script and get the return value
@@ -176,6 +186,52 @@ std::string ExecutableLambda::execute(const std::vector<std::string>& parameters
     }
 }
 
+std::string ExecutableLambda::execute(const std::vector<std::string>& parameters, ExecAliasRegistry* registry, uint32_t scope_index) {
+    if (lua_script.empty()) {
+        return "";  // Empty script returns empty string
+    }
+    
+    // Check if this is a specialization (not a direct Lua script)
+    if (lua_script.substr(0, 15) == "SPECIALIZATION:") {
+        // Extract CPrime content from specialization
+        std::string cprime_content = lua_script.substr(15); // Remove "SPECIALIZATION:" prefix
+        
+        // Get the parent alias name for this specialization
+        std::string parent_alias_name = registry->get_parent_alias_name(scope_index);
+        if (parent_alias_name.empty()) {
+            return "// Error: No parent alias found for specialization";
+        }
+        
+        // Find the parent's executable lambda
+        ExecAliasIndex parent_alias_index = registry->get_alias_index(parent_alias_name);
+        if (parent_alias_index.value == UINT32_MAX) {
+            return "// Error: Parent alias '" + parent_alias_name + "' not found in registry";
+        }
+        
+        try {
+            const ExecutableLambda& parent_lambda = registry->get_executable_lambda_by_alias(parent_alias_index);
+            
+            // Create parameters vector with CPrime content as first parameter
+            std::vector<std::string> parent_parameters;
+            parent_parameters.push_back(cprime_content);
+            
+            // Add any additional parameters passed to the specialization
+            for (const auto& param : parameters) {
+                parent_parameters.push_back(param);
+            }
+            
+            // Execute the parent's Lua script with specialization content as first parameter
+            return execute_lua_inline(parent_lambda.lua_script, parent_parameters);
+            
+        } catch (const std::exception& e) {
+            return "// Error executing parent '" + parent_alias_name + "': " + std::string(e.what());
+        }
+    }
+    
+    // Regular Lua script execution
+    return execute_lua_inline(lua_script, parameters);
+}
+
 ExecAliasIndex ExecAliasRegistry::register_alias(const std::string& alias_name) {
     // Check for duplicate registration - assert for now with TODO for proper error handling
     auto existing = alias_to_index_.find(alias_name);
@@ -240,6 +296,7 @@ void ExecAliasRegistry::clear() {
     alias_reverse_map_.clear();
     scope_to_lambda_.clear();
     alias_to_scope_.clear();
+    specialization_to_parent_.clear();
 }
 
 void ExecAliasRegistry::reserve(size_t expected_aliases) {
@@ -431,6 +488,18 @@ bool ExecAliasRegistry::namespace_path_matches(const std::vector<std::string>& c
     
     // Check if candidate namespace matches current context exactly
     return candidate_namespace == current_context;
+}
+
+void ExecAliasRegistry::register_specialization_to_parent(uint32_t specialization_scope_index, const std::string& parent_alias_name) {
+    specialization_to_parent_[specialization_scope_index] = parent_alias_name;
+}
+
+std::string ExecAliasRegistry::get_parent_alias_name(uint32_t specialization_scope_index) const {
+    auto it = specialization_to_parent_.find(specialization_scope_index);
+    if (it != specialization_to_parent_.end()) {
+        return it->second;
+    }
+    return ""; // Not a specialization or parent not found
 }
 
 } // namespace cprime
