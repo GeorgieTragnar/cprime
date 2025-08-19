@@ -1,5 +1,6 @@
 #include "../layer2.h"
 #include "../../commons/logger.h"
+#include "../../commons/errorHandler.h"
 #include "../../layer1/layer1.h"
 #include <sstream>
 #include <cassert>
@@ -732,17 +733,17 @@ uint32_t handle_scope_create_integration(const ExecResult& exec_result,
     return generated_scope_index;
 }
 
-// Main exec processing function (single pass)
-uint32_t process_exec_execution(const Instruction& exec_instruction,
-                               std::vector<Scope>& master_scopes,
-                               const StringTable& string_table,
-                               ExecAliasRegistry& exec_registry,
-                               const std::map<std::string, std::vector<RawToken>>& streams,
-                               uint32_t current_scope_index,
-                               bool is_header_exec) {
+// Enhanced exec processing function that returns both scope index and exec result
+ExecProcessingResult process_exec_execution_with_result(const Instruction& exec_instruction,
+                                                       std::vector<Scope>& master_scopes,
+                                                       const StringTable& string_table,
+                                                       ExecAliasRegistry& exec_registry,
+                                                       const std::map<std::string, std::vector<RawToken>>& streams,
+                                                       uint32_t current_scope_index,
+                                                       bool is_header_exec) {
     
     auto logger = cprime::LoggerFactory::get_logger("exec_processing");
-    LOG_INFO("Processing exec execution (single pass)...");
+    LOG_INFO("Processing exec execution with result tracking (single pass)...");
     
     try {
         // Step 1: Extract exec execution info
@@ -771,28 +772,299 @@ uint32_t process_exec_execution(const Instruction& exec_instruction,
         
         if (!exec_result.is_valid) {
             LOG_ERROR("Exec execution returned invalid result: {}", exec_result.generated_code);
-            return UINT32_MAX; // Signal error - invalid scope index
+            return ExecProcessingResult(); // Invalid result
         }
         
-        // Step 3: Handle integration based on type
+        // Step 4: Handle integration based on type and return both scope index and exec result
+        uint32_t generated_scope_index = UINT32_MAX;
+        
         if (exec_result.integration_type == "token") {
-            return handle_token_integration(exec_result, exec_instruction, master_scopes, 
-                                           string_table, streams, current_scope_index);
+            generated_scope_index = handle_token_integration(exec_result, exec_instruction, master_scopes, 
+                                                            string_table, streams, current_scope_index);
         } else if (exec_result.integration_type == "scope_insert") {
-            return handle_scope_insert_integration(exec_result, exec_instruction, master_scopes, 
-                                                  string_table, exec_registry, streams, current_scope_index);
+            generated_scope_index = handle_scope_insert_integration(exec_result, exec_instruction, master_scopes, 
+                                                                   string_table, exec_registry, streams, current_scope_index);
         } else if (exec_result.integration_type == "scope_create") {
-            return handle_scope_create_integration(exec_result, exec_instruction, master_scopes, 
-                                                  string_table, exec_registry, streams, current_scope_index);
+            generated_scope_index = handle_scope_create_integration(exec_result, exec_instruction, master_scopes, 
+                                                                   string_table, exec_registry, streams, current_scope_index);
         } else {
             LOG_ERROR("Unknown integration type: {}", exec_result.integration_type);
-            return UINT32_MAX; // Signal error - invalid scope index
+            return ExecProcessingResult(); // Invalid result
         }
+        
+        if (generated_scope_index == UINT32_MAX) {
+            LOG_ERROR("Integration handler failed for type: {}", exec_result.integration_type);
+            return ExecProcessingResult(); // Invalid result
+        }
+        
+        LOG_INFO("Exec processing completed successfully - generated scope: {}, integration type: {}", 
+                 generated_scope_index, exec_result.integration_type);
+        
+        return ExecProcessingResult(generated_scope_index, exec_result);
         
     } catch (const std::exception& e) {
         LOG_ERROR("Exec execution failed: {}", e.what());
         throw;
     }
+}
+
+// Legacy exec processing function (maintained for backward compatibility)
+uint32_t process_exec_execution(const Instruction& exec_instruction,
+                               std::vector<Scope>& master_scopes,
+                               const StringTable& string_table,
+                               ExecAliasRegistry& exec_registry,
+                               const std::map<std::string, std::vector<RawToken>>& streams,
+                               uint32_t current_scope_index,
+                               bool is_header_exec) {
+    
+    ExecProcessingResult result = process_exec_execution_with_result(exec_instruction, master_scopes, 
+                                                                    string_table, exec_registry, streams, 
+                                                                    current_scope_index, is_header_exec);
+    
+    if (!result.is_valid) {
+        return UINT32_MAX; // Signal error
+    }
+    
+    return result.generated_scope_index;
+}
+
+// Helper function to get reference to specific instruction in scopes vector
+Instruction& get_instruction_reference(std::vector<Scope>& scopes, size_t scope_index, size_t instruction_index) {
+    assert(scope_index < scopes.size() && "Invalid scope index");
+    assert(instruction_index < scopes[scope_index]._instructions.size() && "Invalid instruction index");
+    
+    auto& instruction_variant = scopes[scope_index]._instructions[instruction_index];
+    assert(std::holds_alternative<Instruction>(instruction_variant) && "Instruction variant is not an Instruction");
+    
+    return std::get<Instruction>(instruction_variant);
+}
+
+// Process single scope contextualization (recursive helper)
+void process_scope_contextualization(
+    std::vector<Scope>& scopes,
+    size_t scope_index,
+    const StringTable& string_table,
+    const std::map<std::string, std::vector<RawToken>>& streams,
+    ExecAliasRegistry& exec_registry,
+    ErrorHandler& error_handler
+) {
+    auto logger = cprime::LoggerFactory::get_logger("exec_processing");
+    LOG_INFO("Re-contextualizing scope {} after exec processing", scope_index);
+    
+    assert(scope_index < scopes.size() && "Invalid scope index for re-contextualization");
+    
+    Scope& scope = scopes[scope_index];
+    
+    // Create error reporters for different instruction types
+    auto create_error_reporter = [&](size_t instr_idx, InstructionType instr_type) {
+        return [&, instr_idx, instr_type](ContextualizationErrorType error_type,
+                                         const std::string& extra_info,
+                                         const std::vector<uint32_t>& token_indices) {
+            ContextualizationError error;
+            error.error_type = error_type;
+            error.extra_info = extra_info;
+            error.token_indices = token_indices;
+            error.scope_index = static_cast<uint32_t>(scope_index);
+            error.instruction_index = static_cast<uint32_t>(instr_idx);
+            error.instruction_type = instr_type;
+            error_handler.register_contextualization_error(error);
+        };
+    };
+    
+    // 1. Re-contextualize header
+    auto header_error_reporter = create_error_reporter(0, InstructionType::HEADER);
+    bool header_needs_exec = contextualize_header(scope._header, header_error_reporter);
+    
+    if (header_needs_exec) {
+        LOG_ERROR("ASSERTION FAILURE: Found exec pattern in re-contextualized header of scope {}", scope_index);
+        assert(false && "Re-contextualized header should never contain exec patterns - single exec per instruction only");
+    }
+    
+    // 2. Re-contextualize all body instructions
+    for (size_t instr_index = 0; instr_index < scope._instructions.size(); ++instr_index) {
+        auto& instruction_variant = scope._instructions[instr_index];
+        
+        if (std::holds_alternative<Instruction>(instruction_variant)) {
+            Instruction& instruction = std::get<Instruction>(instruction_variant);
+            
+            auto instruction_error_reporter = create_error_reporter(instr_index, InstructionType::BODY);
+            bool instruction_needs_exec = contextualize_instruction(instruction, instruction_error_reporter);
+            
+            if (instruction_needs_exec) {
+                LOG_ERROR("ASSERTION FAILURE: Found exec pattern in re-contextualized instruction {} of scope {}", 
+                         instr_index, scope_index);
+                assert(false && "Re-contextualized instruction should never contain exec patterns - single exec per instruction only");
+            }
+        }
+        // Note: Nested scope references don't need re-contextualization here
+    }
+    
+    // 3. Re-contextualize footer (if it's an instruction)
+    if (std::holds_alternative<Instruction>(scope._footer)) {
+        Instruction& footer_instruction = std::get<Instruction>(scope._footer);
+        
+        auto footer_error_reporter = create_error_reporter(scope._instructions.size(), InstructionType::FOOTER);
+        bool footer_needs_exec = contextualize_footer(footer_instruction, footer_error_reporter);
+        
+        if (footer_needs_exec) {
+            LOG_ERROR("ASSERTION FAILURE: Found exec pattern in re-contextualized footer of scope {}", scope_index);
+            assert(false && "Re-contextualized footer should never contain exec patterns - single exec per instruction only");
+        }
+    }
+    
+    LOG_INFO("Re-contextualization of scope {} completed successfully", scope_index);
+}
+
+// Post-exec re-contextualization based on integration type
+void handle_post_exec_recontextualization(
+    std::vector<Scope>& scopes,
+    size_t original_scope_index,
+    size_t original_instruction_index,
+    InstructionType instruction_type,
+    const ExecProcessingResult& exec_processing_result,
+    const StringTable& string_table,
+    const std::map<std::string, std::vector<RawToken>>& streams,
+    ExecAliasRegistry& exec_registry,
+    ErrorHandler& error_handler
+) {
+    auto logger = cprime::LoggerFactory::get_logger("exec_processing");
+    LOG_INFO("Handling post-exec re-contextualization for integration type: {}", exec_processing_result.exec_result.integration_type);
+    
+    if (!exec_processing_result.is_valid) {
+        LOG_ERROR("Cannot re-contextualize - invalid exec processing result");
+        return;
+    }
+    
+    const ExecResult& exec_result = exec_processing_result.exec_result;
+    uint32_t generated_scope_index = exec_processing_result.generated_scope_index;
+    
+    // Create error reporter for re-contextualization
+    auto create_error_reporter = [&](size_t scope_idx, size_t instr_idx, InstructionType instr_type) {
+        return [&, scope_idx, instr_idx, instr_type](ContextualizationErrorType error_type,
+                                                     const std::string& extra_info,
+                                                     const std::vector<uint32_t>& token_indices) {
+            ContextualizationError error;
+            error.error_type = error_type;
+            error.extra_info = extra_info;
+            error.token_indices = token_indices;
+            error.scope_index = static_cast<uint32_t>(scope_idx);
+            error.instruction_index = static_cast<uint32_t>(instr_idx);
+            error.instruction_type = instr_type;
+            error_handler.register_contextualization_error(error);
+        };
+    };
+    
+    // Integration-type-specific re-contextualization
+    if (exec_result.integration_type == "token") {
+        LOG_INFO("Token integration: re-contextualizing modified instruction");
+        
+        // Token integration modified the original instruction in-place
+        // Need to re-contextualize the same instruction at the same location
+        if (instruction_type == InstructionType::BODY) {
+            Instruction& modified_instruction = get_instruction_reference(scopes, original_scope_index, original_instruction_index);
+            
+            // Clear previous contextualization
+            modified_instruction._contextualTokens.clear();
+            
+            // Re-contextualize with new tokens
+            auto error_reporter = create_error_reporter(original_scope_index, original_instruction_index, InstructionType::BODY);
+            bool needs_exec_again = contextualize_instruction(modified_instruction, error_reporter);
+            
+            if (needs_exec_again) {
+                LOG_ERROR("ASSERTION FAILURE: Token-substituted instruction contains MORE exec patterns");
+                assert(false && "Generated code should never contain exec patterns - single exec per instruction only");
+            }
+            
+            LOG_INFO("✅ Token integration re-contextualization completed for scope {}, instruction {}", 
+                     original_scope_index, original_instruction_index);
+        } else if (instruction_type == InstructionType::HEADER) {
+            // Re-contextualize modified header
+            Scope& modified_scope = scopes[original_scope_index];
+            modified_scope._header._contextualTokens.clear();
+            
+            auto error_reporter = create_error_reporter(original_scope_index, 0, InstructionType::HEADER);
+            bool needs_exec_again = contextualize_header(modified_scope._header, error_reporter);
+            
+            if (needs_exec_again) {
+                LOG_ERROR("ASSERTION FAILURE: Token-substituted header contains MORE exec patterns");
+                assert(false && "Generated code should never contain exec patterns - single exec per instruction only");
+            }
+            
+            LOG_INFO("✅ Token integration re-contextualization completed for scope {} header", original_scope_index);
+        } else if (instruction_type == InstructionType::FOOTER) {
+            // Re-contextualize modified footer
+            Scope& modified_scope = scopes[original_scope_index];
+            if (std::holds_alternative<Instruction>(modified_scope._footer)) {
+                Instruction& footer_instruction = std::get<Instruction>(modified_scope._footer);
+                footer_instruction._contextualTokens.clear();
+                
+                auto error_reporter = create_error_reporter(original_scope_index, modified_scope._instructions.size(), InstructionType::FOOTER);
+                bool needs_exec_again = contextualize_footer(footer_instruction, error_reporter);
+                
+                if (needs_exec_again) {
+                    LOG_ERROR("ASSERTION FAILURE: Token-substituted footer contains MORE exec patterns");
+                    assert(false && "Generated code should never contain exec patterns - single exec per instruction only");
+                }
+                
+                LOG_INFO("✅ Token integration re-contextualization completed for scope {} footer", original_scope_index);
+            }
+        }
+        
+    } else if (exec_result.integration_type == "scope_insert") {
+        LOG_INFO("Scope insertion: contextualizing newly created scope {}", generated_scope_index);
+        
+        // Scope insertion replaced the original instruction with a scope index
+        // The new scope (at generated_scope_index) needs full contextualization
+        // It has never been through the contextualization pipeline
+        
+        if (generated_scope_index < scopes.size()) {
+            process_scope_contextualization(scopes, generated_scope_index, string_table, streams, exec_registry, error_handler);
+            LOG_INFO("✅ Scope insertion re-contextualization completed for generated scope {}", generated_scope_index);
+        } else {
+            LOG_ERROR("Invalid generated scope index {} for scope insertion re-contextualization", generated_scope_index);
+        }
+        
+    } else if (exec_result.integration_type == "scope_create") {
+        LOG_INFO("Scope creation: contextualizing {} new scopes and modified instruction", 
+                 scopes.size() - generated_scope_index);
+        
+        // Scope creation created multiple new scopes AND modified the original instruction
+        // Need to contextualize ALL new scopes + re-contextualize the modified instruction
+        
+        // 1. Contextualize all newly created scopes (from generated_scope_index to end)
+        for (size_t new_scope_idx = generated_scope_index; new_scope_idx < scopes.size(); ++new_scope_idx) {
+            process_scope_contextualization(scopes, new_scope_idx, string_table, streams, exec_registry, error_handler);
+            LOG_INFO("Re-contextualized newly created scope {}", new_scope_idx);
+        }
+        
+        // 2. Re-contextualize the modified original instruction (if it was a body instruction)
+        if (instruction_type == InstructionType::BODY) {
+            Instruction& modified_instruction = get_instruction_reference(scopes, original_scope_index, original_instruction_index);
+            
+            // Clear previous contextualization
+            modified_instruction._contextualTokens.clear();
+            
+            // Re-contextualize with identifier-substituted tokens
+            auto error_reporter = create_error_reporter(original_scope_index, original_instruction_index, InstructionType::BODY);
+            bool needs_exec_again = contextualize_instruction(modified_instruction, error_reporter);
+            
+            if (needs_exec_again) {
+                LOG_ERROR("ASSERTION FAILURE: Identifier-substituted instruction contains MORE exec patterns");
+                assert(false && "Generated code should never contain exec patterns - single exec per instruction only");
+            }
+            
+            LOG_INFO("Re-contextualized modified original instruction at scope {}, instruction {}", 
+                     original_scope_index, original_instruction_index);
+        }
+        
+        LOG_INFO("✅ Scope creation re-contextualization completed - {} new scopes contextualized", 
+                 scopes.size() - generated_scope_index);
+        
+    } else {
+        LOG_ERROR("Unknown integration type for re-contextualization: {}", exec_result.integration_type);
+    }
+    
+    LOG_INFO("Post-exec re-contextualization completed successfully for integration type: {}", exec_result.integration_type);
 }
 
 } // namespace cprime::layer2_contextualization

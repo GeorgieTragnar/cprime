@@ -166,11 +166,23 @@ std::vector<Scope> sublayer2d(const std::vector<Scope>& input_scopes,
                 // Fallback to old execution logic for backward compatibility
                 LOG_INFO("exec execution detected in header - processing...");
                 
-                uint32_t generated_scope_index = process_exec_execution(
+                // Use enhanced exec processing to get both scope index and exec result
+                ExecProcessingResult exec_processing_result = process_exec_execution_with_result(
                     scope._header, scopes, string_table, exec_registry, streams, scope_index, true);
                 
-                LOG_INFO("header exec execution: generated scope {}", generated_scope_index);
-                LOG_INFO("Header exec processing completed - scope generated successfully");
+                if (!exec_processing_result.is_valid) {
+                    LOG_ERROR("Header exec processing failed for scope {}", scope_index);
+                } else {
+                    LOG_INFO("header exec execution: generated scope {}", exec_processing_result.generated_scope_index);
+                    
+                    // NEW: Handle post-exec re-contextualization for header
+                    handle_post_exec_recontextualization(
+                        scopes, scope_index, 0, InstructionType::HEADER, 
+                        exec_processing_result, string_table, streams, 
+                        exec_registry, error_handler);
+                    
+                    LOG_INFO("Header exec processing completed - scope generated successfully with re-contextualization");
+                }
             }
         }
         
@@ -205,12 +217,34 @@ std::vector<Scope> sublayer2d(const std::vector<Scope>& input_scopes,
                 if (needs_exec_processing) {
                     LOG_INFO("exec execution detected - processing...");
                     
-                    uint32_t generated_scope_index = process_exec_execution(
+                    // Store original scope count for tracking new scopes
+                    size_t original_scope_count = scopes.size();
+                    
+                    // Use enhanced exec processing to get both scope index and exec result
+                    ExecProcessingResult exec_processing_result = process_exec_execution_with_result(
                         instruction, scopes, string_table, exec_registry, streams, scope_index, false);
                     
-                    // Replace instruction with scope reference to generated code
-                    instruction_variant = generated_scope_index;
-                    LOG_INFO("exec execution: replaced with generated scope {}", generated_scope_index);
+                    if (!exec_processing_result.is_valid) {
+                        LOG_ERROR("Exec processing failed for instruction in scope {}", scope_index);
+                        continue; // Skip to next instruction
+                    }
+                    
+                    // Replace instruction with scope reference if needed (scope_insert case)
+                    if (exec_processing_result.exec_result.integration_type == "scope_insert") {
+                        instruction_variant = exec_processing_result.generated_scope_index;
+                        LOG_INFO("exec execution: replaced with generated scope {}", exec_processing_result.generated_scope_index);
+                    } else {
+                        LOG_INFO("exec execution: completed with integration type '{}', generated scope {}", 
+                                 exec_processing_result.exec_result.integration_type, exec_processing_result.generated_scope_index);
+                    }
+                    
+                    // NEW: Handle post-exec re-contextualization
+                    handle_post_exec_recontextualization(
+                        scopes, scope_index, instr_index, InstructionType::BODY, 
+                        exec_processing_result, string_table, streams, 
+                        exec_registry, error_handler);
+                    
+                    LOG_INFO("Post-exec re-contextualization completed for instruction {}", instr_index);
                 }
             } else if (std::holds_alternative<uint32_t>(instruction_variant)) {
                 // No contextualization for nested scope references
@@ -245,12 +279,30 @@ std::vector<Scope> sublayer2d(const std::vector<Scope>& input_scopes,
             if (footer_needs_exec) {
                 LOG_INFO("exec execution detected in footer - processing...");
                 
-                uint32_t generated_scope_index = process_exec_execution(
+                // Use enhanced exec processing to get both scope index and exec result
+                ExecProcessingResult exec_processing_result = process_exec_execution_with_result(
                     footer_instruction, scopes, string_table, exec_registry, streams, scope_index, false);
                 
-                // Replace footer instruction with scope reference (core semantic change!)
-                scope._footer = generated_scope_index;
-                LOG_INFO("footer exec execution: replaced footer with generated scope {}", generated_scope_index);
+                if (!exec_processing_result.is_valid) {
+                    LOG_ERROR("Footer exec processing failed for scope {}", scope_index);
+                } else {
+                    // Replace footer instruction with scope reference if needed (scope_insert case)
+                    if (exec_processing_result.exec_result.integration_type == "scope_insert") {
+                        scope._footer = exec_processing_result.generated_scope_index;
+                        LOG_INFO("footer exec execution: replaced footer with generated scope {}", exec_processing_result.generated_scope_index);
+                    } else {
+                        LOG_INFO("footer exec execution: completed with integration type '{}', generated scope {}", 
+                                 exec_processing_result.exec_result.integration_type, exec_processing_result.generated_scope_index);
+                    }
+                    
+                    // NEW: Handle post-exec re-contextualization for footer
+                    handle_post_exec_recontextualization(
+                        scopes, scope_index, scope._instructions.size(), InstructionType::FOOTER, 
+                        exec_processing_result, string_table, streams, 
+                        exec_registry, error_handler);
+                    
+                    LOG_INFO("Footer exec processing completed with re-contextualization");
+                }
             }
         } else {
             // Footer is already a scope index (previously replaced)

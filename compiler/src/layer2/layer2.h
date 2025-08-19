@@ -95,7 +95,27 @@ namespace layer2_contextualization {
     // Returns true if instruction contains exec execution that needs processing
     bool contextualize_instruction(Instruction& body_instruction, ErrorReporter report_error);
     
-    // Process exec execution and return global scope index of generated code (single pass)
+    // Result structure for exec processing that includes both scope index and exec result
+    struct ExecProcessingResult {
+        uint32_t generated_scope_index;
+        ExecResult exec_result;
+        bool is_valid;
+        
+        ExecProcessingResult() : generated_scope_index(UINT32_MAX), is_valid(false) {}
+        ExecProcessingResult(uint32_t scope_idx, const ExecResult& result) 
+            : generated_scope_index(scope_idx), exec_result(result), is_valid(true) {}
+    };
+    
+    // Process exec execution and return both scope index and exec result (single pass)
+    ExecProcessingResult process_exec_execution_with_result(const Instruction& exec_instruction,
+                                                           std::vector<Scope>& master_scopes,
+                                                           const StringTable& string_table,
+                                                           ExecAliasRegistry& exec_registry,
+                                                           const std::map<std::string, std::vector<RawToken>>& streams,
+                                                           uint32_t current_scope_index,
+                                                           bool is_header_exec = false);
+    
+    // Legacy function - maintained for backward compatibility
     uint32_t process_exec_execution(const Instruction& exec_instruction,
                                    std::vector<Scope>& master_scopes,
                                    const StringTable& string_table,
@@ -103,6 +123,29 @@ namespace layer2_contextualization {
                                    const std::map<std::string, std::vector<RawToken>>& streams,
                                    uint32_t current_scope_index,
                                    bool is_header_exec = false);
+    
+    // Post-exec re-contextualization based on integration type
+    void handle_post_exec_recontextualization(
+        std::vector<Scope>& scopes,
+        size_t original_scope_index,
+        size_t original_instruction_index,
+        InstructionType instruction_type,
+        const ExecProcessingResult& exec_processing_result,
+        const StringTable& string_table,
+        const std::map<std::string, std::vector<RawToken>>& streams,
+        ExecAliasRegistry& exec_registry,
+        ErrorHandler& error_handler
+    );
+    
+    // Process single scope contextualization (recursive helper)
+    void process_scope_contextualization(
+        std::vector<Scope>& scopes,
+        size_t scope_index,
+        const StringTable& string_table,
+        const std::map<std::string, std::vector<RawToken>>& streams,
+        ExecAliasRegistry& exec_registry,
+        ErrorHandler& error_handler
+    );
 }
 
 // Internal helper structures for Sublayer 2A
