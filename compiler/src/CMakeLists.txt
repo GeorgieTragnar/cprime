@@ -78,6 +78,9 @@ add_library(cprime_layer2
     layer2/contextualization/footer_contextualization.cpp
     layer2/contextualization/instruction_contextualization.cpp
     layer2/contextualization/exec_processing.cpp
+    layer2/contextualization/instruction_contextualizer.h
+    layer2/contextualization/instruction_contextualizer.cpp
+    layer2/contextualization/pattern_definitions.cpp
     layer2/lua_exec_runtime.h
     layer2/lua_exec_runtime.cpp
     layer2/token_detokenizer.h

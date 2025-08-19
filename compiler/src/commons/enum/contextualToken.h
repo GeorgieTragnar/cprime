@@ -14,7 +14,9 @@ enum class EContextualToken : uint32_t {
 	TYPE_REFERENCE = 6,
 	OPERATOR = 7,
 	LITERAL_VALUE = 8,
-	SCOPE_REFERENCE = 9
+	SCOPE_REFERENCE = 9,
+	WHITESPACE = 10,
+	FORMATTING = 11
 };
 
 } // namespace cprime

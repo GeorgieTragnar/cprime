@@ -1,6 +1,8 @@
 #include "../layer2.h"
 #include "../../commons/logger.h"
 #include "../../commons/contextualizationError.h"
+#include "instruction_contextualizer.h"
+#include <algorithm>
 
 namespace cprime::layer2_contextualization {
 
@@ -25,38 +27,51 @@ bool contextualize_instruction(Instruction& body_instruction, ErrorReporter repo
         return true;  // Signal for exec processing
     }
     
-    // TODO: Regular contextualization - populate body_instruction._contextualTokens
-    // All needed data is in the _tokens vector already
-    // Examples:
-    // - Variable declarations: int a = 1;
-    // - Assignments: a = b + c;
-    // - Function calls: print("hello");
-    // - Expressions: calculations, operations
-    // - Control flow statements: break, continue, return
+    // NEW: Use pattern-based N:M contextualization system
+    static InstructionContextualizer contextualizer;
+    static bool patterns_initialized = false;
     
-    // For now, generate INVALID contextual tokens for all non-exec instruction patterns
-    // This demonstrates the error reporting system
-    if (!body_instruction._tokens.empty()) {
-        // Collect token indices for error reporting
-        std::vector<uint32_t> token_indices;
-        for (size_t i = 0; i < body_instruction._tokens.size(); ++i) {
-            token_indices.push_back(body_instruction._tokens[i]._tokenIndex);
-        }
-        
-        // Report unsupported pattern error
-        report_error(ContextualizationErrorType::UNSUPPORTED_TOKEN_PATTERN,
-                    "Instruction contextualization not yet implemented for this pattern",
-                    token_indices);
-        
-        // Generate INVALID contextual tokens for all tokens
-        body_instruction._contextualTokens.clear();
-        for (const auto& token : body_instruction._tokens) {
-            ContextualToken ctx_token;
-            ctx_token._contextualToken = EContextualToken::INVALID;
-            ctx_token._parentTokenIndices.push_back(token._tokenIndex);
-            body_instruction._contextualTokens.push_back(ctx_token);
+    if (!patterns_initialized) {
+        LOG_INFO("Initializing instruction contextualization patterns");
+        setup_basic_patterns(contextualizer);
+        patterns_initialized = true;
+        LOG_INFO("Pattern initialization complete - {} patterns available", contextualizer.pattern_count());
+    }
+    
+    // Apply pattern-based contextualization
+    std::vector<ContextualToken> contextual_tokens = contextualizer.contextualize_instruction(body_instruction._tokens);
+    
+    // Check if any tokens were left as INVALID (unrecognized patterns)
+    bool has_invalid_tokens = false;
+    std::vector<uint32_t> invalid_token_indices;
+    
+    for (const auto& ctx_token : contextual_tokens) {
+        if (ctx_token._contextualToken == EContextualToken::INVALID) {
+            has_invalid_tokens = true;
+            // Add parent token indices to error report
+            invalid_token_indices.insert(invalid_token_indices.end(),
+                                        ctx_token._parentTokenIndices.begin(),
+                                        ctx_token._parentTokenIndices.end());
         }
     }
+    
+    // Report unsupported patterns if any were found
+    if (has_invalid_tokens) {
+        report_error(ContextualizationErrorType::UNSUPPORTED_TOKEN_PATTERN,
+                    "Some token patterns not yet implemented in instruction contextualization",
+                    invalid_token_indices);
+        
+        LOG_DEBUG("Instruction contextualization completed with {} invalid tokens out of {} contextual tokens",
+                 std::count_if(contextual_tokens.begin(), contextual_tokens.end(),
+                              [](const ContextualToken& ct) { return ct._contextualToken == EContextualToken::INVALID; }),
+                 contextual_tokens.size());
+    } else {
+        LOG_DEBUG("Instruction contextualization completed successfully - all {} tokens contextualized",
+                 contextual_tokens.size());
+    }
+    
+    // Update instruction with generated contextual tokens
+    body_instruction._contextualTokens = std::move(contextual_tokens);
     
     return false;  // Regular instruction, no exec processing needed
 }
