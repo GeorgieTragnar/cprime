@@ -1,6 +1,7 @@
 #include "../layer2.h"
 #include "../../commons/logger.h"
 #include "../../commons/contextualizationError.h"
+#include "header_contextualizer.h"
 
 namespace cprime::layer2_contextualization {
 
@@ -177,35 +178,49 @@ bool contextualize_header(Instruction& header_instruction, ErrorReporter report_
         return true;  // Signal for exec processing
     }
     
-    // TODO: Regular header contextualization
-    // Examples:
-    // - Function declarations: int main(), exec code_gen<...>
-    // - Control flow headers: if (...), while (...)
-    // - Class/struct declarations
+    // NEW: Use HeaderContextualizer for pattern-based header contextualization
+    static HeaderContextualizer contextualizer;
+    static bool patterns_initialized = false;
     
-    // For now, generate INVALID contextual tokens for all non-exec header patterns
-    // This demonstrates the error reporting system
-    if (!header_instruction._tokens.empty()) {
-        // Collect token indices for error reporting
-        std::vector<uint32_t> token_indices;
-        for (size_t i = 0; i < header_instruction._tokens.size(); ++i) {
-            token_indices.push_back(header_instruction._tokens[i]._tokenIndex);
-        }
-        
-        // Report unsupported pattern error
-        report_error(ContextualizationErrorType::UNSUPPORTED_TOKEN_PATTERN,
-                    "Header contextualization not yet implemented for this pattern",
-                    token_indices);
-        
-        // Generate INVALID contextual tokens for all tokens
-        header_instruction._contextualTokens.clear();
-        for (const auto& token : header_instruction._tokens) {
-            ContextualToken ctx_token;
-            ctx_token._contextualToken = EContextualToken::INVALID;
-            ctx_token._parentTokenIndices.push_back(token._tokenIndex);
-            header_instruction._contextualTokens.push_back(ctx_token);
+    if (!patterns_initialized) {
+        LOG_INFO("Header contextualizer already initialized with {} patterns", contextualizer.pattern_count());
+        patterns_initialized = true;
+    }
+    
+    // Apply pattern-based header contextualization
+    std::vector<ContextualToken> contextual_tokens = contextualizer.contextualize(header_instruction._tokens);
+    
+    // Check if any tokens were left as INVALID (unrecognized patterns)
+    bool has_invalid_tokens = false;
+    std::vector<uint32_t> invalid_token_indices;
+    
+    for (const auto& ctx_token : contextual_tokens) {
+        if (ctx_token._contextualToken == EContextualToken::INVALID) {
+            has_invalid_tokens = true;
+            // Add parent token indices to error report
+            invalid_token_indices.insert(invalid_token_indices.end(),
+                                        ctx_token._parentTokenIndices.begin(),
+                                        ctx_token._parentTokenIndices.end());
         }
     }
+    
+    // Report unsupported patterns if any were found
+    if (has_invalid_tokens) {
+        report_error(ContextualizationErrorType::UNSUPPORTED_TOKEN_PATTERN,
+                    "Some token patterns not yet implemented in header contextualization",
+                    invalid_token_indices);
+        
+        LOG_DEBUG("Header contextualization completed with {} invalid tokens out of {} contextual tokens",
+                 std::count_if(contextual_tokens.begin(), contextual_tokens.end(),
+                              [](const ContextualToken& ct) { return ct._contextualToken == EContextualToken::INVALID; }),
+                 contextual_tokens.size());
+    } else {
+        LOG_DEBUG("Header contextualization completed successfully - all {} tokens contextualized",
+                 contextual_tokens.size());
+    }
+    
+    // Update header with generated contextual tokens
+    header_instruction._contextualTokens = std::move(contextual_tokens);
     
     return false;  // Regular header, no exec processing needed
 }

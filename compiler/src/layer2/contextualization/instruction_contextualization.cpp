@@ -29,14 +29,8 @@ bool contextualize_instruction(Instruction& body_instruction, ErrorReporter repo
     
     // NEW: Use pattern-based N:M contextualization system
     static InstructionContextualizer contextualizer;
-    static bool patterns_initialized = false;
     
-    if (!patterns_initialized) {
-        LOG_INFO("Initializing instruction contextualization patterns");
-        setup_basic_patterns(contextualizer);
-        patterns_initialized = true;
-        LOG_INFO("Pattern initialization complete - {} patterns available", contextualizer.pattern_count());
-    }
+    LOG_DEBUG("Using instruction contextualizer with {} patterns available", contextualizer.pattern_count());
     
     // Apply pattern-based contextualization
     std::vector<ContextualToken> contextual_tokens = contextualizer.contextualize_instruction(body_instruction._tokens);
