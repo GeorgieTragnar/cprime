@@ -1,0 +1,9 @@
+// Test scope_create integration type
+exec make_function<name> {
+    return "void " .. params[0] .. "() { print(\"Hello from " .. params[0] .. "\"); }", "scope_create", params[0]
+}
+
+func main() {
+    make_function<test_func>();
+    test_func();
+}

@@ -62,19 +62,14 @@ std::vector<Scope> sublayer2a(const std::map<std::string, std::vector<RawToken>>
                         // Inside exec scope: just accumulate the semicolon, don't create instruction boundary
                         builder.token_cache.add_token(raw_token, token_index);
                     } else {
-                        // Regular CPrime scope: treat semicolon as instruction boundary
+                        // Regular CPrime scope: treat semicolon as instruction boundary (consume separator)
                         if (!builder.token_cache.empty()) {
-                            builder.token_cache.add_token(raw_token, token_index);
-                            auto instruction = builder.token_cache.create_instruction();
-                            builder.add_instruction(instruction);
-                            builder.token_cache.clear();
-                        } else {
-                            // Standalone semicolon - create empty instruction
-                            builder.token_cache.add_token(raw_token, token_index);
+                            // Don't add the semicolon - it's a separator, not content
                             auto instruction = builder.token_cache.create_instruction();
                             builder.add_instruction(instruction);
                             builder.token_cache.clear();
                         }
+                        // Standalone semicolons are ignored (consumed as separators)
                     }
                 }
             }

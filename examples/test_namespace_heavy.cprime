@@ -1,0 +1,49 @@
+// Test heavy namespace nesting with CHUNK disambiguation
+exec global_gen<basic> {
+    print("Global basic generator");
+}
+
+namespace OuterSpace {
+    exec outer_gen<advanced> {
+        print("Outer advanced generator");
+    }
+    
+    namespace InnerSpace {
+        exec inner_gen<complex> {
+            print("Inner complex generator");
+        }
+        
+        namespace DeepSpace {
+            int deep_variable = 42;
+            func deep_function() {
+                // Test multiple exec alias calls from different scopes
+                global_gen<basic>();    // Should resolve to global scope
+                outer_gen<advanced>();  // Should resolve to OuterSpace scope
+                inner_gen<complex>();   // Should resolve to InnerSpace scope
+                
+                int local_var = deep_variable;  // Should be IDENTIFIER
+                func nested_func() {
+                    // Even deeper nesting
+                    print("Deep nested function");
+                }
+            }
+        }
+        
+        func inner_function() {
+            global_gen<basic>();    // Cross-namespace call
+            outer_gen<advanced>();  // Parent namespace call
+            inner_gen<complex>();   // Same namespace call
+        }
+    }
+    
+    func outer_function() {
+        global_gen<basic>();    // Global call from outer
+        outer_gen<advanced>();  // Same namespace call
+        int result = 123;       // 'int' should be INT32_T keyword
+    }
+}
+
+func main() {
+    global_gen<basic>();        // Global call from global
+    int main_var = 456;         // 'int' should be INT32_T keyword
+}

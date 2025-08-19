@@ -1,0 +1,22 @@
+// Test namespace-aware CHUNK token disambiguation
+exec code_gen<detailed> {
+    print("Generating detailed code");
+}
+
+namespace MyNamespace {
+    exec code_gen<simple> {
+        print("Generating simple code in namespace");
+    }
+    
+    int code_gen = 42;  // Should be IDENTIFIER, not EXEC_ALIAS
+    
+    func test_function() {
+        code_gen<detailed>();  // Should be EXEC_ALIAS (global scope)
+        int result = code_gen; // Should be IDENTIFIER (local variable)
+    }
+}
+
+func main() {
+    code_gen<detailed>();  // Should be EXEC_ALIAS (global scope)
+    int my_var = 123;      // 'int' should be INT32_T keyword
+}

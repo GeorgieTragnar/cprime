@@ -1,0 +1,8 @@
+// Test scope_insert integration type
+exec with_logging<message> {
+    return "print(\"Starting: " .. params[0] .. "\");", "scope_insert"
+}
+
+func main() {
+    with_logging<test_operation>();
+}

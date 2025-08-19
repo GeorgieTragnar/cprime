@@ -175,9 +175,12 @@ bool CompilerOrchestrator::run_layer2() {
                 LOG_INFO("=== ON-DEMAND EXECUTION TEST ===");
                 LOG_INFO("Executing prepared Lua script for scope {}", scope_index);
                 try {
-                    std::string result = executable_lambda.execute(test_params, &exec_alias_registry_, scope_index);
-                    LOG_INFO("Lua script returned: \"{}\"", result);
-                    LOG_INFO("Return value length: {} chars", result.length());
+                    ExecResult exec_result = executable_lambda.execute(test_params, &exec_alias_registry_, scope_index);
+                    LOG_INFO("Lua script returned (type: {}): \"{}\"", exec_result.integration_type, exec_result.generated_code);
+                    LOG_INFO("Return value length: {} chars, valid: {}", exec_result.generated_code.length(), exec_result.is_valid);
+                    if (!exec_result.identifier.empty()) {
+                        LOG_INFO("Generated identifier: \"{}\"", exec_result.identifier);
+                    }
                 } catch (const std::exception& e) {
                     LOG_ERROR("Execution failed: {}", e.what());
                 }
@@ -329,20 +332,15 @@ void CompilerOrchestrator::test_multiple_lua_scripts(ExecAliasRegistry& registry
                 LOG_INFO("Executing Script {}: {}", script_num, script_name);
                 
                 try {
-                    std::string result = current_script->execute(params);
+                    ExecResult exec_result = current_script->execute(params);
                     
-                    // Extract just the return value from the full result
-                    size_t return_pos = result.find("=== LUA RETURN VALUE ===");
-                    std::string return_value = "No return value";
-                    if (return_pos != std::string::npos) {
-                        size_t start = return_pos + 26; // Length of "=== LUA RETURN VALUE ===\n"
-                        size_t end = result.find('\n', start);
-                        if (end != std::string::npos) {
-                            return_value = result.substr(start, end - start);
-                        }
+                    LOG_INFO("Script {} Result (type: {}): {}", script_num, exec_result.integration_type, exec_result.generated_code);
+                    if (!exec_result.is_valid) {
+                        LOG_WARN("Script {} returned invalid result", script_num);
                     }
-                    
-                    LOG_INFO("Script {} Result: {}", script_num, return_value);
+                    if (!exec_result.identifier.empty()) {
+                        LOG_INFO("Script {} generated identifier: {}", script_num, exec_result.identifier);
+                    }
                     
                 } catch (const std::exception& e) {
                     LOG_ERROR("Script {} execution failed: {}", script_num, e.what());

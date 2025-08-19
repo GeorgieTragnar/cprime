@@ -2,6 +2,7 @@
 #include "../../commons/logger.h"
 #include "../../layer1/layer1.h"
 #include <sstream>
+#include <cassert>
 
 namespace cprime::layer2_contextualization {
 
@@ -335,14 +336,147 @@ std::map<std::string, std::vector<RawToken>> tokenize_generated_code(const std::
     return token_streams;
 }
 
+// Find the range of tokens that make up an exec alias call (alias<params>())
+bool find_exec_alias_range(const Instruction& exec_instruction, int& start_pos, int& end_pos) {
+    auto logger = cprime::LoggerFactory::get_logger("exec_processing");
+    
+    // Look for the pattern: EXEC_ALIAS < ... > ( ... )
+    // We need to find the EXEC_ALIAS token and then find the matching closing parenthesis
+    
+    for (size_t i = 0; i < exec_instruction._tokens.size(); ++i) {
+        if (exec_instruction._tokens[i]._token == EToken::EXEC_ALIAS) {
+            start_pos = static_cast<int>(i);
+            
+            // Look for the closing pattern - we need to find the matching closing parenthesis
+            // Pattern: EXEC_ALIAS < params > ( args )
+            //                    ^               ^
+            //                  start           end
+            
+            int paren_depth = 0;
+            int angle_depth = 0;
+            bool found_opening_paren = false;
+            
+            for (size_t j = i + 1; j < exec_instruction._tokens.size(); ++j) {
+                EToken token = exec_instruction._tokens[j]._token;
+                
+                if (token == EToken::LESS_THAN) {
+                    angle_depth++;
+                } else if (token == EToken::GREATER_THAN) {
+                    angle_depth--;
+                } else if (token == EToken::LEFT_PAREN && angle_depth == 0) {
+                    paren_depth++;
+                    found_opening_paren = true;
+                } else if (token == EToken::RIGHT_PAREN && angle_depth == 0) {
+                    paren_depth--;
+                    if (paren_depth == 0 && found_opening_paren) {
+                        end_pos = static_cast<int>(j);
+                        LOG_DEBUG("Found complete exec alias call from token {} to {}", start_pos, end_pos);
+                        return true;
+                    }
+                }
+            }
+            
+            // If we found an EXEC_ALIAS but no matching closing parenthesis, this might be a malformed call
+            LOG_WARN("Found EXEC_ALIAS token at {} but no matching closing parenthesis", i);
+            
+            // Fallback: just use the EXEC_ALIAS token itself
+            start_pos = static_cast<int>(i);
+            end_pos = static_cast<int>(i);
+            return true;
+        }
+    }
+    
+    LOG_ERROR("No EXEC_ALIAS token found in instruction");
+    return false;
+}
+
+// Perform direct token substitution: replace exec alias with generated tokens
+bool perform_token_substitution(const Instruction& exec_instruction,
+                                const std::vector<RawToken>& replacement_tokens,
+                                std::vector<Scope>& master_scopes,
+                                uint32_t current_scope_index,
+                                const StringTable& string_table) {
+    
+    auto logger = cprime::LoggerFactory::get_logger("exec_processing");
+    
+    assert(current_scope_index < master_scopes.size() && "Invalid scope index for token substitution");
+    
+    Scope& target_scope = master_scopes[current_scope_index];
+    
+    // Find the instruction that contains the exec alias in the target scope
+    // We need to search through all instructions in the scope
+    for (auto& instruction_variant : target_scope._instructions) {
+        if (std::holds_alternative<Instruction>(instruction_variant)) {
+            Instruction& instruction = std::get<Instruction>(instruction_variant);
+            
+            // Check if this is the exec instruction we're looking for
+            if (&instruction == &exec_instruction) {
+                LOG_INFO("Found exec instruction to modify in scope {}", current_scope_index);
+                
+                // Find the exec alias token in the instruction
+                for (size_t i = 0; i < instruction._tokens.size(); ++i) {
+                    if (instruction._tokens[i]._token == EToken::EXEC_ALIAS) {
+                        LOG_INFO("Found EXEC_ALIAS token at position {} in instruction", i);
+                        
+                        // TODO: Find the complete exec alias call pattern (including <> and ())
+                        // For now, just replace the single EXEC_ALIAS token
+                        
+                        // Create new tokens vector with replacement
+                        std::vector<Token> new_tokens;
+                        
+                        // Add tokens before the exec alias
+                        for (size_t j = 0; j < i; ++j) {
+                            new_tokens.push_back(instruction._tokens[j]);
+                        }
+                        
+                        // Add the replacement tokens (converted from RawToken to Token)
+                        LOG_INFO("Inserting {} replacement tokens at position {}", replacement_tokens.size(), i);
+                        for (size_t rt_idx = 0; rt_idx < replacement_tokens.size(); ++rt_idx) {
+                            const RawToken& raw_token = replacement_tokens[rt_idx];
+                            
+                            // Create Token from RawToken
+                            Token replacement_token;
+                            replacement_token._token = raw_token._token;
+                            replacement_token._stringstreamId = 0; // Generated tokens use stream 0
+                            replacement_token._tokenIndex = rt_idx; // Index within replacement tokens
+                            
+                            new_tokens.push_back(replacement_token);
+                            
+                            LOG_DEBUG("Added replacement token {} at position {}: type={}", 
+                                     rt_idx, new_tokens.size() - 1, static_cast<uint32_t>(raw_token._token));
+                        }
+                        
+                        // Add tokens after the exec alias (skip the exec alias itself)
+                        for (size_t j = i + 1; j < instruction._tokens.size(); ++j) {
+                            new_tokens.push_back(instruction._tokens[j]);
+                        }
+                        
+                        // Replace the instruction's tokens
+                        instruction._tokens = new_tokens;
+                        
+                        LOG_INFO("✅ Successfully replaced EXEC_ALIAS token with {} replacement tokens", replacement_tokens.size());
+                        LOG_INFO("Instruction now has {} total tokens (was {} before)", new_tokens.size(), instruction._tokens.size());
+                        
+                        return true;
+                    }
+                }
+                
+                LOG_WARN("No EXEC_ALIAS token found in the target instruction");
+                return false;
+            }
+        }
+    }
+    
+    LOG_WARN("Could not find the exec instruction in scope {} for token substitution", current_scope_index);
+    return false;
+}
+
 // Integrate generated scopes into master scope vector
 uint32_t integrate_generated_scopes(const std::vector<Scope>& generated_scopes, 
                                    std::vector<Scope>& master_scopes) {
     auto logger = cprime::LoggerFactory::get_logger("exec_processing");
     
-    if (generated_scopes.empty()) {
-        throw std::runtime_error("No scopes generated from exec execution");
-    }
+    assert(!generated_scopes.empty() && "Cannot integrate empty generated scopes");
     
     uint32_t global_scope_index = static_cast<uint32_t>(master_scopes.size());
     
@@ -361,6 +495,241 @@ uint32_t integrate_generated_scopes(const std::vector<Scope>& generated_scopes,
     
     LOG_INFO("Integrated {} generated scopes starting at index {}", adjusted_scopes.size(), global_scope_index);
     return global_scope_index;  // Return index of the generated global scope
+}
+
+// Token Integration Handler: Direct token substitution
+uint32_t handle_token_integration(const ExecResult& exec_result, 
+                                  const Instruction& exec_instruction,
+                                  std::vector<Scope>& master_scopes,
+                                  const StringTable& string_table,
+                                  const std::map<std::string, std::vector<RawToken>>& streams,
+                                  uint32_t current_scope_index) {
+    
+    auto logger = cprime::LoggerFactory::get_logger("exec_processing");
+    LOG_INFO("Handling token integration for generated code: {}", exec_result.generated_code);
+    
+    // Validate generated code is pure CPrime (no exec constructs)
+    validate_pure_cprime_output(exec_result.generated_code);
+    
+    // Tokenize generated CPrime code using Layer 1
+    std::map<std::string, std::vector<RawToken>> generated_tokens = 
+        tokenize_generated_code(exec_result.generated_code, string_table);
+    
+    // Extract the generated raw tokens (should be from single stream)
+    std::vector<RawToken> replacement_tokens;
+    for (const auto& [stream_name, raw_tokens] : generated_tokens) {
+        replacement_tokens = raw_tokens;
+        break; // Take first (and should be only) stream
+    }
+    
+    LOG_INFO("Generated {} replacement tokens from: {}", replacement_tokens.size(), exec_result.generated_code);
+    
+    // Perform direct token substitution in the current scope's instruction
+    bool substitution_performed = perform_token_substitution(exec_instruction, replacement_tokens, 
+                                                           master_scopes, current_scope_index, string_table);
+    
+    if (substitution_performed) {
+        LOG_INFO("✅ Token substitution completed - replaced exec alias with {} tokens", replacement_tokens.size());
+        // Return current scope index since we modified in-place, no new scope created
+        return current_scope_index;
+    } else {
+        LOG_ERROR("❌ Token substitution failed - falling back to scope creation");
+        
+        // Fallback to scope creation if direct substitution fails
+        ExecAliasRegistry temp_registry;
+        std::vector<Scope> generated_scopes = layer2_sublayers::sublayer2a(generated_tokens, string_table, temp_registry);
+        uint32_t fallback_scope_index = integrate_generated_scopes(generated_scopes, master_scopes);
+        
+        LOG_INFO("Fallback scope creation completed - generated scope index: {}", fallback_scope_index);
+        return fallback_scope_index;
+    }
+}
+
+// Scope Insert Integration Handler: Transform instruction to scope with header/footer
+uint32_t handle_scope_insert_integration(const ExecResult& exec_result, 
+                                         const Instruction& exec_instruction,
+                                         std::vector<Scope>& master_scopes,
+                                         const StringTable& string_table,
+                                         ExecAliasRegistry& exec_registry,
+                                         const std::map<std::string, std::vector<RawToken>>& streams,
+                                         uint32_t current_scope_index) {
+    
+    auto logger = cprime::LoggerFactory::get_logger("exec_processing");
+    LOG_INFO("Handling scope_insert integration for generated code: {}", exec_result.generated_code);
+    
+    // Validate generated code is pure CPrime (no exec constructs)
+    validate_pure_cprime_output(exec_result.generated_code);
+    
+    // Step 1: Find the exec alias position in the instruction
+    int exec_alias_start = -1, exec_alias_end = -1;
+    if (!find_exec_alias_range(exec_instruction, exec_alias_start, exec_alias_end)) {
+        LOG_ERROR("Could not find exec alias range in instruction for scope insertion");
+        return UINT32_MAX; // Signal error
+    }
+    
+    LOG_INFO("Found exec alias at token range [{}, {}] in instruction", exec_alias_start, exec_alias_end);
+    
+    // Step 2: Extract header tokens (before exec alias)
+    std::vector<Token> header_tokens;
+    for (int i = 0; i < exec_alias_start; ++i) {
+        header_tokens.push_back(exec_instruction._tokens[i]);
+    }
+    
+    // Step 3: Extract footer tokens (after exec alias call)
+    std::vector<Token> footer_tokens;
+    for (size_t i = exec_alias_end + 1; i < exec_instruction._tokens.size(); ++i) {
+        footer_tokens.push_back(exec_instruction._tokens[i]);
+    }
+    
+    LOG_INFO("Extracted {} header tokens and {} footer tokens", header_tokens.size(), footer_tokens.size());
+    
+    // Step 4: Tokenize generated code for the body
+    std::map<std::string, std::vector<RawToken>> generated_tokens = 
+        tokenize_generated_code(exec_result.generated_code, string_table);
+    
+    // Step 5: Build scopes from generated code
+    std::vector<Scope> generated_scopes = layer2_sublayers::sublayer2a(generated_tokens, string_table, exec_registry);
+    
+    // Step 6: Create the new scope with header/body/footer structure
+    Scope new_scope;
+    new_scope._parentScopeIndex = current_scope_index;
+    
+    // Set header instruction
+    if (!header_tokens.empty()) {
+        new_scope._header._tokens = header_tokens;
+        // _contextualTokens is a vector, not a count - initialize empty for now
+        new_scope._header._contextualTokens.clear();
+        LOG_INFO("Created header with {} tokens", header_tokens.size());
+    } else {
+        LOG_DEBUG("No header tokens - header will be empty");
+    }
+    
+    // Set body instructions from generated scopes
+    if (!generated_scopes.empty()) {
+        // Add generated scopes as nested scopes in the body
+        uint32_t base_scope_index = static_cast<uint32_t>(master_scopes.size()) + 1; // +1 for the new scope itself
+        
+        for (size_t i = 0; i < generated_scopes.size(); ++i) {
+            // Add generated scope to master scopes (will be added after this scope)
+            uint32_t nested_scope_index = base_scope_index + static_cast<uint32_t>(i);
+            new_scope._instructions.emplace_back(nested_scope_index);
+            
+            LOG_DEBUG("Added nested scope {} to body instructions", nested_scope_index);
+        }
+        
+        LOG_INFO("Created body with {} nested scopes", generated_scopes.size());
+    } else {
+        LOG_WARN("No generated scopes - body will be empty");
+    }
+    
+    // Set footer instruction
+    if (!footer_tokens.empty()) {
+        Instruction footer_instruction;
+        footer_instruction._tokens = footer_tokens;
+        // _contextualTokens is a vector, not a count - initialize empty for now
+        footer_instruction._contextualTokens.clear();
+        new_scope._footer = footer_instruction;
+        LOG_INFO("Created footer with {} tokens", footer_tokens.size());
+    } else {
+        LOG_DEBUG("No footer tokens - footer will be empty");
+    }
+    
+    // Step 7: Add the new scope and generated scopes to master scopes
+    uint32_t new_scope_index = static_cast<uint32_t>(master_scopes.size());
+    master_scopes.push_back(new_scope);
+    
+    // Add the generated scopes after the new scope
+    for (auto& generated_scope : generated_scopes) {
+        // Adjust parent scope indices to point to the new scope
+        generated_scope._parentScopeIndex = new_scope_index;
+        master_scopes.push_back(generated_scope);
+    }
+    
+    LOG_INFO("✅ Scope insertion completed - created scope {} with {} nested generated scopes", 
+             new_scope_index, generated_scopes.size());
+    
+    return new_scope_index;
+}
+
+// Scope Create Integration Handler: Create new function/class scope + identifier substitution
+uint32_t handle_scope_create_integration(const ExecResult& exec_result, 
+                                         const Instruction& exec_instruction,
+                                         std::vector<Scope>& master_scopes,
+                                         const StringTable& string_table,
+                                         ExecAliasRegistry& exec_registry,
+                                         const std::map<std::string, std::vector<RawToken>>& streams,
+                                         uint32_t current_scope_index) {
+    
+    auto logger = cprime::LoggerFactory::get_logger("exec_processing");
+    LOG_INFO("Handling scope_create integration - generated code: {}", exec_result.generated_code);
+    LOG_INFO("Identifier for substitution: '{}'", exec_result.identifier);
+    
+    if (exec_result.identifier.empty()) {
+        LOG_ERROR("scope_create integration requires non-empty identifier");
+        return UINT32_MAX; // Signal error - invalid scope index
+    }
+    
+    // Validate generated code is pure CPrime (no exec constructs)
+    validate_pure_cprime_output(exec_result.generated_code);
+    
+    // Step 1: Tokenize generated code
+    std::map<std::string, std::vector<RawToken>> generated_tokens = 
+        tokenize_generated_code(exec_result.generated_code, string_table);
+    
+    // Step 2: Build scopes from generated code
+    std::vector<Scope> generated_scopes = layer2_sublayers::sublayer2a(generated_tokens, string_table, exec_registry);
+    
+    if (generated_scopes.empty()) {
+        LOG_ERROR("No scopes generated from code: {}", exec_result.generated_code);
+        return UINT32_MAX; // Signal error
+    }
+    
+    // Step 3: Add generated scopes to master scope list
+    uint32_t generated_scope_index = static_cast<uint32_t>(master_scopes.size());
+    
+    for (auto& generated_scope : generated_scopes) {
+        // Set parent to current scope
+        generated_scope._parentScopeIndex = current_scope_index;
+        master_scopes.push_back(generated_scope);
+    }
+    
+    LOG_INFO("Added {} generated scopes starting at index {}", generated_scopes.size(), generated_scope_index);
+    
+    // Step 4: Create identifier token for substitution
+    // We need to create a raw token for the identifier and tokenize it properly
+    std::string identifier_code = exec_result.identifier;
+    
+    // Tokenize the identifier 
+    std::map<std::string, std::vector<RawToken>> identifier_tokens = 
+        tokenize_generated_code(identifier_code, string_table);
+    
+    // Extract the identifier tokens (should be a single IDENTIFIER token)
+    std::vector<RawToken> replacement_tokens;
+    for (const auto& [stream_name, raw_tokens] : identifier_tokens) {
+        replacement_tokens = raw_tokens;
+        break; // Take first (and should be only) stream
+    }
+    
+    if (replacement_tokens.empty()) {
+        LOG_ERROR("Failed to tokenize identifier: {}", exec_result.identifier);
+        return UINT32_MAX; // Signal error
+    }
+    
+    LOG_INFO("Generated {} identifier tokens for: {}", replacement_tokens.size(), exec_result.identifier);
+    
+    // Step 5: Perform identifier substitution at call site
+    bool substitution_performed = perform_token_substitution(exec_instruction, replacement_tokens, 
+                                                           master_scopes, current_scope_index, string_table);
+    
+    if (!substitution_performed) {
+        LOG_ERROR("Failed to substitute exec alias with identifier: {}", exec_result.identifier);
+        return UINT32_MAX; // Signal error
+    }
+    
+    LOG_INFO("✅ Scope creation completed - created {} scopes starting at {} and substituted exec alias with '{}'", 
+             generated_scopes.size(), generated_scope_index, exec_result.identifier);
+    
+    return generated_scope_index;
 }
 
 // Main exec processing function (single pass)
@@ -395,31 +764,30 @@ uint32_t process_exec_execution(const Instruction& exec_instruction,
         
         // Step 3: Get ExecutableLambda and execute Lua script
         ExecutableLambda& lambda = const_cast<ExecutableLambda&>(get_executable_lambda(exec_info, exec_registry, current_scope_index));
-        std::string generated_cprime_code = lambda.execute(lua_parameters);
+        ExecResult exec_result = lambda.execute(lua_parameters);
         
-        LOG_INFO("Generated CPrime code ({} chars): {}", generated_cprime_code.length(), generated_cprime_code);
+        LOG_INFO("Generated CPrime code ({} chars, type: {}): {}", 
+                 exec_result.generated_code.length(), exec_result.integration_type, exec_result.generated_code);
         
-        // Step 3: Validate generated code is pure CPrime (no exec constructs)
-        // Note: Skip validation for header exec since template content may contain exec keywords
-        if (!is_header_exec) {
-            validate_pure_cprime_output(generated_cprime_code);
-        } else {
-            LOG_DEBUG("Skipping exec validation for header template - scope content may contain exec keywords");
+        if (!exec_result.is_valid) {
+            LOG_ERROR("Exec execution returned invalid result: {}", exec_result.generated_code);
+            return UINT32_MAX; // Signal error - invalid scope index
         }
         
-        // Step 4: Tokenize generated CPrime code using Layer 1
-        std::map<std::string, std::vector<RawToken>> generated_tokens = 
-            tokenize_generated_code(generated_cprime_code, string_table);
-        
-        // Step 5: Build scopes using sublayer2a (single pass)
-        std::vector<Scope> generated_scopes = layer2_sublayers::sublayer2a(
-            generated_tokens, string_table, exec_registry);
-        
-        // Step 6: Integrate generated scopes into master scope vector
-        uint32_t global_scope_index = integrate_generated_scopes(generated_scopes, master_scopes);
-        
-        LOG_INFO("Exec execution completed successfully - generated scope index: {}", global_scope_index);
-        return global_scope_index;
+        // Step 3: Handle integration based on type
+        if (exec_result.integration_type == "token") {
+            return handle_token_integration(exec_result, exec_instruction, master_scopes, 
+                                           string_table, streams, current_scope_index);
+        } else if (exec_result.integration_type == "scope_insert") {
+            return handle_scope_insert_integration(exec_result, exec_instruction, master_scopes, 
+                                                  string_table, exec_registry, streams, current_scope_index);
+        } else if (exec_result.integration_type == "scope_create") {
+            return handle_scope_create_integration(exec_result, exec_instruction, master_scopes, 
+                                                  string_table, exec_registry, streams, current_scope_index);
+        } else {
+            LOG_ERROR("Unknown integration type: {}", exec_result.integration_type);
+            return UINT32_MAX; // Signal error - invalid scope index
+        }
         
     } catch (const std::exception& e) {
         LOG_ERROR("Exec execution failed: {}", e.what());

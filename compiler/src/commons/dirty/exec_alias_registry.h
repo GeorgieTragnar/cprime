@@ -12,14 +12,29 @@ namespace cprime {
 // Forward declaration
 class ExecAliasRegistry;
 
+// Structure for exec result containing generated code and integration type
+struct ExecResult {
+    std::string generated_code;     // The generated code string
+    std::string integration_type;   // "token", "scope_insert", or "scope_create"
+    std::string identifier;         // Optional: identifier for scope_create (empty for other types)
+    bool is_valid = false;          // Indicates if the result is valid
+    
+    // Constructors
+    ExecResult() = default;
+    ExecResult(const std::string& code, const std::string& type) 
+        : generated_code(code), integration_type(type), is_valid(true) {}
+    ExecResult(const std::string& code, const std::string& type, const std::string& id) 
+        : generated_code(code), integration_type(type), identifier(id), is_valid(true) {}
+};
+
 // Structure for executable lambdas created from exec blocks
 // Contains Lua script and execution interface for exec blocks
 struct ExecutableLambda {
     std::string lua_script;                    // Converted exec block as Lua script
     
-    // Execution interface
-    std::string execute(const std::vector<std::string>& parameters = {});
-    std::string execute(const std::vector<std::string>& parameters, ExecAliasRegistry* registry, uint32_t scope_index);
+    // Structured execution interface returning ExecResult with integration type
+    ExecResult execute(const std::vector<std::string>& parameters = {});
+    ExecResult execute(const std::vector<std::string>& parameters, ExecAliasRegistry* registry, uint32_t scope_index);
     
     // Utilities
     bool is_empty() const { return lua_script.empty(); }
@@ -161,6 +176,12 @@ public:
      * Get executable lambda by exec alias index (two-step lookup).
      */
     const ExecutableLambda& get_executable_lambda_by_alias(ExecAliasIndex alias_idx) const;
+    
+    /**
+     * Get the scope index associated with an exec alias index.
+     * Returns UINT32_MAX if alias is not mapped to any scope.
+     */
+    uint32_t get_scope_index_for_alias(ExecAliasIndex alias_idx) const;
     
     /**
      * Get the number of registered exec scopes.

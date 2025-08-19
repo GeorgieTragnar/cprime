@@ -12,14 +12,16 @@ extern "C" {
 
 namespace cprime {
 
-// Simple Lua execution without full LuaExecRuntime to avoid circular deps
-static std::string execute_lua_inline(const std::string& script, const std::vector<std::string>& parameters) {
+// Enhanced Lua execution that returns structured results from 2-3 string returns
+static ExecResult execute_lua_with_result(const std::string& script, const std::vector<std::string>& parameters) {
     lua_State* L = luaL_newstate();
     if (!L) {
-        return "// Error: Failed to create Lua state\n";
+        ExecResult error_result;
+        error_result.generated_code = "// Error: Failed to create Lua state\n";
+        error_result.integration_type = "token";  // Default to token for error cases
+        error_result.is_valid = false;
+        return error_result;
     }
-    
-    std::string output_buffer;
     
     try {
         // Load standard libraries
@@ -34,81 +36,111 @@ static std::string execute_lua_inline(const std::string& script, const std::vect
         }
         lua_setglobal(L, "params");
         
-        // Set up simple cprime API
-        lua_newtable(L);
-        
-        // cprime.emit function
-        lua_pushstring(L, "emit");
-        lua_pushlightuserdata(L, &output_buffer);
-        lua_pushcclosure(L, [](lua_State* L) -> int {
-            std::string* buffer = static_cast<std::string*>(lua_touserdata(L, lua_upvalueindex(1)));
-            if (lua_isstring(L, 1)) {
-                *buffer += lua_tostring(L, 1);
-            }
-            return 0;
-        }, 1);
-        lua_settable(L, -3);
-        
-        // cprime.emit_line function
-        lua_pushstring(L, "emit_line");
-        lua_pushlightuserdata(L, &output_buffer);
-        lua_pushcclosure(L, [](lua_State* L) -> int {
-            std::string* buffer = static_cast<std::string*>(lua_touserdata(L, lua_upvalueindex(1)));
-            if (lua_isstring(L, 1)) {
-                *buffer += lua_tostring(L, 1);
-                *buffer += "\n";
-            }
-            return 0;
-        }, 1);
-        lua_settable(L, -3);
-        
-        lua_setglobal(L, "cprime");
-        
-        // Execute the script and capture return value
+        // Execute the script
         int result = luaL_loadstring(L, script.c_str());
         if (result != LUA_OK) {
             std::string error = "// Lua compilation error: ";
-            error += lua_tostring(L, -1);
+            if (lua_isstring(L, -1)) {
+                error += lua_tostring(L, -1);
+            }
             lua_close(L);
-            return error + "\n";
+            return ExecResult(error + "\n", "token");  // Error defaults to token
         }
         
-        result = lua_pcall(L, 0, 1, 0);  // Expect 1 return value
+        result = lua_pcall(L, 0, LUA_MULTRET, 0);  // Accept multiple return values
         if (result != LUA_OK) {
             std::string error = "// Lua execution error: ";
-            error += lua_tostring(L, -1);
+            if (lua_isstring(L, -1)) {
+                error += lua_tostring(L, -1);
+            }
             lua_close(L);
-            return error + "\n";
+            return ExecResult(error + "\n", "token");  // Error defaults to token
         }
         
-        // Get return value from Lua script
-        std::string return_value;
-        if (lua_isstring(L, -1)) {
-            return_value = lua_tostring(L, -1);
+        // Check the number of return values
+        int return_count = lua_gettop(L);
+        ExecResult exec_result;
+        
+        if (return_count == 1) {
+            // Single string return - backward compatibility (assume "token")
+            if (lua_isstring(L, -1)) {
+                exec_result.generated_code = lua_tostring(L, -1);
+                exec_result.integration_type = "token";  // Default for backward compatibility
+                exec_result.is_valid = true;
+            } else {
+                exec_result.generated_code = "// Error: Single return value must be string";
+                exec_result.integration_type = "token";
+                exec_result.is_valid = false;
+            }
+        } else if (return_count == 2) {
+            // Two string returns: code, integration_type
+            if (lua_isstring(L, -2) && lua_isstring(L, -1)) {
+                exec_result.generated_code = lua_tostring(L, -2);
+                exec_result.integration_type = lua_tostring(L, -1);
+                
+                // Validate integration type
+                if (exec_result.integration_type == "token" || 
+                    exec_result.integration_type == "scope_insert" || 
+                    exec_result.integration_type == "scope_create") {
+                    exec_result.is_valid = true;
+                } else {
+                    exec_result.generated_code = "// Error: Invalid integration type '" + exec_result.integration_type + "'. Must be: token, scope_insert, or scope_create";
+                    exec_result.integration_type = "token";
+                    exec_result.is_valid = false;
+                }
+            } else {
+                exec_result.generated_code = "// Error: Two return values must both be strings";
+                exec_result.integration_type = "token";
+                exec_result.is_valid = false;
+            }
+        } else if (return_count == 3) {
+            // Three string returns: code, integration_type, identifier
+            if (lua_isstring(L, -3) && lua_isstring(L, -2) && lua_isstring(L, -1)) {
+                exec_result.generated_code = lua_tostring(L, -3);
+                exec_result.integration_type = lua_tostring(L, -2);
+                exec_result.identifier = lua_tostring(L, -1);
+                
+                // Validate integration type and identifier requirements
+                if (exec_result.integration_type == "scope_create") {
+                    if (!exec_result.identifier.empty()) {
+                        exec_result.is_valid = true;
+                    } else {
+                        exec_result.generated_code = "// Error: scope_create requires non-empty identifier (third parameter)";
+                        exec_result.integration_type = "token";
+                        exec_result.identifier = "";
+                        exec_result.is_valid = false;
+                    }
+                } else {
+                    exec_result.generated_code = "// Error: Third parameter (identifier) only valid for scope_create integration type";
+                    exec_result.integration_type = "token";
+                    exec_result.identifier = "";
+                    exec_result.is_valid = false;
+                }
+            } else {
+                exec_result.generated_code = "// Error: Three return values must all be strings";
+                exec_result.integration_type = "token";
+                exec_result.is_valid = false;
+            }
         } else {
-            return_value = "No return value";
+            // Invalid number of return values
+            exec_result.generated_code = "// Error: Lua script must return 1, 2, or 3 strings, got " + std::to_string(return_count) + " values";
+            exec_result.integration_type = "token";
+            exec_result.is_valid = false;
         }
         
         lua_close(L);
-        
-        // Combine generated output and return value
-        std::string full_result = output_buffer;
-        if (!return_value.empty()) {
-            full_result += "\n=== LUA RETURN VALUE ===\n";
-            full_result += return_value + "\n";
-        }
-        
-        return full_result;
+        return exec_result;
         
     } catch (const std::exception& e) {
         lua_close(L);
-        return "// Exception during Lua execution: " + std::string(e.what()) + "\n";
+        return ExecResult("// Exception during Lua execution: " + std::string(e.what()) + "\n", "token");
     }
 }
 
-std::string ExecutableLambda::execute(const std::vector<std::string>& parameters) {
+
+ExecResult ExecutableLambda::execute(const std::vector<std::string>& parameters) {
     if (lua_script.empty()) {
-        return "";  // Empty script returns empty string
+        return ExecResult("", "token");  // Empty script returns empty token
     }
     
     // Check if this is a specialization (not a direct Lua script)
@@ -116,79 +148,17 @@ std::string ExecutableLambda::execute(const std::vector<std::string>& parameters
         // Extract CPrime content from specialization
         std::string cprime_content = lua_script.substr(15); // Remove "SPECIALIZATION:" prefix
         
-        // For the basic execute method, just return the content directly
-        // The registry-aware execute method will handle parent delegation
-        return "SPECIALIZATION_EXECUTED: " + cprime_content;
+        // For the basic execute method, just return the content directly as token
+        return ExecResult("SPECIALIZATION_EXECUTED: " + cprime_content, "token");
     }
     
-    // Execute the Lua script and get the return value
-    lua_State* L = luaL_newstate();
-    if (!L) {
-        throw std::runtime_error("Failed to create Lua state");
-    }
-    
-    try {
-        // Load standard libraries
-        luaL_openlibs(L);
-        
-        // Set up parameters table
-        lua_newtable(L);
-        for (size_t i = 0; i < parameters.size(); ++i) {
-            lua_pushinteger(L, static_cast<lua_Integer>(i));
-            lua_pushstring(L, parameters[i].c_str());
-            lua_settable(L, -3);
-        }
-        lua_setglobal(L, "params");
-        
-        // Load and execute the Lua script
-        int load_result = luaL_loadstring(L, lua_script.c_str());
-        if (load_result != LUA_OK) {
-            std::string error = "Lua syntax error: ";
-            if (lua_isstring(L, -1)) {
-                error += lua_tostring(L, -1);
-            }
-            lua_close(L);
-            throw std::runtime_error(error);
-        }
-        
-        // Execute the script - expect exactly 1 return value
-        int call_result = lua_pcall(L, 0, 1, 0);  // 0 args, 1 return value, 0 error handler
-        if (call_result != LUA_OK) {
-            std::string error = "Lua execution error: ";
-            if (lua_isstring(L, -1)) {
-                error += lua_tostring(L, -1);
-            }
-            lua_close(L);
-            throw std::runtime_error(error);
-        }
-        
-        // Check that we got exactly 1 return value and it's a string
-        int return_count = lua_gettop(L);
-        if (return_count != 1) {
-            lua_close(L);
-            throw std::runtime_error("Lua script must return exactly 1 value, got " + std::to_string(return_count));
-        }
-        
-        if (!lua_isstring(L, -1)) {
-            lua_close(L);
-            throw std::runtime_error("Lua script must return a string value");
-        }
-        
-        // Extract the single string return value
-        std::string result = lua_tostring(L, -1);
-        lua_close(L);
-        
-        return result;
-        
-    } catch (...) {
-        lua_close(L);
-        throw;  // Re-throw the exception
-    }
+    // Execute the Lua script using enhanced execution
+    return execute_lua_with_result(lua_script, parameters);
 }
 
-std::string ExecutableLambda::execute(const std::vector<std::string>& parameters, ExecAliasRegistry* registry, uint32_t scope_index) {
+ExecResult ExecutableLambda::execute(const std::vector<std::string>& parameters, ExecAliasRegistry* registry, uint32_t scope_index) {
     if (lua_script.empty()) {
-        return "";  // Empty script returns empty string
+        return ExecResult("", "token");  // Empty script returns empty token
     }
     
     // Check if this is a specialization (not a direct Lua script)
@@ -199,13 +169,13 @@ std::string ExecutableLambda::execute(const std::vector<std::string>& parameters
         // Get the parent alias name for this specialization
         std::string parent_alias_name = registry->get_parent_alias_name(scope_index);
         if (parent_alias_name.empty()) {
-            return "// Error: No parent alias found for specialization";
+            return ExecResult("// Error: No parent alias found for specialization", "token");
         }
         
         // Find the parent's executable lambda
         ExecAliasIndex parent_alias_index = registry->get_alias_index(parent_alias_name);
         if (parent_alias_index.value == UINT32_MAX) {
-            return "// Error: Parent alias '" + parent_alias_name + "' not found in registry";
+            return ExecResult("// Error: Parent alias '" + parent_alias_name + "' not found in registry", "token");
         }
         
         try {
@@ -220,17 +190,18 @@ std::string ExecutableLambda::execute(const std::vector<std::string>& parameters
                 parent_parameters.push_back(param);
             }
             
-            // Execute the parent's Lua script with specialization content as first parameter
-            return execute_lua_inline(parent_lambda.lua_script, parent_parameters);
+            // Execute the parent's Lua script with enhanced result structure
+            return execute_lua_with_result(parent_lambda.lua_script, parent_parameters);
             
         } catch (const std::exception& e) {
-            return "// Error executing parent '" + parent_alias_name + "': " + std::string(e.what());
+            return ExecResult("// Error executing parent '" + parent_alias_name + "': " + std::string(e.what()), "token");
         }
     }
     
-    // Regular Lua script execution
-    return execute_lua_inline(lua_script, parameters);
+    // Regular Lua script execution with enhanced result structure
+    return execute_lua_with_result(lua_script, parameters);
 }
+
 
 ExecAliasIndex ExecAliasRegistry::register_alias(const std::string& alias_name) {
     // Check for duplicate registration - assert for now with TODO for proper error handling
@@ -335,6 +306,14 @@ const ExecutableLambda& ExecAliasRegistry::get_executable_lambda_by_alias(ExecAl
     
     uint32_t scope_index = alias_it->second;
     return get_executable_lambda(scope_index);
+}
+
+uint32_t ExecAliasRegistry::get_scope_index_for_alias(ExecAliasIndex alias_idx) const {
+    auto alias_it = alias_to_scope_.find(alias_idx.value);
+    if (alias_it == alias_to_scope_.end()) {
+        return UINT32_MAX; // Alias not mapped to any scope
+    }
+    return alias_it->second;
 }
 
 void ExecAliasRegistry::update_executable_lambda(uint32_t scope_index, const ExecutableLambda& lambda) {

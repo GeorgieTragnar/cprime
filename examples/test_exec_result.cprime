@@ -1,0 +1,8 @@
+// Test new ExecResult structured returns
+exec simple_gen<type> {
+    return "int generated_" .. params[0] .. " = 42;", "token"
+}
+
+func main() {
+    simple_gen<test>();
+}

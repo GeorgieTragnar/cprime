@@ -14,16 +14,20 @@ std::vector<Scope> layer2(const std::map<std::string, std::vector<RawToken>>& st
     // Sublayer 2B: Exec logic compilation with Lua
     auto retVal2 = layer2_sublayers::sublayer2b(retVal1, exec_registry, string_table, streams);
     
-    // Sublayer 2C: Instruction contextualization and analysis with error handling
+    // Sublayer 2C: CHUNK token disambiguation (requires mutable streams for RawToken updates)
+    auto mutable_streams = streams; // Create mutable copy for CHUNK→EXEC_ALIAS resolution
+    auto retVal3 = layer2_sublayers::sublayer2c(retVal2, string_table, mutable_streams, exec_registry);
+    
+    // Sublayer 2D: Instruction contextualization and analysis with error handling
     ErrorHandler error_handler;
-    auto retVal3 = layer2_sublayers::sublayer2c(retVal2, string_table, streams, exec_registry, error_handler);
+    auto retVal4 = layer2_sublayers::sublayer2d(retVal3, string_table, mutable_streams, exec_registry, error_handler);
     
     // TODO: In the future, the orchestrator will handle error resolution and reporting
     // For now, resolve source locations and report errors immediately within Layer 2
-    error_handler.resolve_source_locations(retVal3, streams, string_table);
+    error_handler.resolve_source_locations(retVal4, mutable_streams, string_table);
     error_handler.report_errors();
     
-    return retVal3;
+    return retVal4;
 }
 
 namespace layer2_sublayers {
@@ -34,7 +38,12 @@ std::vector<Scope> sublayer2b(const std::vector<Scope>& scopes,
                               const StringTable& string_table,
                               const std::map<std::string, std::vector<RawToken>>& streams);
 
-std::vector<Scope> sublayer2c(const std::vector<Scope>& scopes, 
+std::vector<Scope> sublayer2c(const std::vector<Scope>& scopes,
+                              const StringTable& string_table,
+                              std::map<std::string, std::vector<RawToken>>& streams,
+                              ExecAliasRegistry& exec_registry);
+
+std::vector<Scope> sublayer2d(const std::vector<Scope>& scopes, 
                               const StringTable& string_table,
                               const std::map<std::string, std::vector<RawToken>>& streams,
                               ExecAliasRegistry& exec_registry,

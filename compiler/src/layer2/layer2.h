@@ -44,13 +44,22 @@ namespace layer2_sublayers {
                                   const StringTable& string_table,
                                   const std::map<std::string, std::vector<RawToken>>& streams);
     
-    // Sublayer 2C: Instruction contextualization and sequential analysis
+    // Sublayer 2C: Namespace-aware CHUNK token disambiguation
+    // - Traverse scopes hierarchically with namespace context inheritance
+    // - Resolve CHUNK tokens to KEYWORD/IDENTIFIER/EXEC_ALIAS based on namespace
+    // - Replace CHUNK tokens in-place while preserving source correlation
+    std::vector<Scope> sublayer2c(const std::vector<Scope>& scopes,
+                                  const StringTable& string_table,
+                                  std::map<std::string, std::vector<RawToken>>& streams,
+                                  ExecAliasRegistry& exec_registry);
+    
+    // Sublayer 2D: Instruction contextualization and sequential analysis
     // - Sequential iteration through all scope instructions
     // - Flat logging format for debugging and analysis
     // - No hierarchical traversal, simple scope-by-scope processing
     // - Exec execution processing and code generation (single pass)
     // - Error handling with ErrorReporter lambdas for contextualization
-    std::vector<Scope> sublayer2c(const std::vector<Scope>& scopes, 
+    std::vector<Scope> sublayer2d(const std::vector<Scope>& scopes, 
                                   const StringTable& string_table,
                                   const std::map<std::string, std::vector<RawToken>>& streams,
                                   ExecAliasRegistry& exec_registry,
