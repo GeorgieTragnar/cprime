@@ -21,11 +21,15 @@ bool HeaderContextualizer::token_matches_element(const Token& token, HeaderPatte
         case HeaderPatternElement::KEYWORD_FUNC:
             return token._token == EToken::FUNC || token._token == EToken::FUNCTION;
             
-        // Type definition keywords
+        // Type definition keywords  
         case HeaderPatternElement::KEYWORD_CLASS:
             return token._token == EToken::CLASS;
         case HeaderPatternElement::KEYWORD_STRUCT:
             return token._token == EToken::STRUCT;
+        case HeaderPatternElement::KEYWORD_PLEX:
+            return token._token == EToken::PLEX;
+        case HeaderPatternElement::KEYWORD_DATA_STRUCTURE:
+            return token._token == EToken::CLASS || token._token == EToken::STRUCT || token._token == EToken::PLEX;
         case HeaderPatternElement::KEYWORD_INTERFACE:
             return token._token == EToken::INTERFACE;
         case HeaderPatternElement::KEYWORD_ENUM:
@@ -260,35 +264,87 @@ void HeaderContextualizer::setup_type_declaration_patterns() {
     auto logger = cprime::LoggerFactory::get_logger("header_contextualizer");
     LOG_DEBUG("Setting up type declaration patterns");
     
-    // Pattern: class identifier
-    // Example: class MyClass
-    HeaderContextualizationPattern class_declaration(
-        "class_declaration",
-        {HeaderPatternElement::KEYWORD_CLASS,
+    // Pattern: data_structure identifier (unified class/struct/plex) with optional leading whitespace
+    // Example: class MyClass, struct Point, plex Complex
+    HeaderContextualizationPattern data_structure_declaration(
+        "data_structure_declaration",
+        {static_cast<HeaderPatternElement>(BasePatternElement::OPTIONAL_WHITESPACE),
+         HeaderPatternElement::KEYWORD_DATA_STRUCTURE,
          static_cast<HeaderPatternElement>(BasePatternElement::REQUIRED_WHITESPACE),
          static_cast<HeaderPatternElement>(BasePatternElement::ANY_IDENTIFIER)},
         {
-            ContextualTokenTemplate(EContextualToken::TYPE_REFERENCE, {0, 2}, "class definition"),
-            ContextualTokenTemplate(EContextualToken::WHITESPACE, {1}, "class name spacing")
+            ContextualTokenTemplate(EContextualToken::WHITESPACE, {0}, "optional leading whitespace"),
+            ContextualTokenTemplate(EContextualToken::TYPE_REFERENCE, {1, 3}, "data structure definition"),
+            ContextualTokenTemplate(EContextualToken::WHITESPACE, {2}, "type name spacing")
         },
         100
     );
-    register_pattern(class_declaration);
+    register_pattern(data_structure_declaration);
     
-    // Pattern: struct identifier
-    // Example: struct Point
-    HeaderContextualizationPattern struct_declaration(
-        "struct_declaration", 
-        {HeaderPatternElement::KEYWORD_STRUCT,
+    // DEBUG: Add individual patterns with optional leading whitespace
+    HeaderContextualizationPattern class_test_declaration(
+        "class_test_declaration",
+        {static_cast<HeaderPatternElement>(BasePatternElement::OPTIONAL_WHITESPACE),
+         HeaderPatternElement::KEYWORD_CLASS,
          static_cast<HeaderPatternElement>(BasePatternElement::REQUIRED_WHITESPACE),
          static_cast<HeaderPatternElement>(BasePatternElement::ANY_IDENTIFIER)},
         {
-            ContextualTokenTemplate(EContextualToken::TYPE_REFERENCE, {0, 2}, "struct definition"),
-            ContextualTokenTemplate(EContextualToken::WHITESPACE, {1}, "struct name spacing")
+            ContextualTokenTemplate(EContextualToken::WHITESPACE, {0}, "optional leading whitespace"),
+            ContextualTokenTemplate(EContextualToken::TYPE_REFERENCE, {1, 3}, "class test definition"),
+            ContextualTokenTemplate(EContextualToken::WHITESPACE, {2}, "class test spacing")
         },
-        100
+        110  // Higher priority to test first
     );
-    register_pattern(struct_declaration);
+    register_pattern(class_test_declaration);
+    
+    HeaderContextualizationPattern struct_test_declaration(
+        "struct_test_declaration",
+        {static_cast<HeaderPatternElement>(BasePatternElement::OPTIONAL_WHITESPACE),
+         HeaderPatternElement::KEYWORD_STRUCT,
+         static_cast<HeaderPatternElement>(BasePatternElement::REQUIRED_WHITESPACE),
+         static_cast<HeaderPatternElement>(BasePatternElement::ANY_IDENTIFIER)},
+        {
+            ContextualTokenTemplate(EContextualToken::WHITESPACE, {0}, "optional leading whitespace"),
+            ContextualTokenTemplate(EContextualToken::TYPE_REFERENCE, {1, 3}, "struct test definition"),
+            ContextualTokenTemplate(EContextualToken::WHITESPACE, {2}, "struct test spacing")
+        },
+        110  // Higher priority to test first
+    );
+    register_pattern(struct_test_declaration);
+    
+    HeaderContextualizationPattern plex_test_declaration(
+        "plex_test_declaration",
+        {static_cast<HeaderPatternElement>(BasePatternElement::OPTIONAL_WHITESPACE),
+         HeaderPatternElement::KEYWORD_PLEX,
+         static_cast<HeaderPatternElement>(BasePatternElement::REQUIRED_WHITESPACE),
+         static_cast<HeaderPatternElement>(BasePatternElement::ANY_IDENTIFIER)},
+        {
+            ContextualTokenTemplate(EContextualToken::WHITESPACE, {0}, "optional leading whitespace"),
+            ContextualTokenTemplate(EContextualToken::TYPE_REFERENCE, {1, 3}, "plex test definition"),
+            ContextualTokenTemplate(EContextualToken::WHITESPACE, {2}, "plex test spacing")
+        },
+        110  // Higher priority to test first
+    );
+    register_pattern(plex_test_declaration);
+    
+    // Pattern: namespace_path data_structure identifier (namespace-qualified type) with optional leading whitespace
+    // Example: Math::class Vector, Graphics::struct Point, Utils::plex Helper
+    HeaderContextualizationPattern namespace_qualified_data_structure(
+        "namespace_qualified_data_structure",
+        {static_cast<HeaderPatternElement>(BasePatternElement::OPTIONAL_WHITESPACE),
+         HeaderPatternElement::NAMESPACE_PATH,
+         HeaderPatternElement::KEYWORD_DATA_STRUCTURE,
+         static_cast<HeaderPatternElement>(BasePatternElement::REQUIRED_WHITESPACE),
+         static_cast<HeaderPatternElement>(BasePatternElement::ANY_IDENTIFIER)},
+        {
+            ContextualTokenTemplate(EContextualToken::WHITESPACE, {0}, "optional leading whitespace"),
+            ContextualTokenTemplate(EContextualToken::TYPE_REFERENCE, {1}, "namespace context"),
+            ContextualTokenTemplate(EContextualToken::TYPE_REFERENCE, {2, 4}, "qualified data structure definition"),
+            ContextualTokenTemplate(EContextualToken::WHITESPACE, {3}, "qualified type name spacing")
+        },
+        120  // Higher priority than simple data_structure_declaration
+    );
+    register_pattern(namespace_qualified_data_structure);
     
     LOG_DEBUG("Type declaration patterns registered");
 }
@@ -633,6 +689,79 @@ PatternMatchResult HeaderContextualizer::try_match_function_signature(const std:
     
     LOG_DEBUG("Matched function signature consuming {} tokens", pos - start_pos);
     return PatternMatchResult::success(pos - start_pos, contextual_tokens);
+}
+
+PatternMatchResult HeaderContextualizer::try_match_pattern_clean(const std::vector<Token>& tokens,
+                                                                const std::vector<size_t>& clean_indices,
+                                                                size_t clean_start_pos,
+                                                                const BaseContextualizationPattern<HeaderPatternElement>& pattern) {
+    auto logger = cprime::LoggerFactory::get_logger("header_contextualizer");
+    
+    // Check if we have enough clean tokens remaining
+    if (clean_start_pos >= clean_indices.size()) {
+        return PatternMatchResult::failure("Start position beyond clean token sequence");
+    }
+    
+    size_t pattern_pos = 0;
+    size_t clean_pos = clean_start_pos;
+    std::vector<uint32_t> matched_token_indices;
+    
+    LOG_INFO("HEADER CLEAN PATTERN MATCHING: Trying header pattern '{}' at clean position {} (actual token {})", 
+              pattern.pattern_name, clean_start_pos, 
+              clean_start_pos < clean_indices.size() ? clean_indices[clean_start_pos] : -1);
+    
+    // Match each element in the pattern using clean indices with header-specific logic
+    while (pattern_pos < pattern.token_pattern.size() && clean_pos < clean_indices.size()) {
+        HeaderPatternElement element = pattern.token_pattern[pattern_pos];
+        size_t actual_token_pos = clean_indices[clean_pos];
+        
+        // Use HeaderContextualizer's specific token matching logic
+        if (!token_matches_element(tokens[actual_token_pos], element)) {
+            LOG_DEBUG("Header pattern element {} failed to match at clean position {} (actual token {}, type: {})", 
+                      static_cast<uint32_t>(element), clean_pos, actual_token_pos, 
+                      static_cast<uint32_t>(tokens[actual_token_pos]._token));
+            return PatternMatchResult::failure("Pattern element does not match token");
+        }
+        
+        // Record the matched token index
+        matched_token_indices.push_back(tokens[actual_token_pos]._tokenIndex);
+        
+        LOG_DEBUG("Header pattern element {} matched token at clean position {} (actual {})", 
+                  static_cast<uint32_t>(element), clean_pos, actual_token_pos);
+        
+        pattern_pos++;
+        clean_pos++;
+    }
+    
+    // Check if we matched the entire pattern
+    if (pattern_pos < pattern.token_pattern.size()) {
+        LOG_DEBUG("Header pattern incomplete - expected {} elements, matched only {}", 
+                  pattern.token_pattern.size(), pattern_pos);
+        return PatternMatchResult::failure("Not enough tokens to complete pattern");
+    }
+    
+    // Generate contextual tokens using the template
+    size_t clean_tokens_consumed = clean_pos - clean_start_pos;
+    std::vector<ContextualToken> contextual_tokens;
+    
+    for (const auto& template_token : pattern.output_templates) {
+        ContextualToken ctx_token;
+        ctx_token._contextualToken = template_token.contextual_type;
+        
+        // Map template indices to actual matched token indices
+        for (uint32_t template_idx : template_token.source_token_indices) {
+            if (template_idx < matched_token_indices.size()) {
+                ctx_token._parentTokenIndices.push_back(matched_token_indices[template_idx]);
+            }
+        }
+        
+        contextual_tokens.push_back(ctx_token);
+    }
+    
+    LOG_DEBUG("Header pattern '{}' matched successfully, consuming {} clean tokens", 
+              pattern.pattern_name, clean_tokens_consumed);
+    
+    return PatternMatchResult::success(clean_tokens_consumed, contextual_tokens);
 }
 
 } // namespace cprime::layer2_contextualization

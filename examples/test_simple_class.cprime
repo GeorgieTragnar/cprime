@@ -1,0 +1,16 @@
+// Simple test for basic type recognition
+class SimpleClass {
+    int value;
+}
+
+struct SimpleStruct {
+    float x;
+}
+
+plex SimplePlex {
+    double data;
+}
+
+int main() {
+    return 0;
+}

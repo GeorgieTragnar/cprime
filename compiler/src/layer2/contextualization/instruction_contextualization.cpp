@@ -51,6 +51,17 @@ bool contextualize_instruction(Instruction& body_instruction, ErrorReporter repo
     
     // Report unsupported patterns if any were found
     if (has_invalid_tokens) {
+        // LOG ALL TOKENS in the instruction for debugging
+        LOG_INFO("UNSUPPORTED PATTERN DEBUG: Instruction contains {} tokens:", body_instruction._tokens.size());
+        for (size_t i = 0; i < body_instruction._tokens.size(); ++i) {
+            const auto& token = body_instruction._tokens[i];
+            LOG_INFO("  Token[{}]: type={} streamId={} tokenIndex={}", 
+                    i, 
+                    static_cast<int>(token._token), 
+                    token._stringstreamId, 
+                    token._tokenIndex);
+        }
+        
         report_error(ContextualizationErrorType::UNSUPPORTED_TOKEN_PATTERN,
                     "Some token patterns not yet implemented in instruction contextualization",
                     invalid_token_indices);

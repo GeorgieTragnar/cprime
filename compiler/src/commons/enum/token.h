@@ -65,6 +65,7 @@ enum class EToken : uint16_t {
     // Keywords - Context-sensitive
     CLASS = 100,
     STRUCT,
+    PLEX,               // Third variant of data structure declaration
     INTERFACE,
     UNION,
     FUNCTION,

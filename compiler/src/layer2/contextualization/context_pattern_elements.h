@@ -18,10 +18,12 @@ enum class HeaderPatternElement : uint32_t {
     // Type definition patterns (1100-1199)
     KEYWORD_CLASS = 1100,
     KEYWORD_STRUCT = 1101,
-    KEYWORD_INTERFACE = 1102,
-    KEYWORD_ENUM = 1103,
-    KEYWORD_TYPEDEF = 1104,
-    TYPE_BODY = 1105,               // { class/struct body }
+    KEYWORD_PLEX = 1102,            // Third variant of data structure
+    KEYWORD_DATA_STRUCTURE = 1103,  // Any of class/struct/plex (semantic equivalence)
+    KEYWORD_INTERFACE = 1105,
+    KEYWORD_ENUM = 1106,
+    KEYWORD_TYPEDEF = 1107,
+    TYPE_BODY = 1108,               // { class/struct body }
     
     // Template patterns (1200-1299)
     KEYWORD_TEMPLATE = 1200,

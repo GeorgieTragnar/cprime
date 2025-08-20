@@ -4,9 +4,10 @@ namespace cprime {
 
 // Centralized keyword mapping - single source of truth for all CPrime keywords
 const std::unordered_map<std::string, EToken> KEYWORD_TO_ETOKEN_MAP = {
-    // Class/Structure keywords
+    // Class/Structure keywords  
     {"class", EToken::CLASS},
     {"struct", EToken::STRUCT},
+    {"plex", EToken::PLEX},
     {"interface", EToken::INTERFACE},
     {"union", EToken::UNION},
     {"function", EToken::FUNCTION},

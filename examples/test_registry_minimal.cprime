@@ -1,0 +1,20 @@
+// Minimal test for registry functionality using only implemented patterns
+// Tests basic patterns that should work with current contextualizer implementation
+
+// Simple variable declarations (should work with basic patterns)
+int global_var;
+auto x;
+int y;
+
+func main() {
+    // Basic variable declarations
+    int local_var;
+    auto z;
+    
+    // Simple assignments (if implemented)
+    x = 42;
+    y = 100;
+    local_var = 200;
+    
+    return 0;
+}

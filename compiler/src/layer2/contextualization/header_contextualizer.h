@@ -21,6 +21,12 @@ public:
                                         size_t start_pos, 
                                         const BaseContextualizationPattern<HeaderPatternElement>& pattern) override;
     
+    // Override clean pattern matching to support N:M complex patterns with preprocessing
+    PatternMatchResult try_match_pattern_clean(const std::vector<Token>& tokens,
+                                              const std::vector<size_t>& clean_indices,
+                                              size_t clean_start_pos,
+                                              const BaseContextualizationPattern<HeaderPatternElement>& pattern) override;
+    
 protected:
     // Check if pattern element is a whitespace pattern (includes base + header-specific)
     bool is_whitespace_pattern_element(HeaderPatternElement element) override;

@@ -50,6 +50,11 @@ enum class BasePatternElement : uint32_t {
     SINGLE_WHITESPACE = 502,        // Exactly one whitespace token
     MERGED_WHITESPACE = 503,        // Any sequence of whitespace merged into single unit
     
+    // Comment patterns (520-529)
+    OPTIONAL_COMMENT = 520,         // Optional comment token (0 or 1)
+    REQUIRED_COMMENT = 521,         // Required comment token (exactly 1)
+    OPTIONAL_COMMENT_AND_WHITESPACE = 522, // Optional comment + whitespace sequence
+    
     // Complex patterns (600-699)
     EXPRESSION_TOKENS = 600,        // Variable-length expression
     TYPE_TOKEN_LIST = 601,          // Variable-length type parameter list
@@ -157,6 +162,15 @@ public:
     virtual PatternMatchResult try_match_pattern(const std::vector<Token>& tokens, 
                                                 size_t start_pos, 
                                                 const BaseContextualizationPattern<PatternElementType>& pattern);
+    
+    // Try to match a pattern using preprocessed clean token indices
+    virtual PatternMatchResult try_match_pattern_clean(const std::vector<Token>& tokens,
+                                                      const std::vector<size_t>& clean_indices,
+                                                      size_t clean_start_pos,
+                                                      const BaseContextualizationPattern<PatternElementType>& pattern);
+    
+    // Preprocess token indices to skip comments and consolidate whitespace
+    std::vector<size_t> preprocess_token_indices(const std::vector<Token>& tokens);
     
     // Check if a token matches a pattern element (context-specific implementation)
     virtual bool token_matches_element(const Token& token, PatternElementType element) = 0;

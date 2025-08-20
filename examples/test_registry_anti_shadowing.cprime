@@ -1,0 +1,333 @@
+// Anti-shadowing test for Type and Function Registry
+// Tests prevention of type and function name conflicts across namespace hierarchies
+
+// === Global Scope Baseline ===
+class BaseClass {
+    int base_value;
+    
+    void base_method() {
+        base_value = 1;
+    }
+};
+
+struct CommonStruct {
+    float common_field;
+};
+
+void utility_function(int param) {
+    BaseClass base;
+    base.base_method();
+}
+
+void overloaded_function(int param) {
+    // Global version with int
+}
+
+void overloaded_function(float param) {
+    // Global version with float - overloading allowed in same scope
+}
+
+// === Level 1: Namespace Anti-Shadowing Tests ===
+
+namespace ValidNamespace {
+    // These are VALID - different names from global scope
+    class ValidClass {
+        int valid_value;
+    };
+    
+    struct ValidStruct {
+        double valid_field;
+    };
+    
+    void valid_function(ValidClass param) {
+        param.valid_value = 100;
+    }
+    
+    // These would be INVALID due to shadowing (commented out for testing)
+    // class BaseClass {      // Would shadow global::BaseClass - FORBIDDEN
+    //     int shadowing_value;
+    // };
+    
+    // struct CommonStruct {  // Would shadow global::CommonStruct - FORBIDDEN 
+    //     int shadowing_field;
+    // };
+    
+    // void utility_function(float param) {  // Would shadow global::utility_function - FORBIDDEN
+    //     // Different signature but same name - still forbidden
+    // };
+    
+    // Overloading within same namespace is allowed
+    void namespace_function(int param) {
+        // Valid - new function in namespace
+    }
+    
+    void namespace_function(ValidClass param) {
+        // Valid - overload within same namespace
+    }
+    
+    // Nested namespace tests
+    namespace Nested {
+        // These are VALID - different names
+        class NestedClass {
+            ValidClass* parent_ref;  // Reference to parent namespace is OK
+        };
+        
+        void nested_function(NestedClass param) {
+            BaseClass global_ref;  // Reference to global is OK
+            ValidClass parent_ref; // Reference to parent namespace is OK
+        }
+        
+        // These would be INVALID due to shadowing (commented out)
+        // class ValidClass {     // Would shadow ValidNamespace::ValidClass - FORBIDDEN
+        //     int nested_value;
+        // };
+        
+        // void valid_function(int param) {  // Would shadow ValidNamespace::valid_function - FORBIDDEN
+        //     // Even with different signature - still forbidden
+        // };
+        
+        // class BaseClass {      // Would shadow global::BaseClass - FORBIDDEN
+        //     int deeply_nested_value;
+        // };
+    }
+}
+
+namespace AnotherNamespace {
+    // These are VALID - same names as ValidNamespace but different namespace
+    class ValidClass {
+        float another_value;  // Same class name but different namespace - ALLOWED
+    };
+    
+    void valid_function(ValidClass param) {
+        // Same function name but different namespace - ALLOWED
+        param.another_value = 200.0;
+    }
+    
+    // Reference to other namespace types is allowed
+    void cross_reference(ValidNamespace::ValidClass param) {
+        ValidNamespace::Nested::NestedClass nested;
+        BaseClass global_obj;
+    }
+    
+    // These would still be INVALID due to global shadowing
+    // class BaseClass {      // Would shadow global::BaseClass - FORBIDDEN
+    //     int another_base_value;
+    // };
+    
+    // void utility_function(double param) {  // Would shadow global::utility_function - FORBIDDEN
+    //     // Different namespace but still forbidden
+    // };
+}
+
+// === Level 2: Deep Nesting Anti-Shadowing ===
+
+namespace OuterScope {
+    class OuterClass {
+        int outer_value;
+    };
+    
+    void outer_function() {
+        OuterClass obj;
+        obj.outer_value = 50;
+    }
+    
+    namespace MiddleScope {
+        class MiddleClass {
+            OuterClass* outer_ref;  // Reference to parent is OK
+        };
+        
+        void middle_function(MiddleClass param) {
+            outer_function();  // Call to parent namespace is OK
+        }
+        
+        namespace InnerScope {
+            class InnerClass {
+                MiddleClass middle_ref;   // Reference to parent is OK
+                OuterClass outer_ref;     // Reference to grandparent is OK
+                BaseClass global_ref;     // Reference to global is OK
+            };
+            
+            void inner_function() {
+                InnerClass inner;
+                middle_function(inner.middle_ref);
+                outer_function();
+                utility_function(42);
+            }
+            
+            // These would be INVALID due to shadowing at various levels
+            // class OuterClass {     // Would shadow OuterScope::OuterClass - FORBIDDEN
+            //     int inner_value;
+            // };
+            
+            // class MiddleClass {    // Would shadow MiddleScope::MiddleClass - FORBIDDEN
+            //     int inner_value;
+            // };
+            
+            // class BaseClass {      // Would shadow global::BaseClass - FORBIDDEN
+            //     int inner_value;
+            // };
+            
+            // void outer_function() {  // Would shadow OuterScope::outer_function - FORBIDDEN
+            //     // Even in deeply nested scope
+            // };
+        }
+    }
+}
+
+// === Level 3: Multiple Namespace Trees ===
+
+namespace TreeA {
+    class TreeAClass {
+        int tree_a_value;
+    };
+    
+    namespace BranchA1 {
+        class Branch1Class {
+            TreeAClass* tree_ref;
+        };
+        
+        void branch1_function() {
+            Branch1Class branch;
+            TreeAClass tree;
+        }
+        
+        namespace LeafA1 {
+            class Leaf1Class {
+                Branch1Class branch_ref;
+                TreeAClass tree_ref;
+            };
+        }
+    }
+    
+    namespace BranchA2 {
+        // Same names as BranchA1 but different branch - ALLOWED
+        class Branch1Class {  
+            int branch_a2_value;  // Different implementation - OK
+        };
+        
+        void branch1_function() {
+            // Same function name but different branch - OK
+            Branch1Class local_branch;
+            TreeAClass tree;
+        }
+        
+        namespace LeafA2 {
+            // Cross-branch references are allowed
+            void cross_branch_function() {
+                BranchA1::Branch1Class other_branch;
+                BranchA1::LeafA1::Leaf1Class other_leaf;
+                TreeAClass common_tree;
+            }
+        }
+    }
+}
+
+namespace TreeB {
+    // Same names as TreeA classes but different tree - ALLOWED
+    class TreeAClass {
+        float tree_b_value;  // Same name, different namespace - OK
+    };
+    
+    void test_cross_tree() {
+        TreeAClass local_tree;          // TreeB::TreeAClass
+        TreeA::TreeAClass other_tree;   // TreeA::TreeAClass
+        
+        TreeA::BranchA1::Branch1Class branch1;
+        TreeA::BranchA2::Branch1Class branch2;  // Same name, different branches - OK
+        
+        BaseClass global_obj;  // Global reference is OK
+    }
+}
+
+// === Level 4: Function Overloading vs Shadowing ===
+
+namespace OverloadTest {
+    // Function overloading within namespace is ALLOWED
+    void process(int value) {
+        value = value + 1;
+    }
+    
+    void process(float value) {
+        value = value + 1.0;
+    }
+    
+    void process(BaseClass obj) {
+        obj.base_method();
+    }
+    
+    // These overloads would be INVALID due to shadowing global functions
+    // void utility_function(BaseClass obj) {  // Would shadow global::utility_function - FORBIDDEN
+    //     // Even with different signature
+    // };
+    
+    // void overloaded_function(BaseClass obj) {  // Would shadow global::overloaded_function - FORBIDDEN
+    //     // Adding new overload in different namespace - forbidden
+    // };
+    
+    namespace NestedOverload {
+        // More overloads in nested namespace - parent function names forbidden
+        void nested_process(int value) {
+            value = value * 2;
+        }
+        
+        void nested_process(double value) {
+            value = value * 2.0;
+        }
+        
+        // These would be INVALID
+        // void process(char value) {  // Would shadow OverloadTest::process - FORBIDDEN
+        //     // Cannot add overloads to parent namespace functions
+        // };
+    }
+}
+
+// === Level 5: Complex Type Dependencies ===
+
+namespace ComplexDependencies {
+    class ServiceManager {
+        TreeA::TreeAClass* tree_a_ref;
+        TreeB::TreeAClass* tree_b_ref;  // Same name, different namespace - OK
+        ValidNamespace::ValidClass* valid_ref;
+        AnotherNamespace::ValidClass* another_ref;  // Same name, different namespace - OK
+        
+        void manage_services() {
+            tree_a_ref->tree_a_value = 100;
+            tree_b_ref->tree_b_value = 200.0;
+        }
+    };
+    
+    namespace Advanced {
+        class AdvancedManager {
+            ServiceManager* basic_manager;
+            OuterScope::MiddleScope::InnerScope::InnerClass* deep_ref;
+            
+            void advanced_management() {
+                basic_manager->manage_services();
+                TreeA::BranchA1::branch1_function();
+                TreeA::BranchA2::branch1_function();  // Same name, different branch - OK
+            }
+        };
+    }
+}
+
+// === Test Function ===
+int main() {
+    // Test all valid namespace interactions
+    ValidNamespace::ValidClass valid1;
+    AnotherNamespace::ValidClass valid2;  // Same name, different namespace - OK
+    
+    ValidNamespace::valid_function(valid1);
+    AnotherNamespace::valid_function(valid2);  // Same name, different namespace - OK
+    
+    TreeA::TreeAClass tree_a;
+    TreeB::TreeAClass tree_b;  // Same name, different namespace - OK
+    
+    OverloadTest::process(42);
+    OverloadTest::process(3.14);
+    OverloadTest::process(BaseClass());
+    
+    ComplexDependencies::ServiceManager manager;
+    ComplexDependencies::Advanced::AdvancedManager adv_manager;
+    
+    return 0;
+}
