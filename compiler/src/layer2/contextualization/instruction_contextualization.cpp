@@ -1,7 +1,6 @@
 #include "../layer2.h"
 #include "../../commons/logger.h"
 #include "../../commons/contextualizationError.h"
-#include "instruction_contextualizer.h"
 #include <algorithm>
 
 namespace cprime::layer2_contextualization {
@@ -27,56 +26,11 @@ bool contextualize_instruction(Instruction& body_instruction, ErrorReporter repo
         return true;  // Signal for exec processing
     }
     
-    // NEW: Use pattern-based N:M contextualization system
-    static InstructionContextualizer contextualizer;
-    
-    LOG_DEBUG("Using instruction contextualizer with {} patterns available", contextualizer.pattern_count());
-    
-    // Apply pattern-based contextualization
-    std::vector<ContextualToken> contextual_tokens = contextualizer.contextualize_instruction(body_instruction._tokens);
-    
-    // Check if any tokens were left as INVALID (unrecognized patterns)
-    bool has_invalid_tokens = false;
-    std::vector<uint32_t> invalid_token_indices;
-    
-    for (const auto& ctx_token : contextual_tokens) {
-        if (ctx_token._contextualToken == EContextualToken::INVALID) {
-            has_invalid_tokens = true;
-            // Add parent token indices to error report
-            invalid_token_indices.insert(invalid_token_indices.end(),
-                                        ctx_token._parentTokenIndices.begin(),
-                                        ctx_token._parentTokenIndices.end());
-        }
-    }
-    
-    // Report unsupported patterns if any were found
-    if (has_invalid_tokens) {
-        // LOG ALL TOKENS in the instruction for debugging
-        LOG_INFO("UNSUPPORTED PATTERN DEBUG: Instruction contains {} tokens:", body_instruction._tokens.size());
-        for (size_t i = 0; i < body_instruction._tokens.size(); ++i) {
-            const auto& token = body_instruction._tokens[i];
-            LOG_INFO("  Token[{}]: type={} streamId={} tokenIndex={}", 
-                    i, 
-                    static_cast<int>(token._token), 
-                    token._stringstreamId, 
-                    token._tokenIndex);
-        }
-        
-        report_error(ContextualizationErrorType::UNSUPPORTED_TOKEN_PATTERN,
-                    "Some token patterns not yet implemented in instruction contextualization",
-                    invalid_token_indices);
-        
-        LOG_DEBUG("Instruction contextualization completed with {} invalid tokens out of {} contextual tokens",
-                 std::count_if(contextual_tokens.begin(), contextual_tokens.end(),
-                              [](const ContextualToken& ct) { return ct._contextualToken == EContextualToken::INVALID; }),
-                 contextual_tokens.size());
-    } else {
-        LOG_DEBUG("Instruction contextualization completed successfully - all {} tokens contextualized",
-                 contextual_tokens.size());
-    }
-    
-    // Update instruction with generated contextual tokens
-    body_instruction._contextualTokens = std::move(contextual_tokens);
+    // TODO: Pattern-based instruction contextualization will be implemented here
+    LOG_DEBUG("Instruction contextualization not yet implemented for this pattern");
+    report_error(ContextualizationErrorType::UNSUPPORTED_TOKEN_PATTERN,
+                "Some token patterns not yet implemented in instruction contextualization",
+                {0}); // Placeholder error position
     
     return false;  // Regular instruction, no exec processing needed
 }

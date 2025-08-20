@@ -16,7 +16,7 @@ bool is_keyword(const std::string& content) {
         content == "if" || content == "else" || content == "for" || content == "while" ||
         content == "return" || content == "break" || content == "continue" ||
         content == "exec" || content == "defer" ||
-        content == "namespace" || content == "class" || content == "struct" ||
+        content == "namespace" || content == "class" || content == "struct" || content == "plex" ||
         content == "true" || content == "false") {
         return true;
     }
@@ -39,6 +39,9 @@ EToken get_keyword_token_type(const std::string& content) {
     if (content == "return") return EToken::RETURN;
     if (content == "exec") return EToken::EXEC;
     if (content == "defer") return EToken::DEFER;
+    if (content == "class") return EToken::CLASS;
+    if (content == "struct") return EToken::STRUCT;
+    if (content == "plex") return EToken::PLEX;
     if (content == "true") return EToken::TRUE_LITERAL;
     if (content == "false") return EToken::FALSE_LITERAL;
     
