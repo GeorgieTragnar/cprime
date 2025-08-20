@@ -3,6 +3,8 @@
 #include "layer0/compilation_parameters.h"
 #include "commons/dirty/string_table.h"
 #include "commons/dirty/exec_alias_registry.h"
+#include "commons/type_registry.h"
+#include "commons/function_registry.h"
 #include "commons/rawToken.h"
 #include "commons/logger.h"
 #include <map>
@@ -59,6 +61,10 @@ private:
     
     // Exec alias registry (shared across all layers)
     ExecAliasRegistry exec_alias_registry_;
+    
+    // Type and function registries for Layer 2 registration extraction
+    TypeRegistry type_registry_;
+    FunctionRegistry function_registry_;
     
     // TODO: Add CompilationContext ownership and management
     // TODO: Add proper error handling system

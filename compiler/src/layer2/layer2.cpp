@@ -1,13 +1,17 @@
 #include "layer2.h"
 #include "token_detokenizer.h"
 #include "../commons/errorHandler.h"
+#include "../commons/type_registry.h"
+#include "../commons/function_registry.h"
 
 namespace cprime {
 
 // Layer 2 main function - Structure Building
 std::vector<Scope> layer2(const std::map<std::string, std::vector<RawToken>>& streams, 
                          const StringTable& string_table, 
-                         ExecAliasRegistry& exec_registry) {
+                         ExecAliasRegistry& exec_registry,
+                         TypeRegistry& type_registry,
+                         FunctionRegistry& function_registry) {
     // Sublayer 2A: Pure structural scope building
     auto retVal1 = layer2_sublayers::sublayer2a(streams, string_table, exec_registry);
     
@@ -20,7 +24,7 @@ std::vector<Scope> layer2(const std::map<std::string, std::vector<RawToken>>& st
     
     // Sublayer 2D: Instruction contextualization and analysis with error handling
     ErrorHandler error_handler;
-    auto retVal4 = layer2_sublayers::sublayer2d(retVal3, string_table, mutable_streams, exec_registry, error_handler);
+    auto retVal4 = layer2_sublayers::sublayer2d(retVal3, string_table, mutable_streams, exec_registry, error_handler, type_registry, function_registry);
     
     // TODO: In the future, the orchestrator will handle error resolution and reporting
     // For now, resolve source locations and report errors immediately within Layer 2
@@ -47,7 +51,9 @@ std::vector<Scope> sublayer2d(const std::vector<Scope>& scopes,
                               const StringTable& string_table,
                               const std::map<std::string, std::vector<RawToken>>& streams,
                               ExecAliasRegistry& exec_registry,
-                              ErrorHandler& error_handler);
+                              ErrorHandler& error_handler,
+                              TypeRegistry& type_registry,
+                              FunctionRegistry& function_registry);
 
 std::vector<Token> extract_tokens_from_scope(const Scope& scope) {
     // Extract tokens from scope's _instructions vector of variants

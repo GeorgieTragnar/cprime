@@ -82,3 +82,24 @@ private:
 };
 
 } // namespace cprime
+
+// Hash specialization for StringIndex to enable use in std::unordered_map
+namespace std {
+    template<>
+    struct hash<cprime::StringIndex> {
+        size_t operator()(const cprime::StringIndex& index) const {
+            return hash<uint32_t>{}(index.value);
+        }
+    };
+}
+
+// Equality operator for StringIndex
+namespace cprime {
+    inline bool operator==(const StringIndex& lhs, const StringIndex& rhs) {
+        return lhs.value == rhs.value;
+    }
+    
+    inline bool operator!=(const StringIndex& lhs, const StringIndex& rhs) {
+        return lhs.value != rhs.value;
+    }
+}

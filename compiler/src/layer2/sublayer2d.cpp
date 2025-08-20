@@ -2,6 +2,7 @@
 #include "../commons/logger.h"
 #include "../commons/errorHandler.h"
 #include "../commons/contextualizationError.h"
+#include "contextual_registration_extractor.h"
 #include <sstream>
 #include <stdexcept>
 
@@ -107,7 +108,9 @@ std::vector<Scope> sublayer2d(const std::vector<Scope>& input_scopes,
                               const StringTable& string_table,
                               const std::map<std::string, std::vector<RawToken>>& streams,
                               ExecAliasRegistry& exec_registry,
-                              ErrorHandler& error_handler) {
+                              ErrorHandler& error_handler,
+                              TypeRegistry& type_registry,
+                              FunctionRegistry& function_registry) {
     
     // Create a mutable copy of the input scopes for processing
     std::vector<Scope> scopes = input_scopes;
@@ -314,6 +317,17 @@ std::vector<Scope> sublayer2d(const std::vector<Scope>& input_scopes,
         LOG_INFO("");
     }
     
+    // After all contextualization is complete, extract and register types and functions
+    LOG_INFO("=== Post-Contextualization Registration Extraction ===");
+    
+    // Note: We need to cast the const StringTable to mutable for the extractor
+    // This is safe because the extractor only interns new strings, not modifying existing ones
+    StringTable& mutable_string_table = const_cast<StringTable&>(string_table);
+    
+    ContextualRegistrationExtractor extractor(type_registry, function_registry, mutable_string_table);
+    extractor.extract_and_register_from_scopes(scopes, streams);
+    
+    LOG_INFO("=== Registration Extraction Complete ===");
     LOG_INFO("=== Sublayer 2D Complete ===");
     return scopes;
 }

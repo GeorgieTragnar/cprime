@@ -14,14 +14,19 @@ namespace cprime {
 
 // Forward declarations
 class ErrorHandler;
+class TypeRegistry;
+class FunctionRegistry;
 
 // Layer 2 main function - Structure Building
 // Input: Map of file streams to RawToken vectors from Layer 1
 // Output: Flat vector of structured Scopes with Instructions
 // Note: ErrorHandler will be used internally for contextualization error reporting
+// Note: Registries will be populated with type and function information during processing
 std::vector<Scope> layer2(const std::map<std::string, std::vector<RawToken>>& streams, 
                          const StringTable& string_table, 
-                         ExecAliasRegistry& exec_registry);
+                         ExecAliasRegistry& exec_registry,
+                         TypeRegistry& type_registry,
+                         FunctionRegistry& function_registry);
 
 // Layer 2 sublayer implementations 
 namespace layer2_sublayers {
@@ -59,11 +64,14 @@ namespace layer2_sublayers {
     // - No hierarchical traversal, simple scope-by-scope processing
     // - Exec execution processing and code generation (single pass)
     // - Error handling with ErrorReporter lambdas for contextualization
+    // - Type and function registration extraction after contextualization
     std::vector<Scope> sublayer2d(const std::vector<Scope>& scopes, 
                                   const StringTable& string_table,
                                   const std::map<std::string, std::vector<RawToken>>& streams,
                                   ExecAliasRegistry& exec_registry,
-                                  ErrorHandler& error_handler);
+                                  ErrorHandler& error_handler,
+                                  TypeRegistry& type_registry,
+                                  FunctionRegistry& function_registry);
     
     // Helper function to extract tokens from scope
     std::vector<Token> extract_tokens_from_scope(const Scope& scope);

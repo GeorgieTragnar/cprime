@@ -27,6 +27,11 @@ add_library(cprime_commons
     commons/errorHandler.cpp
     commons/logger.h
     commons/logger.cpp
+    commons/type_descriptors.h
+    commons/type_registry.h
+    commons/type_registry.cpp
+    commons/function_registry.h
+    commons/function_registry.cpp
     commons/dirty/selective_buffer_sink.h
     commons/dirty/component_buffer_manager.h
     commons/dirty/component_buffer_manager.cpp
@@ -74,6 +79,8 @@ add_library(cprime_layer2
     layer2/sublayer2b.cpp
     layer2/sublayer2c.cpp
     layer2/sublayer2d.cpp
+    layer2/contextual_registration_extractor.h
+    layer2/contextual_registration_extractor.cpp
     layer2/contextualization/header_contextualization.cpp
     layer2/contextualization/footer_contextualization.cpp
     layer2/contextualization/instruction_contextualization.cpp

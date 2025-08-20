@@ -12,7 +12,8 @@
 namespace cprime {
 
 CompilerOrchestrator::CompilerOrchestrator(CompilationParameters params)
-    : params_(std::move(params)), logger_(cprime::LoggerFactory::get_logger("orchestrator")) {
+    : params_(std::move(params)), logger_(cprime::LoggerFactory::get_logger("orchestrator")),
+      type_registry_(string_table_), function_registry_(string_table_) {
     
     if (!validate_parameters()) {
         throw std::runtime_error("Invalid compilation parameters provided to orchestrator");
@@ -151,8 +152,8 @@ bool CompilerOrchestrator::run_layer2() {
     
     try {
         // Use persistent exec alias registry for exec alias processing
-        // Call Layer 2 to build scope structure
-        auto scopes = layer2(token_streams_, string_table_, exec_alias_registry_);
+        // Call Layer 2 to build scope structure with type and function registries
+        auto scopes = layer2(token_streams_, string_table_, exec_alias_registry_, type_registry_, function_registry_);
         
         LOG_INFO("Layer 2 completed: {} scopes built", scopes.size());
         
