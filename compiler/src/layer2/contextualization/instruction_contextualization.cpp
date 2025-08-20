@@ -1,6 +1,7 @@
 #include "../layer2.h"
 #include "../../commons/logger.h"
 #include "../../commons/contextualizationError.h"
+#include "contextualization_pattern_matcher.h"
 #include <algorithm>
 
 namespace cprime::layer2_contextualization {
@@ -26,8 +27,42 @@ bool contextualize_instruction(Instruction& body_instruction, ErrorReporter repo
         return true;  // Signal for exec processing
     }
     
-    // TODO: Pattern-based instruction contextualization will be implemented here
-    LOG_DEBUG("Instruction contextualization not yet implemented for this pattern");
+    // Try pattern-based body instruction contextualization
+    LOG_INFO("🎯 Attempting pattern-based body instruction contextualization with {} tokens", body_instruction._tokens.size());
+    for (size_t i = 0; i < body_instruction._tokens.size(); ++i) {
+        LOG_INFO("  Token[{}]: {}", i, static_cast<int>(body_instruction._tokens[i]._token));
+    }
+    
+    ContextualizationPatternMatcher& pattern_matcher = ContextualizationPatternMatcher::getInstance();
+    LOG_INFO("Got pattern matcher instance, {} body patterns available", pattern_matcher.get_body_pattern_count());
+    
+    PatternMatchResult match_result = pattern_matcher.match_body_pattern(body_instruction);
+    LOG_INFO("Pattern matching result: success = {}", match_result.success);
+    
+    if (match_result.success) {
+        LOG_INFO("Body pattern matched: {}", match_result.matched_pattern->pattern_name);
+        LOG_INFO("Generated {} contextual tokens", match_result.contextual_tokens.size());
+        
+        // Apply the contextual tokens to the body instruction
+        for (const auto& contextual_result : match_result.contextual_tokens) {
+            ContextualToken ctx_token;
+            ctx_token._contextualToken = contextual_result.contextual_token;
+            // Convert size_t indices to uint32_t
+            for (size_t idx : contextual_result.token_indices) {
+                ctx_token._parentTokenIndices.push_back(static_cast<uint32_t>(idx));
+            }
+            body_instruction._contextualTokens.push_back(ctx_token);
+            
+            LOG_INFO("Added contextual token {} with {} token indices", 
+                     static_cast<int>(contextual_result.contextual_token),
+                     contextual_result.token_indices.size());
+        }
+        
+        return false;  // Successful pattern matching, no exec processing needed
+    }
+    
+    // No pattern matched - report error
+    LOG_INFO("No body pattern matched for this instruction");
     report_error(ContextualizationErrorType::UNSUPPORTED_TOKEN_PATTERN,
                 "Some token patterns not yet implemented in instruction contextualization",
                 {0}); // Placeholder error position

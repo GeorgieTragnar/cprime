@@ -1,6 +1,7 @@
 #include "../layer2.h"
 #include "../../commons/logger.h"
 #include "../../commons/contextualizationError.h"
+#include "contextualization_pattern_matcher.h"
 
 namespace cprime::layer2_contextualization {
 
@@ -177,8 +178,42 @@ bool contextualize_header(Instruction& header_instruction, ErrorReporter report_
         return true;  // Signal for exec processing
     }
     
-    // TODO: Pattern-based header contextualization will be implemented here
-    LOG_DEBUG("Header contextualization not yet implemented for this pattern");
+    // Try pattern-based header contextualization
+    LOG_INFO("🎯 Attempting pattern-based header contextualization with {} tokens", header_instruction._tokens.size());
+    for (size_t i = 0; i < header_instruction._tokens.size(); ++i) {
+        LOG_INFO("  Token[{}]: {}", i, static_cast<int>(header_instruction._tokens[i]._token));
+    }
+    
+    ContextualizationPatternMatcher& pattern_matcher = ContextualizationPatternMatcher::getInstance();
+    LOG_INFO("Got pattern matcher instance, {} header patterns available", pattern_matcher.get_header_pattern_count());
+    
+    PatternMatchResult match_result = pattern_matcher.match_header_pattern(header_instruction);
+    LOG_INFO("Pattern matching result: success = {}", match_result.success);
+    
+    if (match_result.success) {
+        LOG_INFO("Header pattern matched: {}", match_result.matched_pattern->pattern_name);
+        LOG_INFO("Generated {} contextual tokens", match_result.contextual_tokens.size());
+        
+        // Apply the contextual tokens to the header instruction
+        for (const auto& contextual_result : match_result.contextual_tokens) {
+            ContextualToken ctx_token;
+            ctx_token._contextualToken = contextual_result.contextual_token;
+            // Convert size_t indices to uint32_t
+            for (size_t idx : contextual_result.token_indices) {
+                ctx_token._parentTokenIndices.push_back(static_cast<uint32_t>(idx));
+            }
+            header_instruction._contextualTokens.push_back(ctx_token);
+            
+            LOG_DEBUG("Added contextual token {} with {} token indices", 
+                     static_cast<int>(contextual_result.contextual_token),
+                     contextual_result.token_indices.size());
+        }
+        
+        return false;  // Successful pattern matching, no exec processing needed
+    }
+    
+    // No pattern matched - report error
+    LOG_DEBUG("No header pattern matched for this instruction");
     report_error(ContextualizationErrorType::UNSUPPORTED_TOKEN_PATTERN,
                 "Header contextualization not yet implemented for this pattern",
                 {0}); // Placeholder error position

@@ -133,9 +133,16 @@ void resolve_chunks_in_instruction(Instruction& instruction,
                             token._token = resolved_token;
                             raw_token._token = resolved_token;
                             
+                            std::string token_type_str = "UNKNOWN";
+                            if (resolved_token == EToken::CLASS) token_type_str = "CLASS";
+                            else if (resolved_token == EToken::STRUCT) token_type_str = "STRUCT"; 
+                            else if (resolved_token == EToken::PLEX) token_type_str = "PLEX";
+                            else if (resolved_token == EToken::FUNC) token_type_str = "FUNC";
+                            else if (resolved_token == EToken::IDENTIFIER) token_type_str = "IDENTIFIER";
+                            else token_type_str = "KEYWORD_" + std::to_string(static_cast<uint32_t>(resolved_token));
+                            
                             LOG_INFO("✅ CHUNK→{}: '{}' at token index {} in scope {}", 
-                                     (resolved_token == EToken::INT32_T) ? "KEYWORD" : "IDENTIFIER",
-                                     chunk_content, token._tokenIndex, current_scope_index);
+                                     token_type_str, chunk_content, token._tokenIndex, current_scope_index);
                         }
                         break;
                     }
