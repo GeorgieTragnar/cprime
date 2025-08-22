@@ -35,6 +35,7 @@ std::vector<ProcessingChunk> sublayer1d(const std::vector<ProcessingChunk>& inpu
     
     auto is_digit = [](char c) { return std::isdigit(c); };
     auto is_hex_digit = [](char c) { return std::isxdigit(c); };
+    auto is_identifier_char = [](char c) { return std::isalnum(c) || c == '_'; };
     
     for (const auto& chunk : input) {
         if (chunk.is_processed()) {
@@ -79,6 +80,14 @@ std::vector<ProcessingChunk> sublayer1d(const std::vector<ProcessingChunk>& inpu
             } else if (c == '.' && pos + 1 < str.size() && is_digit(str[pos+1])) {
                 is_number_start = true;
                 is_float = true;
+            }
+            
+            // IDENTIFIER BOUNDARY CHECK: Don't extract numbers that are part of identifiers
+            if (is_number_start) {
+                // Check if preceded by identifier character (would make this part of an identifier)
+                if (pos > 0 && is_identifier_char(str[pos-1])) {
+                    is_number_start = false;
+                }
             }
             
             if (!is_number_start) {
@@ -154,7 +163,7 @@ std::vector<ProcessingChunk> sublayer1d(const std::vector<ProcessingChunk>& inpu
                 }
             }
             
-            // Parse suffix
+            // Parse suffix first, then check identifier boundaries
             EToken number_type;
             if (is_float) {
                 // Floating-point suffixes
@@ -207,6 +216,13 @@ std::vector<ProcessingChunk> sublayer1d(const std::vector<ProcessingChunk>& inpu
                 } else {
                     number_type = is_unsigned ? EToken::UINT_LITERAL : EToken::INT_LITERAL;
                 }
+            }
+            
+            // IDENTIFIER BOUNDARY CHECK: After suffix parsing, check if still followed by identifier chars
+            if (number_end < str.size() && is_identifier_char(str[number_end])) {
+                // This number (with suffixes) is still followed by identifier chars, so it's part of an identifier
+                pos++;
+                continue;
             }
             
             // Add unprocessed segment before number

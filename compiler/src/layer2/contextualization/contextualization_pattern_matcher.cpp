@@ -570,9 +570,11 @@ void ContextualizationPatternMatcher::initialize_builtin_patterns() {
     LOG_INFO("🏗️ Initializing builtin patterns");
     
     // Header Pattern 1: Class/Struct/Plex Definition
-    // Pattern: CLASS|STRUCT|PLEX + REQUIRED_WHITESPACE + NAMESPACED_IDENTIFIER + OPTIONAL_WHITESPACE
+    // Pattern: OPTIONAL_WHITESPACE + CLASS|STRUCT|PLEX + REQUIRED_WHITESPACE + NAMESPACED_IDENTIFIER + OPTIONAL_WHITESPACE
     {
         std::vector<PatternElement> elements = {
+            // Optional leading whitespace
+            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
             PatternElement({EToken::CLASS, EToken::STRUCT, EToken::PLEX}, EContextualToken::TYPE_REFERENCE),
             PatternElement(PatternElementType::REQUIRED_WHITESPACE),
             PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::TYPE_REFERENCE),
@@ -586,9 +588,11 @@ void ContextualizationPatternMatcher::initialize_builtin_patterns() {
     }
     
     // Header Pattern 2: Simple Function Declaration  
-    // Pattern: FUNC + REQUIRED_WHITESPACE + NAMESPACED_IDENTIFIER + OPTIONAL_WHITESPACE
+    // Pattern: OPTIONAL_WHITESPACE + FUNC + REQUIRED_WHITESPACE + NAMESPACED_IDENTIFIER + OPTIONAL_WHITESPACE
     {
         std::vector<PatternElement> elements = {
+            // Optional leading whitespace
+            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
             PatternElement(EToken::FUNC, EContextualToken::FUNCTION_CALL),
             PatternElement(PatternElementType::REQUIRED_WHITESPACE),
             PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::FUNCTION_CALL),
@@ -602,11 +606,13 @@ void ContextualizationPatternMatcher::initialize_builtin_patterns() {
     }
     
     // Body Pattern 1: Variable Declaration with Assignment
-    // Pattern: PRIMITIVE/IDENTIFIER + REQUIRED_WHITESPACE + IDENTIFIER + OPTIONAL_WHITESPACE + ASSIGN + OPTIONAL_WHITESPACE + IDENTIFIER/LITERAL + OPTIONAL_WHITESPACE
+    // Pattern: OPTIONAL_WHITESPACE + PRIMITIVE/IDENTIFIER + REQUIRED_WHITESPACE + IDENTIFIER + OPTIONAL_WHITESPACE + ASSIGN + OPTIONAL_WHITESPACE + IDENTIFIER/LITERAL + OPTIONAL_WHITESPACE
     {
         std::vector<PatternElement> elements = {
-            // Type (primitive or namespaced identifier)
-            PatternElement({EToken::INT32_T, EToken::FLOAT, EToken::DOUBLE, EToken::BOOL, EToken::CHAR, EToken::VOID}, EContextualToken::TYPE_REFERENCE),
+            // Optional leading whitespace
+            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
+            // Type (primitive keywords or identifiers that resolve to types)
+            PatternElement({EToken::INT32_T, EToken::FLOAT, EToken::DOUBLE, EToken::BOOL, EToken::CHAR, EToken::VOID, EToken::IDENTIFIER}, EContextualToken::TYPE_REFERENCE),
             PatternElement(PatternElementType::REQUIRED_WHITESPACE),
             // Variable name
             PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::VARIABLE_DECLARATION),
@@ -626,11 +632,13 @@ void ContextualizationPatternMatcher::initialize_builtin_patterns() {
     }
     
     // Body Pattern 2: Variable Declaration without Assignment  
-    // Pattern: PRIMITIVE/IDENTIFIER + REQUIRED_WHITESPACE + IDENTIFIER + OPTIONAL_WHITESPACE
+    // Pattern: OPTIONAL_WHITESPACE + PRIMITIVE/IDENTIFIER + REQUIRED_WHITESPACE + IDENTIFIER + OPTIONAL_WHITESPACE
     {
         std::vector<PatternElement> elements = {
-            // Type (primitive or namespaced identifier)
-            PatternElement({EToken::INT32_T, EToken::FLOAT, EToken::DOUBLE, EToken::BOOL, EToken::CHAR, EToken::VOID}, EContextualToken::TYPE_REFERENCE),
+            // Optional leading whitespace
+            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
+            // Type (primitive keywords or identifiers that resolve to types)
+            PatternElement({EToken::INT32_T, EToken::FLOAT, EToken::DOUBLE, EToken::BOOL, EToken::CHAR, EToken::VOID, EToken::IDENTIFIER}, EContextualToken::TYPE_REFERENCE),
             PatternElement(PatternElementType::REQUIRED_WHITESPACE),
             // Variable name
             PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::VARIABLE_DECLARATION),
