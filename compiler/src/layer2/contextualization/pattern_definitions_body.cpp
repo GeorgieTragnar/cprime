@@ -46,9 +46,7 @@ void BodyPatternDefinitions::create_variable_declaration_with_assignment_pattern
         // Use the optional assignment pattern which handles the full "= expression" part
         PatternElement(PatternKey::OPTIONAL_ASSIGNMENT, EContextualToken::INVALID),
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
-        // Statement terminator
-        PatternElement(EToken::SEMICOLON, EContextualToken::OPERATOR),
-        PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
+        // No semicolon needed - instructions are pre-split at semicolon boundaries
         PatternElement(PatternElementType::END_OF_PATTERN, EContextualToken::INVALID)
     };
     
@@ -71,9 +69,7 @@ void BodyPatternDefinitions::create_variable_declaration_without_assignment_patt
         // Variable name
         PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::VARIABLE_DECLARATION),
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
-        // Statement terminator
-        PatternElement(EToken::SEMICOLON, EContextualToken::OPERATOR),
-        PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
+        // No semicolon needed - instructions are pre-split at semicolon boundaries
         PatternElement(PatternElementType::END_OF_PATTERN, EContextualToken::INVALID)
     };
     
@@ -129,9 +125,7 @@ void BodyPatternDefinitions::create_assignment_statement_pattern(Contextualizati
         // Full expression support for the assigned value
         PatternElement(PatternKey::MANDATORY_EXPRESSION, EContextualToken::INVALID),
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
-        // Statement terminator
-        PatternElement(EToken::SEMICOLON, EContextualToken::OPERATOR),
-        PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
+        // No semicolon needed - instructions are pre-split at semicolon boundaries
         PatternElement(PatternElementType::END_OF_PATTERN, EContextualToken::INVALID)
     };
     

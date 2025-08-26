@@ -1238,48 +1238,15 @@ void ContextualizationPatternMatcher::initialize_builtin_patterns() {
 // Register a complex pattern that demonstrates multiple reusable patterns
 void ContextualizationPatternMatcher::register_complex_test_pattern() {
     auto logger = cprime::LoggerFactory::get_logger("contextualization_pattern_matcher");
-    LOG_INFO("🧪 Registering complex test pattern for multiple reusable patterns");
+    LOG_INFO("🧪 Complex test pattern registration disabled - using modular pattern definitions instead");
     
-    // Complex Variable Declaration Pattern:
-    // [OPTIONAL_WHITESPACE] [optional_modifier]* type [namespace::path]* identifier [= expression] [OPTIONAL_WHITESPACE] END_OF_PATTERN
-    // Example: "const static int std::vector::size_type my_var = 42 ;"
-    {
-        std::vector<PatternElement> elements = {
-            // Optional leading whitespace
-            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
-            
-            // Optional type modifiers (can appear multiple times)
-            // Note: In a full implementation, this would reference OPTIONAL_TYPE_MODIFIER
-            // For now, we'll inline the modifier options
-            PatternElement({EToken::CONST, EToken::STATIC, EToken::VOLATILE}, EContextualToken::TYPE_REFERENCE),
-            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
-            
-            // Required type
-            PatternElement({EToken::INT32_T, EToken::FLOAT, EToken::DOUBLE, EToken::BOOL, EToken::CHAR, EToken::VOID, EToken::IDENTIFIER}, EContextualToken::TYPE_REFERENCE),
-            PatternElement(PatternElementType::REQUIRED_WHITESPACE),
-            
-            // Optional namespace path (repeatable)
-            // Note: In a full implementation, this would reference REPEATABLE_NAMESPACE
-            // For now, we'll use NAMESPACED_IDENTIFIER which handles this
-            PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::VARIABLE_DECLARATION),
-            
-            // Optional assignment
-            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
-            PatternElement(EToken::ASSIGN, EContextualToken::OPERATOR),
-            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
-            PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::EXPRESSION),
-            
-            // Optional trailing whitespace and end
-            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
-            PatternElement(PatternElementType::END_OF_PATTERN)
-        };
-        
-        Pattern complex_test_pattern("complex_variable_declaration", elements);
-        register_body_pattern(complex_test_pattern);
-        LOG_DEBUG("Registered complex test pattern: complex_variable_declaration with {} elements", elements.size());
-    }
+    // OLD COMPLEX PATTERN DISABLED - CONFLICTED WITH MODULAR PATTERNS
+    // The old hardcoded complex pattern conflicted with our new modular pattern system
+    // that uses PATTERN_KEY_REFERENCE for OPTIONAL_ASSIGNMENT.
+    // Our updated body pattern definitions now handle complex variable declarations
+    // using the proper modular approach with recursive expression support.
     
-    LOG_INFO("✅ Complex test pattern registered successfully");
+    LOG_INFO("✅ Complex test pattern skipped - using modular patterns");
 }
 
 bool ContextualizationPatternMatcher::matches_pattern_key_reference(
