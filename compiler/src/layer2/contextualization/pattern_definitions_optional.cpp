@@ -19,6 +19,13 @@ void OptionalPatternDefinitions::initialize_builtin_optional_patterns(ReusablePa
     create_repeatable_parameter_list_pattern(registry);
     create_repeatable_template_args_pattern(registry);
     
+    // Create expression patterns
+    create_base_expression_pattern(registry);
+    create_mandatory_expression_pattern(registry);
+    create_optional_parenthesized_pattern(registry);
+    create_optional_binary_operator_pattern(registry);
+    create_optional_unary_operator_pattern(registry);
+    
     // Log registry state (if method exists)
     // registry.log_registry_state(); // Comment out for now
     
@@ -30,7 +37,8 @@ void OptionalPatternDefinitions::initialize_builtin_optional_patterns(ReusablePa
 void OptionalPatternDefinitions::create_optional_assignment_pattern(ReusablePatternRegistry& registry) {
     std::vector<PatternElement> elements = {
         PatternElement(EToken::ASSIGN, EContextualToken::OPERATOR),
-        PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::EXPRESSION)
+        PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
+        PatternElement(PatternKey::MANDATORY_EXPRESSION, EContextualToken::INVALID)  // Use full expression support
     };
     Pattern assignment_pattern("optional_assignment", elements);
     registry.register_optional_pattern(PatternKey::OPTIONAL_ASSIGNMENT, assignment_pattern, 
@@ -105,6 +113,98 @@ void OptionalPatternDefinitions::create_repeatable_template_args_pattern(Reusabl
     Pattern template_pattern("repeatable_template_args", elements);
     registry.register_repeatable_pattern(PatternKey::REPEATABLE_TEMPLATE_ARGS, template_pattern,
                                         "Repeatable template arguments: <type,>");
+}
+
+// Base Expression Pattern: literals and identifiers
+void OptionalPatternDefinitions::create_base_expression_pattern(ReusablePatternRegistry& registry) {
+    std::vector<PatternElement> elements = {
+        // Support all literal types and identifiers as base expressions
+        PatternElement({
+            EToken::IDENTIFIER,
+            EToken::INT_LITERAL,
+            EToken::UINT_LITERAL, 
+            EToken::LONG_LITERAL,
+            EToken::ULONG_LITERAL,
+            EToken::LONG_LONG_LITERAL,
+            EToken::ULONG_LONG_LITERAL,
+            EToken::FLOAT_LITERAL,
+            EToken::DOUBLE_LITERAL,
+            EToken::LONG_DOUBLE_LITERAL,
+            EToken::CHAR_LITERAL,
+            EToken::STRING_LITERAL,
+            EToken::TRUE_LITERAL,
+            EToken::FALSE_LITERAL,
+            EToken::NULLPTR_LITERAL
+        }, EContextualToken::EXPRESSION)
+    };
+    Pattern base_expression_pattern("base_expression", elements);
+    registry.register_optional_pattern(PatternKey::BASE_EXPRESSION, base_expression_pattern,
+                                      "Base expressions: literals and identifiers");
+}
+
+// Mandatory Expression Pattern: recursive expression composition
+void OptionalPatternDefinitions::create_mandatory_expression_pattern(ReusablePatternRegistry& registry) {
+    // This is a composite pattern that will be handled by the pattern matcher
+    // It delegates to BASE_EXPRESSION with optional PARENTHESIZED, BINARY_OPERATOR, and UNARY_OPERATOR
+    std::vector<PatternElement> elements = {
+        PatternElement(PatternKey::BASE_EXPRESSION, EContextualToken::INVALID)
+    };
+    Pattern mandatory_expression_pattern("mandatory_expression", elements);
+    registry.register_optional_pattern(PatternKey::MANDATORY_EXPRESSION, mandatory_expression_pattern,
+                                      "Mandatory expression with recursive composition");
+}
+
+// Optional Parenthesized Expression Pattern: ( expression )
+void OptionalPatternDefinitions::create_optional_parenthesized_pattern(ReusablePatternRegistry& registry) {
+    std::vector<PatternElement> elements = {
+        PatternElement(EToken::LEFT_PAREN, EContextualToken::OPERATOR),
+        PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
+        PatternElement(PatternKey::MANDATORY_EXPRESSION, EContextualToken::INVALID),  // Recursive expression
+        PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
+        PatternElement(EToken::RIGHT_PAREN, EContextualToken::OPERATOR)
+    };
+    Pattern parenthesized_pattern("optional_parenthesized", elements);
+    registry.register_optional_pattern(PatternKey::OPTIONAL_PARENTHESIZED, parenthesized_pattern,
+                                      "Optional parenthesized expression: ( expression )");
+}
+
+// Optional Binary Operator Pattern: expression OP expression
+void OptionalPatternDefinitions::create_optional_binary_operator_pattern(ReusablePatternRegistry& registry) {
+    std::vector<PatternElement> elements = {
+        PatternElement(PatternKey::MANDATORY_EXPRESSION, EContextualToken::INVALID),  // Left expression
+        PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
+        PatternElement({
+            // Arithmetic operators
+            EToken::PLUS, EToken::MINUS, EToken::MULTIPLY, EToken::DIVIDE, EToken::MODULO,
+            // Comparison operators  
+            EToken::EQUALS, EToken::NOT_EQUALS, 
+            EToken::LESS_THAN, EToken::GREATER_THAN, EToken::LESS_EQUAL, EToken::GREATER_EQUAL,
+            // Logical operators
+            EToken::LOGICAL_AND, EToken::LOGICAL_OR
+        }, EContextualToken::OPERATOR),
+        PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
+        PatternElement(PatternKey::MANDATORY_EXPRESSION, EContextualToken::INVALID)  // Right expression
+    };
+    Pattern binary_operator_pattern("optional_binary_operator", elements);
+    registry.register_optional_pattern(PatternKey::OPTIONAL_BINARY_OPERATOR, binary_operator_pattern,
+                                      "Optional binary operator: expression OP expression");
+}
+
+// Optional Unary Operator Pattern: OP expression
+void OptionalPatternDefinitions::create_optional_unary_operator_pattern(ReusablePatternRegistry& registry) {
+    std::vector<PatternElement> elements = {
+        PatternElement({
+            EToken::LOGICAL_NOT,  // !
+            EToken::PLUS,         // Unary +
+            EToken::MINUS         // Unary -
+            // TODO: Add increment/decrement when tokens are available
+        }, EContextualToken::OPERATOR),
+        PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
+        PatternElement(PatternKey::MANDATORY_EXPRESSION, EContextualToken::INVALID)  // Recursive expression
+    };
+    Pattern unary_operator_pattern("optional_unary_operator", elements);
+    registry.register_optional_pattern(PatternKey::OPTIONAL_UNARY_OPERATOR, unary_operator_pattern,
+                                      "Optional unary operator: OP expression");
 }
 
 } // namespace cprime::layer2_contextualization

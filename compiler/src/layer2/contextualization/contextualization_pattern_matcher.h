@@ -150,6 +150,13 @@ private:
         size_t& current_index,
         ContextualTokenResult& result
     );
+    bool matches_pattern_key_reference(
+        const PatternElement& element,
+        const Instruction& instruction,
+        const std::vector<size_t>& clean_indices,
+        size_t& current_index,
+        ContextualTokenResult& result
+    );
     
     // Tree initialization - called once during first access
     void initialize_builtin_patterns();

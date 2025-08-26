@@ -30,6 +30,19 @@ enum class PatternKey : uint16_t {
     OPTIONAL_ACCESS_MODIFIER = 0x1020,     // [public|private|protected]
     OPTIONAL_WHITESPACE_PATTERN = 0x1030,  // Reusable whitespace handling
     
+    // Expression patterns: 0x1100-0x11FF
+    MANDATORY_EXPRESSION = 0x1100,         // Core expression pattern
+    OPTIONAL_PARENTHESIZED = 0x1110,       // ( expression )
+    OPTIONAL_BINARY_OPERATOR = 0x1120,     // expression OP expression
+    OPTIONAL_UNARY_OPERATOR = 0x1130,      // OP expression
+    BASE_EXPRESSION = 0x1140,              // literals, identifiers
+    
+    // Specific operator groups: 0x1150-0x118F
+    ARITHMETIC_OPERATORS = 0x1150,         // +, -, *, /, %
+    COMPARISON_OPERATORS = 0x1160,         // ==, !=, <, >, <=, >=
+    LOGICAL_OPERATORS = 0x1170,            // &&, ||, !
+    UNARY_ARITHMETIC = 0x1180,             // ++, --, unary +, -
+    
     // Reusable repeatable patterns: 0x2000-0x2FFF
     REPEATABLE_NAMESPACE = 0x2000,         // (::identifier)*
     REPEATABLE_PARAMETER_LIST = 0x2010,    // (parameter,)*
@@ -43,6 +56,7 @@ enum class PatternElementType {
     OPTIONAL_WHITESPACE,   // Zero or more whitespace tokens
     REQUIRED_WHITESPACE,   // One or more whitespace tokens
     NAMESPACED_IDENTIFIER, // Variable-length namespace::identifier patterns
+    PATTERN_KEY_REFERENCE, // Reference to another pattern (for recursive composition)
     END_OF_PATTERN        // Tree termination marker for exact matching
 };
 
@@ -51,18 +65,23 @@ struct PatternElement {
     PatternElementType type;
     std::vector<EToken> accepted_tokens;        // For CONCRETE_TOKEN_GROUP
     EContextualToken target_contextual_token;   // What contextual token this element generates
+    PatternKey referenced_pattern_key;          // For PATTERN_KEY_REFERENCE type
     
     // Constructor for concrete token
     PatternElement(EToken token, EContextualToken contextual_token)
-        : type(PatternElementType::CONCRETE_TOKEN), accepted_tokens({token}), target_contextual_token(contextual_token) {}
+        : type(PatternElementType::CONCRETE_TOKEN), accepted_tokens({token}), target_contextual_token(contextual_token), referenced_pattern_key(PatternKey::INVALID) {}
     
     // Constructor for token group
     PatternElement(const std::vector<EToken>& tokens, EContextualToken contextual_token)
-        : type(PatternElementType::CONCRETE_TOKEN_GROUP), accepted_tokens(tokens), target_contextual_token(contextual_token) {}
+        : type(PatternElementType::CONCRETE_TOKEN_GROUP), accepted_tokens(tokens), target_contextual_token(contextual_token), referenced_pattern_key(PatternKey::INVALID) {}
     
     // Constructor for special pattern types
     PatternElement(PatternElementType pattern_type, EContextualToken contextual_token = EContextualToken::INVALID)
-        : type(pattern_type), target_contextual_token(contextual_token) {}
+        : type(pattern_type), target_contextual_token(contextual_token), referenced_pattern_key(PatternKey::INVALID) {}
+    
+    // Constructor for pattern key reference
+    PatternElement(PatternKey pattern_key, EContextualToken contextual_token = EContextualToken::INVALID)
+        : type(PatternElementType::PATTERN_KEY_REFERENCE), target_contextual_token(contextual_token), referenced_pattern_key(pattern_key) {}
 };
 
 // Complete pattern definition

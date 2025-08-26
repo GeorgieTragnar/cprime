@@ -32,7 +32,7 @@ void BodyPatternDefinitions::initialize_builtin_body_patterns(ContextualizationP
 }
 
 // Body Pattern 1: Variable Declaration with Assignment
-// Pattern: [OPTIONAL_WHITESPACE] TYPE REQUIRED_WHITESPACE IDENTIFIER [OPTIONAL_WHITESPACE] = [OPTIONAL_WHITESPACE] EXPRESSION [OPTIONAL_WHITESPACE] ; [OPTIONAL_WHITESPACE]
+// Pattern: [OPTIONAL_WHITESPACE] TYPE REQUIRED_WHITESPACE IDENTIFIER [OPTIONAL_ASSIGNMENT] [OPTIONAL_WHITESPACE] ; [OPTIONAL_WHITESPACE]
 void BodyPatternDefinitions::create_variable_declaration_with_assignment_pattern(ContextualizationPatternMatcher& matcher) {
     std::vector<PatternElement> elements = {
         // Optional leading whitespace
@@ -43,11 +43,8 @@ void BodyPatternDefinitions::create_variable_declaration_with_assignment_pattern
         // Variable name
         PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::VARIABLE_DECLARATION),
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
-        // Assignment operator
-        PatternElement(EToken::ASSIGN, EContextualToken::OPERATOR),
-        PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
-        // Value (could be identifier, literal, or expression)
-        PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::EXPRESSION),
+        // Use the optional assignment pattern which handles the full "= expression" part
+        PatternElement(PatternKey::OPTIONAL_ASSIGNMENT, EContextualToken::INVALID),
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
         // Statement terminator
         PatternElement(EToken::SEMICOLON, EContextualToken::OPERATOR),
@@ -102,11 +99,8 @@ void BodyPatternDefinitions::create_complex_variable_declaration_pattern(Context
         // Variable name
         PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::VARIABLE_DECLARATION),
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
-        // Optional assignment
-        PatternElement(EToken::ASSIGN, EContextualToken::OPERATOR),
-        PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
-        PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::EXPRESSION),
-        PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
+        // Optional assignment with full expression support
+        PatternElement(PatternKey::OPTIONAL_ASSIGNMENT, EContextualToken::INVALID),
         // Statement terminator
         PatternElement(EToken::SEMICOLON, EContextualToken::OPERATOR),
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
@@ -121,7 +115,7 @@ void BodyPatternDefinitions::create_complex_variable_declaration_pattern(Context
 }
 
 // Body Pattern 4: Assignment Statement
-// Pattern: [OPTIONAL_WHITESPACE] IDENTIFIER [OPTIONAL_WHITESPACE] = [OPTIONAL_WHITESPACE] EXPRESSION [OPTIONAL_WHITESPACE] ; [OPTIONAL_WHITESPACE]
+// Pattern: [OPTIONAL_WHITESPACE] IDENTIFIER = EXPRESSION [OPTIONAL_WHITESPACE] ; [OPTIONAL_WHITESPACE]
 void BodyPatternDefinitions::create_assignment_statement_pattern(ContextualizationPatternMatcher& matcher) {
     std::vector<PatternElement> elements = {
         // Optional leading whitespace
@@ -132,8 +126,8 @@ void BodyPatternDefinitions::create_assignment_statement_pattern(Contextualizati
         // Assignment operator
         PatternElement(EToken::ASSIGN, EContextualToken::OPERATOR),
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
-        // Value expression
-        PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::EXPRESSION),
+        // Full expression support for the assigned value
+        PatternElement(PatternKey::MANDATORY_EXPRESSION, EContextualToken::INVALID),
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
         // Statement terminator
         PatternElement(EToken::SEMICOLON, EContextualToken::OPERATOR),
@@ -209,10 +203,10 @@ void BodyPatternDefinitions::create_if_statement_pattern(ContextualizationPatter
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
         PatternElement(EToken::IF, EContextualToken::CONTROL_FLOW),
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
-        // Condition in parentheses
+        // Condition in parentheses with full expression support
         PatternElement(EToken::LEFT_PAREN, EContextualToken::OPERATOR),
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
-        PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::EXPRESSION),
+        PatternElement(PatternKey::MANDATORY_EXPRESSION, EContextualToken::INVALID),  // Full expression support for conditions
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
         PatternElement(EToken::RIGHT_PAREN, EContextualToken::OPERATOR),
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
@@ -237,10 +231,10 @@ void BodyPatternDefinitions::create_while_loop_pattern(ContextualizationPatternM
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
         PatternElement(EToken::WHILE, EContextualToken::CONTROL_FLOW),
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
-        // Condition in parentheses
+        // Condition in parentheses with full expression support
         PatternElement(EToken::LEFT_PAREN, EContextualToken::OPERATOR),
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
-        PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::EXPRESSION),
+        PatternElement(PatternKey::MANDATORY_EXPRESSION, EContextualToken::INVALID),  // Full expression support for conditions
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
         PatternElement(EToken::RIGHT_PAREN, EContextualToken::OPERATOR),
         PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),

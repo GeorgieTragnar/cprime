@@ -22,6 +22,13 @@ private:
     static void create_repeatable_namespace_pattern(ReusablePatternRegistry& registry);
     static void create_repeatable_parameter_list_pattern(ReusablePatternRegistry& registry);
     static void create_repeatable_template_args_pattern(ReusablePatternRegistry& registry);
+    
+    // Expression pattern creation methods
+    static void create_base_expression_pattern(ReusablePatternRegistry& registry);
+    static void create_mandatory_expression_pattern(ReusablePatternRegistry& registry);
+    static void create_optional_parenthesized_pattern(ReusablePatternRegistry& registry);
+    static void create_optional_binary_operator_pattern(ReusablePatternRegistry& registry);
+    static void create_optional_unary_operator_pattern(ReusablePatternRegistry& registry);
 };
 
 } // namespace cprime::layer2_contextualization

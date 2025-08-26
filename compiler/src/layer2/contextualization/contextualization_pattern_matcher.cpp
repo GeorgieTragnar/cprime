@@ -896,6 +896,9 @@ bool ContextualizationPatternMatcher::matches_pattern_element(
         case PatternElementType::NAMESPACED_IDENTIFIER:
             return matches_namespaced_identifier(element, instruction, clean_indices, current_index, result);
             
+        case PatternElementType::PATTERN_KEY_REFERENCE:
+            return matches_pattern_key_reference(element, instruction, clean_indices, current_index, result);
+            
         case PatternElementType::END_OF_PATTERN:
             // END_OF_PATTERN should only match if we've consumed all tokens
             if (current_index >= clean_indices.size()) {
@@ -1277,6 +1280,95 @@ void ContextualizationPatternMatcher::register_complex_test_pattern() {
     }
     
     LOG_INFO("✅ Complex test pattern registered successfully");
+}
+
+bool ContextualizationPatternMatcher::matches_pattern_key_reference(
+    const PatternElement& element,
+    const Instruction& instruction,
+    const std::vector<size_t>& clean_indices,
+    size_t& current_index,
+    ContextualTokenResult& result) {
+    
+    auto logger = cprime::LoggerFactory::get_logger("contextualization_pattern_matcher");
+    
+    // Get the referenced pattern from the registry
+    PatternKey pattern_key = element.referenced_pattern_key;
+    LOG_DEBUG("PATTERN_KEY_REFERENCE: Looking up pattern key {}", static_cast<int>(pattern_key));
+    
+    // Check if we have an optional pattern for this key
+    if (reusable_registry_.is_optional_pattern(pattern_key)) {
+        const Pattern* optional_pattern_ptr = reusable_registry_.get_optional_pattern(pattern_key);
+        if (!optional_pattern_ptr) {
+            LOG_DEBUG("PATTERN_KEY_REFERENCE: Optional pattern pointer is null");
+            return false;
+        }
+        const Pattern& optional_pattern = *optional_pattern_ptr;
+        LOG_DEBUG("PATTERN_KEY_REFERENCE: Found optional pattern '{}'", optional_pattern.pattern_name);
+        
+        // Try to match the optional pattern at the current position
+        size_t saved_index = current_index;
+        std::vector<ContextualTokenResult> pattern_results;
+        
+        // Attempt to match all elements of the referenced pattern
+        for (const PatternElement& pattern_element : optional_pattern.elements) {
+            ContextualTokenResult element_result(EContextualToken::INVALID, {});
+            bool element_matched = matches_pattern_element(
+                pattern_element, instruction, clean_indices, current_index, element_result
+            );
+            
+            if (!element_matched) {
+                LOG_DEBUG("PATTERN_KEY_REFERENCE: Pattern element failed, backtracking");
+                current_index = saved_index; // Restore position
+                return false;
+            }
+            
+            // Collect results from the referenced pattern
+            if (element_result.contextual_token != EContextualToken::INVALID) {
+                pattern_results.push_back(element_result);
+            }
+        }
+        
+        // If we get here, the referenced pattern matched successfully
+        // For now, we'll combine the results into a single contextual token
+        // TODO: We may need more sophisticated result aggregation later
+        if (!pattern_results.empty()) {
+            // Use the target contextual token from the reference element, or the first result
+            EContextualToken target_token = (element.target_contextual_token != EContextualToken::INVALID) 
+                ? element.target_contextual_token 
+                : pattern_results[0].contextual_token;
+            
+            // Combine all token indices from the matched pattern
+            std::vector<size_t> combined_indices;
+            for (const auto& pattern_result : pattern_results) {
+                combined_indices.insert(combined_indices.end(), 
+                                      pattern_result.token_indices.begin(), 
+                                      pattern_result.token_indices.end());
+            }
+            
+            result = ContextualTokenResult(target_token, combined_indices);
+        }
+        
+        LOG_DEBUG("PATTERN_KEY_REFERENCE: Successfully matched pattern '{}', advanced from {} to {}", 
+                 optional_pattern.pattern_name, saved_index, current_index);
+        return true;
+    }
+    
+    // Check if we have a repeatable pattern for this key
+    if (reusable_registry_.is_repeatable_pattern(pattern_key)) {
+        const Pattern* repeatable_pattern_ptr = reusable_registry_.get_repeatable_pattern(pattern_key);
+        if (!repeatable_pattern_ptr) {
+            LOG_DEBUG("PATTERN_KEY_REFERENCE: Repeatable pattern pointer is null");
+            return false;
+        }
+        const Pattern& repeatable_pattern = *repeatable_pattern_ptr;
+        LOG_DEBUG("PATTERN_KEY_REFERENCE: Found repeatable pattern '{}' (not yet fully implemented)", 
+                 repeatable_pattern.pattern_name);
+        // TODO: Implement repeatable pattern matching logic
+        return false;
+    }
+    
+    LOG_DEBUG("PATTERN_KEY_REFERENCE: No pattern found for key {}", static_cast<int>(pattern_key));
+    return false;
 }
 
 } // namespace cprime::layer2_contextualization
