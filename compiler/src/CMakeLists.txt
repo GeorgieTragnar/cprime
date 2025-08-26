@@ -84,6 +84,8 @@ add_library(cprime_layer2
     layer2/contextualization/pattern_core_structures.h
     layer2/contextualization/contextualization_pattern_matcher.h
     layer2/contextualization/contextualization_pattern_matcher.cpp
+    layer2/contextualization/reusable_pattern_registry.h
+    layer2/contextualization/reusable_pattern_registry.cpp
     layer2/contextualization/header_contextualization.cpp
     layer2/contextualization/footer_contextualization.cpp
     layer2/contextualization/instruction_contextualization.cpp

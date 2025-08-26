@@ -5,8 +5,36 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <unordered_map>
 
 namespace cprime::layer2_contextualization {
+
+// Pattern keys for nested map-based pattern matching
+enum class PatternKey : uint16_t {
+    INVALID = 0,
+    
+    // Main pattern key ranges - each pattern type gets 0x100 range
+    // Header patterns: 0x0100-0x01FF
+    HEADER_CLASS_DEFINITION = 0x0100,
+    HEADER_FUNCTION_DECLARATION = 0x0110,
+    
+    // Body patterns: 0x0200-0x02FF  
+    BODY_VARIABLE_ASSIGNMENT = 0x0200,
+    BODY_VARIABLE_DECLARATION = 0x0210,
+    
+    // Footer patterns: 0x0300-0x03FF (reserved for future use)
+    
+    // Reusable optional patterns: 0x1000-0x1FFF
+    OPTIONAL_ASSIGNMENT = 0x1000,          // [= expression]
+    OPTIONAL_TYPE_MODIFIER = 0x1010,       // [const|volatile|static]
+    OPTIONAL_ACCESS_MODIFIER = 0x1020,     // [public|private|protected]
+    OPTIONAL_WHITESPACE_PATTERN = 0x1030,  // Reusable whitespace handling
+    
+    // Reusable repeatable patterns: 0x2000-0x2FFF
+    REPEATABLE_NAMESPACE = 0x2000,         // (::identifier)*
+    REPEATABLE_PARAMETER_LIST = 0x2010,    // (parameter,)*
+    REPEATABLE_TEMPLATE_ARGS = 0x2020,     // (<type,>)*
+};
 
 // Pattern element types define the building blocks of patterns
 enum class PatternElementType {
@@ -57,6 +85,26 @@ struct PatternNode {
     Pattern* complete_pattern = nullptr;  // Set when is_end_of_pattern = true
     
     PatternNode(const PatternElement& elem) : element(elem) {}
+};
+
+// Enhanced tree node for nested map-based pattern matching
+struct KeyedPatternNode {
+    PatternElement element;
+    
+    // Nested map transitions: PatternKey -> Token -> Next Node
+    std::unordered_map<PatternKey, std::unordered_map<EToken, KeyedPatternNode*>> transitions;
+    
+    // Terminal patterns that can end at this node
+    std::unordered_map<PatternKey, Pattern*> terminals;
+    
+    // Backward compatibility: maintain children vector for migration
+    std::vector<std::unique_ptr<KeyedPatternNode>> children;
+    
+    // Debug information
+    std::string debug_label;
+    
+    KeyedPatternNode(const PatternElement& elem, const std::string& label = "")
+        : element(elem), debug_label(label) {}
 };
 
 // Result of matching a single contextual token with its source token indices
