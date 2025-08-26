@@ -2,6 +2,10 @@
 
 #include "pattern_core_structures.h"
 #include "reusable_pattern_registry.h"
+#include "pattern_definitions_optional.h"
+#include "pattern_definitions_header.h"
+#include "pattern_definitions_footer.h"
+#include "pattern_definitions_body.h"
 #include "../layer2.h"
 #include <map>
 #include <memory>
@@ -33,14 +37,16 @@ public:
     ReusablePatternRegistry& get_reusable_registry();
     const ReusablePatternRegistry& get_reusable_registry() const;
     
+    // Pattern count queries (for logging/debugging)
+    size_t get_header_pattern_count() const { return header_patterns_.size(); }
+    size_t get_footer_pattern_count() const { return footer_patterns_.size(); }
+    size_t get_body_pattern_count() const { return body_patterns_.size(); }
+    
     // Convenience methods for reusable pattern registration
     void register_optional_pattern(PatternKey key, const Pattern& pattern, const std::string& description = "");
     void register_repeatable_pattern(PatternKey key, const Pattern& pattern, const std::string& description = "");
     
     // Debug and testing interface
-    size_t get_header_pattern_count() const;
-    size_t get_footer_pattern_count() const;  
-    size_t get_body_pattern_count() const;
     void clear_all_patterns(); // For testing
     
 private:

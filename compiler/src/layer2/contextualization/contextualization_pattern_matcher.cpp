@@ -101,17 +101,6 @@ void ContextualizationPatternMatcher::register_repeatable_pattern(PatternKey key
 }
 
 // Debug and testing interface
-size_t ContextualizationPatternMatcher::get_header_pattern_count() const {
-    return header_patterns_.size();
-}
-
-size_t ContextualizationPatternMatcher::get_footer_pattern_count() const {
-    return footer_patterns_.size();
-}
-
-size_t ContextualizationPatternMatcher::get_body_pattern_count() const {
-    return body_patterns_.size();
-}
 
 void ContextualizationPatternMatcher::clear_all_patterns() {
     header_patterns_.clear();
@@ -1214,95 +1203,22 @@ bool ContextualizationPatternMatcher::validate_pattern_uniqueness() const {
 // Initialize builtin patterns
 void ContextualizationPatternMatcher::initialize_builtin_patterns() {
     auto logger = cprime::LoggerFactory::get_logger("contextualization_pattern_matcher");
-    LOG_INFO("🏗️ Initializing builtin patterns");
+    LOG_INFO("🏗️ Initializing builtin patterns using modular pattern definitions");
     
-    // Header Pattern 1: Class/Struct/Plex Definition
-    // Pattern: OPTIONAL_WHITESPACE + CLASS|STRUCT|PLEX + REQUIRED_WHITESPACE + NAMESPACED_IDENTIFIER + OPTIONAL_WHITESPACE
-    {
-        std::vector<PatternElement> elements = {
-            // Optional leading whitespace
-            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
-            PatternElement({EToken::CLASS, EToken::STRUCT, EToken::PLEX}, EContextualToken::TYPE_REFERENCE),
-            PatternElement(PatternElementType::REQUIRED_WHITESPACE),
-            PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::TYPE_REFERENCE),
-            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
-            PatternElement(PatternElementType::END_OF_PATTERN)
-        };
-        
-        Pattern class_definition_pattern("class_definition", elements);
-        register_header_pattern(class_definition_pattern);
-        LOG_DEBUG("Registered header pattern: class_definition");
-    }
+    // Initialize optional/reusable patterns first
+    OptionalPatternDefinitions::initialize_builtin_optional_patterns(reusable_registry_);
     
-    // Header Pattern 2: Simple Function Declaration  
-    // Pattern: OPTIONAL_WHITESPACE + FUNC + REQUIRED_WHITESPACE + NAMESPACED_IDENTIFIER + OPTIONAL_WHITESPACE
-    {
-        std::vector<PatternElement> elements = {
-            // Optional leading whitespace
-            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
-            PatternElement(EToken::FUNC, EContextualToken::FUNCTION_CALL),
-            PatternElement(PatternElementType::REQUIRED_WHITESPACE),
-            PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::FUNCTION_CALL),
-            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
-            PatternElement(PatternElementType::END_OF_PATTERN)
-        };
-        
-        Pattern function_declaration_pattern("function_declaration", elements);
-        register_header_pattern(function_declaration_pattern);
-        LOG_DEBUG("Registered header pattern: function_declaration");
-    }
+    // Initialize header patterns
+    HeaderPatternDefinitions::initialize_builtin_header_patterns(*this);
     
-    // Body Pattern 1: Variable Declaration with Assignment
-    // Pattern: OPTIONAL_WHITESPACE + PRIMITIVE/IDENTIFIER + REQUIRED_WHITESPACE + IDENTIFIER + OPTIONAL_WHITESPACE + ASSIGN + OPTIONAL_WHITESPACE + IDENTIFIER/LITERAL + OPTIONAL_WHITESPACE
-    {
-        std::vector<PatternElement> elements = {
-            // Optional leading whitespace
-            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
-            // Type (primitive keywords or identifiers that resolve to types)
-            PatternElement({EToken::INT32_T, EToken::FLOAT, EToken::DOUBLE, EToken::BOOL, EToken::CHAR, EToken::VOID, EToken::IDENTIFIER}, EContextualToken::TYPE_REFERENCE),
-            PatternElement(PatternElementType::REQUIRED_WHITESPACE),
-            // Variable name
-            PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::VARIABLE_DECLARATION),
-            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
-            // Assignment operator
-            PatternElement(EToken::ASSIGN, EContextualToken::INVALID), // No contextual token for operators
-            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
-            // Value (identifier or literal)
-            PatternElement({EToken::IDENTIFIER, EToken::INT_LITERAL, EToken::FLOAT_LITERAL, EToken::TRUE_LITERAL, EToken::FALSE_LITERAL, EToken::STRING_LITERAL, EToken::CHAR_LITERAL}, EContextualToken::VARIABLE_REFERENCE),
-            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
-            PatternElement(PatternElementType::END_OF_PATTERN)
-        };
-        
-        Pattern variable_assignment_pattern("variable_assignment", elements);
-        register_body_pattern(variable_assignment_pattern);
-        LOG_DEBUG("Registered body pattern: variable_assignment");
-    }
+    // Initialize footer patterns
+    FooterPatternDefinitions::initialize_builtin_footer_patterns(*this);
     
-    // Body Pattern 2: Variable Declaration without Assignment  
-    // Pattern: OPTIONAL_WHITESPACE + PRIMITIVE/IDENTIFIER + REQUIRED_WHITESPACE + IDENTIFIER + OPTIONAL_WHITESPACE
-    {
-        std::vector<PatternElement> elements = {
-            // Optional leading whitespace
-            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
-            // Type (primitive keywords or identifiers that resolve to types)
-            PatternElement({EToken::INT32_T, EToken::FLOAT, EToken::DOUBLE, EToken::BOOL, EToken::CHAR, EToken::VOID, EToken::IDENTIFIER}, EContextualToken::TYPE_REFERENCE),
-            PatternElement(PatternElementType::REQUIRED_WHITESPACE),
-            // Variable name
-            PatternElement(PatternElementType::NAMESPACED_IDENTIFIER, EContextualToken::VARIABLE_DECLARATION),
-            PatternElement(PatternElementType::OPTIONAL_WHITESPACE),
-            PatternElement(PatternElementType::END_OF_PATTERN)
-        };
-        
-        Pattern variable_declaration_pattern("variable_declaration", elements);
-        register_body_pattern(variable_declaration_pattern);
-        LOG_DEBUG("Registered body pattern: variable_declaration");
-    }
+    // Initialize body patterns
+    BodyPatternDefinitions::initialize_builtin_body_patterns(*this);
     
-    // Initialize reusable patterns registry
-    reusable_registry_.initialize_builtin_reusable_patterns();
-    
-    LOG_DEBUG("Builtin patterns initialization complete - {} header patterns, {} body patterns registered", 
-              header_patterns_.size(), body_patterns_.size());
+    LOG_INFO("✅ Modular pattern initialization complete: {} header, {} footer, {} body patterns", 
+              header_patterns_.size(), footer_patterns_.size(), body_patterns_.size());
     LOG_DEBUG("Reusable patterns registry initialized with {} optional and {} repeatable patterns", 
               reusable_registry_.get_all_optional_keys().size(), reusable_registry_.get_all_repeatable_keys().size());
     
