@@ -26,6 +26,10 @@ void OptionalPatternDefinitions::initialize_builtin_optional_patterns(ReusablePa
     create_optional_binary_operator_pattern(registry);
     create_optional_unary_operator_pattern(registry);
     
+    // Create function-specific patterns
+    create_mandatory_assignment_default_pattern(registry);
+    create_optional_parameter_list_pattern(registry);
+    
     // Log registry state (if method exists)
     // registry.log_registry_state(); // Comment out for now
     
@@ -205,6 +209,33 @@ void OptionalPatternDefinitions::create_optional_unary_operator_pattern(Reusable
     Pattern unary_operator_pattern("optional_unary_operator", elements);
     registry.register_optional_pattern(PatternKey::OPTIONAL_UNARY_OPERATOR, unary_operator_pattern,
                                       "Optional unary operator: OP expression");
+}
+
+// Mandatory Assignment Default Pattern: = default (for function headers)
+void OptionalPatternDefinitions::create_mandatory_assignment_default_pattern(ReusablePatternRegistry& registry) {
+    std::vector<PatternElement> elements = {
+        PatternElement(EToken::ASSIGN, EContextualToken::OPERATOR),
+        PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
+        // Note: "default" is currently tokenized as IDENTIFIER, not DEFAULT keyword
+        PatternElement(EToken::IDENTIFIER, EContextualToken::FUNCTION_CALL)  // Should be "default" identifier
+    };
+    Pattern mandatory_assignment_default_pattern("mandatory_assignment_default", elements);
+    registry.register_optional_pattern(PatternKey::MANDATORY_ASSIGNMENT_DEFAULT, mandatory_assignment_default_pattern,
+                                      "Mandatory assignment default: = default");
+}
+
+// Optional Parameter List Pattern: ( [parameters] ) for functions  
+void OptionalPatternDefinitions::create_optional_parameter_list_pattern(ReusablePatternRegistry& registry) {
+    std::vector<PatternElement> elements = {
+        PatternElement(EToken::LEFT_PAREN, EContextualToken::OPERATOR),
+        PatternElement(PatternElementType::OPTIONAL_WHITESPACE, EContextualToken::INVALID),
+        // For now, just match the closing paren - empty parameter list ()
+        // TODO: Add proper parameter parsing with REPEATABLE_PARAMETER_LIST when needed
+        PatternElement(EToken::RIGHT_PAREN, EContextualToken::OPERATOR)
+    };
+    Pattern optional_parameter_list_pattern("optional_parameter_list", elements);
+    registry.register_optional_pattern(PatternKey::OPTIONAL_PARAMETER_LIST, optional_parameter_list_pattern,
+                                      "Optional parameter list: ( ) - empty for now");
 }
 
 } // namespace cprime::layer2_contextualization

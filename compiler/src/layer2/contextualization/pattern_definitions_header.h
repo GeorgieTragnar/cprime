@@ -18,6 +18,7 @@ private:
     // Individual pattern creation methods
     static void create_class_definition_pattern(ContextualizationPatternMatcher& matcher);
     static void create_function_declaration_pattern(ContextualizationPatternMatcher& matcher);
+    static void create_function_definition_with_default_pattern(ContextualizationPatternMatcher& matcher);
     static void create_namespace_declaration_pattern(ContextualizationPatternMatcher& matcher);
     static void create_import_statement_pattern(ContextualizationPatternMatcher& matcher);
     static void create_typedef_pattern(ContextualizationPatternMatcher& matcher);

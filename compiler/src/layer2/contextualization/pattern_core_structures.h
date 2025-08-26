@@ -37,6 +37,10 @@ enum class PatternKey : uint16_t {
     OPTIONAL_UNARY_OPERATOR = 0x1130,      // OP expression
     BASE_EXPRESSION = 0x1140,              // literals, identifiers
     
+    // Function-specific patterns: 0x1190-0x119F
+    MANDATORY_ASSIGNMENT_DEFAULT = 0x1190, // = default (for function headers)
+    OPTIONAL_PARAMETER_LIST = 0x1191,      // ( [parameters] ) for functions
+    
     // Specific operator groups: 0x1150-0x118F
     ARITHMETIC_OPERATORS = 0x1150,         // +, -, *, /, %
     COMPARISON_OPERATORS = 0x1160,         // ==, !=, <, >, <=, >=
