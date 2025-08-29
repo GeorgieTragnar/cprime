@@ -1,7 +1,0 @@
-int main() {
-    print("Hello");
-};
-
-if (true) {
-    print("True branch");
-};

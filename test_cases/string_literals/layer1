@@ -1,3 +1,0 @@
-string msg = "Hello";
-string escaped = "Line 1\nLine 2";
-char c = 'A';

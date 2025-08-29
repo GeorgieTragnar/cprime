@@ -1,4 +1,0 @@
-// Test pattern-based contextualization
-int variable;
-count = 42;
-print("hello");

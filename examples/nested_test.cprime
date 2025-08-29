@@ -1,9 +1,0 @@
-int global_var = 42;
-
-int main() {
-    if (true) {
-        int local_var = 10;
-        print("Inside if block");
-    }
-    print("Back in main");
-}

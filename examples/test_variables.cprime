@@ -1,4 +1,0 @@
-class TestVariables {
-    int32_t x = 7;
-    int32_t y;
-}
